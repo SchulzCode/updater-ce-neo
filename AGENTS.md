@@ -62,8 +62,7 @@
   suffix files with your model name and reuse `/tmp/cn_raw/*.marshal` dumps instead of re-extracting.
 
 ## Bundled `mtkclient`: the Chinese build's fork
-- `vendor/mtkclient` is **the mtkclient exactly as the Chinese 1.1.7 app ships it** (Copied from
-  `/Volumes/InnioasisUpdater/InnioasisUpdater.app/Contents/Resources/mtkclient`, the real tree behind the
+- `vendor/mtkclient` i`, the real tree behind the
   `Contents/Frameworks/mtkclient` symlink). Its legacy DA write path, DRAM bring-up, USB read loop, error
   strings and `config.last_error` reporting are what make an install behave like the Chinese build at the
   flash stage, so **do not “fix up” those files towards upstream `bkerler/mtkclient`**: re-diff against the
