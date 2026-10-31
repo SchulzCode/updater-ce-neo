@@ -91,7 +91,7 @@ build_windows.bat mediatek_installer    :: MediaTek Installer only
 ```bash
 chmod +x build_appimage.sh
 
-./build_appimage.sh                     # x86_64 (default)
+./build_appimage.sh                     # host architecture (x86_64 or aarch64)
 ./build_appimage.sh --arch aarch64      # ARM64
 ./build_appimage.sh --arch armhf        # ARM32, needs an armhf Python + appimagetool
 ./build_appimage.sh --clean             # rebuild from scratch

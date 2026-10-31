@@ -166,7 +166,7 @@ def test_continue_launches_console_and_search_lines_drive_connect():
                 ), "Continue must start the console command"
                 sp_calls = [c for c in popen_calls if "taskkill" not in str(c[0]).lower()]
                 args = sp_calls[0]
-                assert args[1:3] == ["-c", "format-download"], args
+                assert args[1:3] == ["-c", "download"], args
                 assert args[3] == "-s", args
                 assert "-d" in args and "-t" in args and args[-1] == "-r", args
                 assert args[args.index("-t") + 1] == "without", args

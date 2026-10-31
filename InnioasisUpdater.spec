@@ -11,6 +11,7 @@ InnioasisUpdater.exe and the bundled SP Flash Tool payload.
 """
 
 import os
+import platform
 import shutil
 import sys
 from pathlib import Path
@@ -68,17 +69,31 @@ if ADB_TOOLS.exists():
 # The SP Flash Tool payload is placed next to the exe by a post-build copy
 # step (below), not by PyInstaller datas, because datas always land under
 # _internal and the runtime resolver looks next to the executable.
+#
+# SP Flash Tool exists as an x86/x86-64 build only. On an ARM64 host (Windows
+# ARM64, Linux aarch64/armhf) it cannot run and the app uses MTKClient as its
+# only engine, exactly as it does on macOS, so bundling the x86 payload would
+# add a few hundred megabytes of unusable binaries that the runtime resolver
+# would then have to reject. Match src/linux_sp_flash.arch_supported().
+_X86_MACHINES = ("x86_64", "amd64", "x64", "i386", "i486", "i586", "i686", "x86")
+HOST_IS_X86 = (platform.machine() or "").lower() in _X86_MACHINES
+
 sp_candidates = [
-    PROJECT_ROOT / "SP_Flash_Tool",
-    PROJECT_ROOT / "tools" / "SP_Flash_Tool",
+    PROJECT_ROOT / "SP_Flash_Tool" if HOST_IS_X86 else None,
+    PROJECT_ROOT / "tools" / "SP_Flash_Tool" if HOST_IS_X86 else None,
     PROJECT_ROOT / "tools" / "windows" / "SP_Flash_Tool_v5.1904_Win"
-    if sys.platform.startswith("win")
+    if sys.platform.startswith("win") and HOST_IS_X86
     else None,
     PROJECT_ROOT / "tools" / "linux" / "SP_Flash_Tool_v5.1904_Linux"
-    if sys.platform.startswith("linux")
+    if sys.platform.startswith("linux") and HOST_IS_X86
     else None,
 ]
 SP_FLASH_SRC = next((p for p in sp_candidates if p and p.exists()), None)
+if SP_FLASH_SRC is None and not HOST_IS_X86:
+    print(
+        f"[spec] {platform.machine()}: SP Flash Tool is x86-only; "
+        "packaging MTKClient as the only flash engine"
+    )
 
 
 def _mtkclient_runtime_imports():

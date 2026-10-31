@@ -190,17 +190,28 @@ def _leave_cleanly(window, exit_code) -> None:
         pass
 
 
+def _linux_sp_selected() -> bool:
+    """True when the user's saved engine is SP Flash Tool.
+
+    Mirrors MainWindow._preferred_flash_method: an unset or legacy value resolves
+    to the platform default (MTKclient on Linux), so SP prep only runs on request.
+    """
+    from .flash_service import METHOD_SP, backend_method, normalise_method
+
+    stored = QSettings("innioasis", "updater").value("flash_method", "")
+    return backend_method(normalise_method(stored)) == METHOD_SP
+
+
 def _prepare_linux_sp_flash_tool() -> None:
     """Prepare Linux system for SP Flash Tool USB access.
 
     This ensures the SP Flash Tool can communicate with MediaTek devices
-    on Linux by configuring udev rules, group permissions, and killing
-    conflicting services. This prevents the S_COM_PORT_OPEN_FAIL (1013)
-    error that crashes the app before the GUI opens.
+    on Linux by staging its own user-space files and reporting what the system
+    still lacks. Nothing here asks for a password: udev rules, group changes
+    and service stops are done by the SP Flash Tool install's own prep step,
+    behind the one prompt the user starts with Next.
     """
     try:
-        import subprocess
-
         from . import linux_sp_flash
         from . import process_guard
 
@@ -223,16 +234,14 @@ def _prepare_linux_sp_flash_tool() -> None:
         except Exception as e:
             logger.debug("Could not check service conflicts: %s", e)
 
-        # Check udev rules status and install if missing
+        # Report udev rules status only. Installing them needs root, which
+        # would prompt for a password on every launch while the rules are
+        # missing; that happens in the SP Flash Tool install's own prep step.
         try:
             udev_ok, udev_msg = linux_sp_flash.check_udev_rules()
             logger.info("Udev rules status: %s", udev_msg)
-            if not udev_ok:
-                logger.info("Installing MediaTek udev rules...")
-                install_result, install_msg = linux_sp_flash.install_udev_rules()
-                logger.info("Udev rules installation: %s", install_msg)
         except Exception as e:
-            logger.debug("Could not check/install udev rules: %s", e)
+            logger.debug("Could not check udev rules: %s", e)
 
         # Check user permissions and add to group if needed
         try:
@@ -249,26 +258,12 @@ def _prepare_linux_sp_flash_tool() -> None:
         except Exception as e:
             logger.debug("Could not check user permissions: %s", e)
 
-        # Check for conflicting services and attempt to stop them
-        try:
-            conflicts = process_guard.check_service_conflicts()
-            for conflict in conflicts:
-                service_name = conflict["service"]
-                logger.warning(
-                    "Stopping conflicting service: %s", service_name,
-                )
-                try:
-                    # --no-ask-password: never pop a polkit dialog at launch;
-                    # without rights this simply fails and the warning stands.
-                    subprocess.run(
-                        ["systemctl", "--no-ask-password", "stop", service_name],
-                        capture_output=True,
-                        timeout=3,
-                    )
-                except Exception:
-                    pass
-        except Exception as e:
-            logger.debug("Could not check/stop service conflicts: %s", e)
+        # Conflicting services (ModemManager, brltty) are reported above and
+        # left running here. Stopping one is a polkit action, so doing it at
+        # launch asked every user for a password before the window was even up,
+        # and the short timeout on the call closed the dialog again before it
+        # could be answered. The SP Flash Tool setup script stops them as root
+        # inside the one prompt an SP Flash Tool install raises.
 
         # Run silent system prep (stages libpng12, option.ini, etc.)
         try:
@@ -408,15 +403,19 @@ def main():
         from .flash_service import FlashWorker
 
         cli_app = QCoreApplication(sys.argv)
-        extract_dir = sys.argv[2]
-        scatter_file = sys.argv[3]
-        scatter_platform = sys.argv[4] if len(sys.argv) >= 5 else ""
-        package_path = sys.argv[5] if len(sys.argv) >= 6 else ""
-        model = sys.argv[6] if len(sys.argv) >= 7 else ""
+        # Positional values are read from the arguments that are not switches, so
+        # a trailing ``--keep-data`` can never be mistaken for the model (the
+        # last position is omitted when the caller has nothing to put there).
+        cli_pos = [a for a in sys.argv[2:] if not a.startswith("--")]
+        extract_dir = cli_pos[0]
+        scatter_file = cli_pos[1]
+        scatter_platform = cli_pos[2] if len(cli_pos) >= 3 else ""
+        package_path = cli_pos[3] if len(cli_pos) >= 4 else ""
+        model = cli_pos[4] if len(cli_pos) >= 5 else ""
         # Optional trailing facts, forwarded by the app (and by the terminal
         # install script): a user-chosen Download Agent and auth file.
-        da_file = sys.argv[7] if len(sys.argv) >= 8 else ""
-        auth_file = sys.argv[8] if len(sys.argv) >= 9 else ""
+        da_file = cli_pos[5] if len(cli_pos) >= 6 else ""
+        auth_file = cli_pos[6] if len(cli_pos) >= 7 else ""
 
         worker = FlashWorker(
             package_path=package_path or "dummy.zip",
@@ -425,6 +424,7 @@ def main():
             model=model,
             da_file=da_file,
             auth_file=auth_file,
+            keep_data="--keep-data" in sys.argv,
         )
         worker.progress.connect(lambda x: print(f"[PROGRESS] {x}", flush=True))
         worker.step_changed.connect(lambda x: print(f"[STEP] {x}", flush=True))
@@ -549,7 +549,8 @@ def main():
     apply_interface_direction(app)
 
     # PREPARE LINUX SYSTEM FOR SP FLASH TOOL before showing the window
-    if _sys.platform.startswith("linux"):
+    # (only when SP Flash Tool is the selected engine; MTKclient needs no prep)
+    if _sys.platform.startswith("linux") and _linux_sp_selected():
         _prepare_linux_sp_flash_tool()
 
     window = MainWindow()

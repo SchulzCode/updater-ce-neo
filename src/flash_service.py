@@ -1922,13 +1922,30 @@ def find_scatter_files(directory):
 def _find_scatter(directory, allow_raise=True):
     """Find the scatter file in a directory or its nested subfolder.
     If multiple scatter files are found across different packages/folders,
-    raises ScatterDiscoveryError if allow_raise is True, else returns None.
+    preferences *ndroid_scatter*.txt over other *scatter*.txt files, and
+    filters out *preserve_data* variant scatters.
+    If multiple scatter files are still ambiguous, raises ScatterDiscoveryError
+    if allow_raise is True, else returns None.
     """
     scatters = find_scatter_files(directory)
     if not scatters:
         return None
     if len(scatters) == 1:
         return scatters[0]
+
+    # Preference non-preserve_data scatters when present
+    non_preserve = [s for s in scatters if "preserve_data" not in s.name.lower()]
+    candidates = non_preserve if non_preserve else scatters
+
+    # Preference *ndroid_scatter*.txt over generic *scatter*.txt
+    android = [s for s in candidates if "ndroid_scatter" in s.name.lower()]
+    if len(android) == 1:
+        return android[0]
+    elif len(android) > 1:
+        candidates = android
+
+    if len(candidates) == 1:
+        return candidates[0]
 
     if allow_raise:
         raise ScatterDiscoveryError(
@@ -1970,8 +1987,8 @@ def sp_flash_tool_console_args(scatter_arg, da_arg, auth_file="", log=None):
     """Console arguments for flash_tool, carrying an auth file when one is set.
 
     SP Flash Tool has no ``--auth`` switch, so an authentication file is only
-    reachable through the console configuration file (``-i``). Without one the
-    plain ``format-download`` command line is used. A set auth file that is
+    reachable through the console configuration file (``-i``). Both routes run
+    Download Only. A set auth file that is
     missing, empty or cannot be written raises :class:`SpAuthFileError`: flashing
     without the file the user chose would be silently wrong.
     """
@@ -1992,12 +2009,12 @@ def sp_flash_tool_console_args(scatter_arg, da_arg, auth_file="", log=None):
         if log:
             log(tr("sp_auth_loaded").format(path=auth))
         return ["-r", "-i", str(config)]
-    # ``-c format-download`` is Format All + Download: the reference Chinese
-    # 1.1.7 build runs this unconditionally (see analysis_cn/_flash_via_sp_flash_tool.dis.txt).
-    # Full erase before download avoids S_DA_UPDATE_BOOTLOADER_EXIST_MAGIC_NOT_MATCHED (3145)
-    # when target NAND/eMMC does not have matching DSP_BL headers.
+    # ``-c download`` is Download Only (SP Flash Tool maps it to its
+    # ``download-only`` command): the scatter's downloadable images are written
+    # and nothing is formatted. Format All + Download is never used, so a
+    # partition left out of the scatter keeps its contents.
     return [
-        "-c", "format-download",
+        "-c", "download",
         "-s", scatter_arg,
         "-d", da_arg,
         "-t", "without",
@@ -2030,6 +2047,107 @@ def _is_sp_bootloader_header_mismatch(error_detail="", err_code=None) -> bool:
         return True
     detail_up = str(error_detail or "").upper()
     return any(marker.upper() in detail_up for marker in _SP_BOOTLOADER_HEADER_ERROR_MARKERS)
+
+
+#: Written beside the scatter it derives from, and deliberately without
+#: "scatter" in the name: ``find_scatter_files`` picks up any ``*.txt`` whose
+#: name contains it, and a package holding two would fail discovery
+#: (``MULTIPLE_SCATTERS``) on the next run.
+KEEP_DATA_SCATTER_NAME = ".updater_keepdata.txt"
+
+
+def _scatter_partition_keeps_data(name, file_name="") -> bool:
+    """True for a user data partition the "Try to keep my data" option keeps.
+
+    Matched on the partition name and on its image file name, in either case
+    (``userdata``, ``USRDATA``, ``userdata.img``), because packages name the
+    same partition either way.
+    """
+    for value in (name, file_name):
+        low = str(value or "").strip().lower()
+        if "user" in low or "usr" in low:
+            return True
+    return False
+
+
+def _write_scatter_preserving_data(scatter_path, log=None) -> Optional[Path]:
+    """A scatter copy with user data partitions set ``is_download: false``.
+
+    SP Flash Tool only writes what the scatter marks as downloadable, so this
+    is how Download Only keeps the player's own user data: the partition is
+    left out of the write list rather than erased and rewritten. The original
+    scatter is never modified -- the fleet's packages stay exactly as shipped,
+    and an interrupted run cannot leave a firmware folder whose next flash
+    silently skips a partition. The copy has no "scatter" in its name so
+    discovery never mistakes it for a second package.
+
+    Returns ``None`` when no partition needs to be masked (a package with no
+    user data image), so the caller can keep using the original file. Raises
+    :class:`OSError` when the scatter cannot be read or the copy cannot be
+    written: flashing the original instead would write the very partition the
+    user asked to keep, so the caller stops rather than falling back.
+    """
+    scatter_p = Path(scatter_path).resolve()
+    lines = scatter_p.read_text(encoding="utf-8", errors="ignore").splitlines(keepends=True)
+
+    blocks: list[list[str]] = []
+    header: list[str] = []
+    current: Optional[list[str]] = None
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("- partition_index:") or stripped.startswith("partition_index:"):
+            if current is not None:
+                blocks.append(current)
+            current = [line]
+        elif current is not None:
+            current.append(line)
+        else:
+            header.append(line)
+    if current is not None:
+        blocks.append(current)
+
+    kept: list[str] = []
+    out_blocks: list[list[str]] = []
+    for block in blocks:
+        name = ""
+        file_name = ""
+        for line in block:
+            stripped = line.strip()
+            key, _, value = stripped.partition(":")
+            key = key.strip().lstrip("- ").lower()
+            value = value.strip()
+            if key == "partition_name" and not name:
+                name = value
+            elif key == "file_name" and not file_name:
+                file_name = value
+        mask = _scatter_partition_keeps_data(name, file_name)
+        if mask:
+            kept.append(name or file_name)
+        new_block = []
+        for line in block:
+            stripped = line.strip()
+            if mask and stripped.lower().startswith("is_download:"):
+                idx = line.lower().find("true")
+                if idx != -1:
+                    ending = "\r\n" if line.endswith("\r\n") else ("\n" if line.endswith("\n") else "")
+                    line = f"{line[:idx]}false{ending}"
+            new_block.append(line)
+        out_blocks.append(new_block)
+
+    if not kept:
+        return None
+
+    out_path = scatter_p.parent / KEEP_DATA_SCATTER_NAME
+    out_path.write_text(
+        "".join(header) + "".join("".join(b) for b in out_blocks), encoding="utf-8"
+    )
+    if log:
+        log(
+            "Try to keep my data: leaving "
+            + ", ".join(sorted({n for n in kept if n}))
+            + " untouched"
+        )
+    return out_path
 
 
 def _write_scatter_without_preloader(scatter_path) -> Optional[Path]:
@@ -2865,6 +2983,7 @@ def build_mtk_write_plan(
     *,
     preloader_first=True,
     skip_table_partitions=False,
+    skip_data_partitions=False,
     user_addressing=None,
     user_size=None,
     block_size=None,
@@ -2912,6 +3031,10 @@ def build_mtk_write_plan(
         if not file_name or file_name.upper() == "NONE":
             continue
         if skip_table_partitions and _is_device_table_partition(name, file_name):
+            continue
+        if skip_data_partitions and _scatter_partition_keeps_data(name, file_name):
+            # "Try to keep my data": the partition is never addressed, so the
+            # run issues no write and no erase for it.
             continue
         image = _resolve_image_file(scatter_dir, file_name)
         if not image.is_file() or _is_empty_placeholder_image(image):
@@ -3191,12 +3314,16 @@ class FlashWorker(QThread):
 
     def __init__(self, package_path, pre_extracted_dir="", method="auto", model="",
                  parent=None, device_loss_hold=None, da_file="", auth_file="", is_rockbox=False,
-                 primed_mtk=None):
+                 primed_mtk=None, keep_data=False):
         super().__init__(parent)
         self.package_path = package_path
         self.pre_extracted_dir = pre_extracted_dir
         self.model = (model or "").strip()
         self._primed_mtk = primed_mtk
+        # "Try to keep my data": user data partitions are written by neither
+        # backend. SP Flash Tool gets a scatter that leaves them out; the
+        # MTKClient write plan simply never addresses them.
+        self.keep_data = bool(keep_data)
         pkg_low = (Path(package_path).name if package_path else "").lower()
         self._is_rockbox_flow = bool(is_rockbox or "rockbox" in pkg_low)
         # User-chosen Download Agent and authentication file. Updater CE leaves
@@ -3960,6 +4087,22 @@ class FlashWorker(QThread):
             da_arg = str(da_file)
 
         align_scatter_disk_images(scatter_file, log=self._log)
+        if getattr(self, "keep_data", False):
+            # Download Only writes what the scatter marks downloadable, so a
+            # user data partition is kept by leaving it out of the copy this
+            # run hands the tool. The package's own scatter is never edited.
+            try:
+                scatter_file = (
+                    _write_scatter_preserving_data(scatter_file, log=self._log)
+                    or scatter_file
+                )
+            except OSError as e:
+                # Without the copy the tool would write user data the user asked
+                # to keep, so this run stops instead of flashing the original.
+                self._log(f'Could not prepare "Try to keep my data": {e}')
+                self._log("No firmware images were written.")
+                self.finished.emit(False, tr("err_keep_data_failed"))
+                return
         if IS_WINDOWS:
             scatter_arg = _to_short_path(scatter_file)
             if not str(scatter_arg).isascii():
@@ -4674,19 +4817,6 @@ class FlashWorker(QThread):
             return
 
         self._tool_tag = "MTK"
-        if sys.platform.startswith("linux") or (os.name == "posix" and not sys.platform.startswith("darwin")):
-            try:
-                from . import linux_sp_flash
-                readiness = linux_sp_flash.verify_linux_flashing_readiness()
-                if not readiness.get("udev_ok"):
-                    self._log(
-                        f"Warning: {readiness.get('udev_msg')}. "
-                        f"If device is not detected, run: sudo bash {readiness.get('setup_script_path')}"
-                    )
-                for conf in readiness.get("service_conflicts", []):
-                    self._log(f"Notice: {conf.get('message')}")
-            except Exception as e:
-                logger.debug("Linux readiness check skipped: %s", e)
         self._announce_please_wait()
         self.action_changed.emit(tr("action_init_mtkclient"))
         self._log(tr("action_init_mtkclient"))
@@ -4719,6 +4849,10 @@ class FlashWorker(QThread):
             self.da_file,
             self._resolve_auth_file(),
         ])
+        if getattr(self, "keep_data", False):
+            # A flag rather than a tenth position, so the existing argument
+            # order (and a hand-run command) stays valid.
+            cmd.append("--keep-data")
 
         final_ok = None
         final_msg = ""
@@ -5418,6 +5552,7 @@ class FlashWorker(QThread):
                 scatter_file,
                 getattr(self, "package_model", "") or self.model,
                 preloader_first=False,
+                skip_data_partitions=getattr(self, "keep_data", False),
                 user_addressing=addressing,
                 user_size=user_size,
                 block_size=block_size,
@@ -5453,6 +5588,18 @@ class FlashWorker(QThread):
                 f"{off_str} {step['parttype']} "
                 f"(partition {int(step.get('partition_size') or 0) / 1048576:.1f}MB)"
             )
+        if getattr(self, "keep_data", False):
+            kept_names = sorted(
+                {
+                    str(name).strip()
+                    for name, path in image_files
+                    if _scatter_partition_keeps_data(name, Path(path).name)
+                }
+            )
+            self._log(
+                "Try to keep my data: not writing "
+                + (", ".join(n for n in kept_names if n) or "any user data partition")
+            )
 
         # The Chinese build issues no GPT sync before its writes (the reference
         # sequence is init, connect, then one ``w`` per partition), so the
@@ -5460,7 +5607,8 @@ class FlashWorker(QThread):
 
         # Full-image installs clear the rebuildable runtime partitions first;
         # a partial package must not touch them. This is a read-modify-write
-        # integrity step, not the "format all" the SP backend uses.
+        # integrity step over the listed pockets only: no user data partition is
+        # in that set, and nothing else on the device is formatted.
         if self._safe_full_flash:
             try:
                 self._reset_runtime_partitions_before_flash(
@@ -7380,7 +7528,7 @@ class FlashService(QObject):
 
     # -- flashing -----------------------------------------------------------
     def start_flash(self, package_path, pre_extracted_dir="", method="auto", model="",
-                    da_file="", auth_file="", is_rockbox=False):
+                    da_file="", auth_file="", is_rockbox=False, keep_data=False):
         # Kill any backend still running (e.g. a searching flash_tool) first,
         # then start the new one. The cancelled worker's late terminal signals
         # are detached so they cannot reach the UI or clobber the new run.
@@ -7403,6 +7551,7 @@ class FlashService(QObject):
             auth_file=auth_file,
             is_rockbox=is_rockbox,
             primed_mtk=primed,
+            keep_data=keep_data,
         )
         worker._wait_for = retired
         self._flash_worker = worker

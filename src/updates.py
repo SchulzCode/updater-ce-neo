@@ -76,16 +76,15 @@ def _arch_ok(name: str, platform: str) -> bool:
     An arm64 build is only offered to arm64 machines and an x86-64 build only
     to x86-64 machines. Untagged names (and other platforms) are unaffected.
     """
-    if platform != "linux":
+    if platform not in ("linux", "win32"):
         return True
     arm_tagged = "arm64" in name or "aarch64" in name
     x86_tagged = "x86_64" in name or "amd64" in name
+    if _host_is_arm64():
+        return arm_tagged
     if arm_tagged:
-        return _host_is_arm64()
-    if x86_tagged:
-        return not _host_is_arm64()
-    # Untagged Linux names (UpdaterCE.appimage, UpdaterCE-Linux-Portable.tar.gz) are the x86-64 builds.
-    return not _host_is_arm64()
+        return False
+    return True
 
 
 def _is_linux_asset(name: str) -> bool:
@@ -99,19 +98,66 @@ def pick_platform_asset(assets, platform=None):
 
     Target release asset names per platform:
     - macOS (darwin): Innioasis.Updater.for.Mac.dmg
-    - Windows (win32): installer.exe
+    - Windows (win32): installer.exe (installer-arm64.exe on arm64)
     - Linux (linux): UpdaterCE.appimage, UpdaterCE-Linux-Portable.tar.gz / .zip (arm64 names carry -arm64)
 
     If these specific target files exist, returns that asset. If not found, falls back
     to matching extensions/architecture priority with strict platform exclusions.
     """
+    import os
     platform = platform or sys.platform
     if not assets:
         return None
 
-    targets = UPDATE_TARGET_ASSETS.get(platform) or ()
-    if isinstance(targets, str):
-        targets = (targets,)
+    if platform == "linux":
+        is_appimage = bool(
+            os.environ.get("APPIMAGE")
+            or os.environ.get("APPDIR")
+            or (sys.argv and sys.argv[0].lower().endswith(".appimage"))
+        )
+        if _host_is_arm64():
+            if is_appimage:
+                targets = (
+                    "UpdaterCE-arm64.appimage",
+                    "UpdaterCE-Linux-Portable-arm64.tar.gz",
+                    "Updater-CE-Linux-Portable-arm64.tar.gz",
+                    "UpdaterCE-Linux-Portable-arm64.zip",
+                    "Updater-CE-Linux-Portable-arm64.zip",
+                )
+            else:
+                targets = (
+                    "UpdaterCE-Linux-Portable-arm64.tar.gz",
+                    "Updater-CE-Linux-Portable-arm64.tar.gz",
+                    "UpdaterCE-Linux-Portable-arm64.zip",
+                    "Updater-CE-Linux-Portable-arm64.zip",
+                    "UpdaterCE-arm64.appimage",
+                )
+        else:
+            if is_appimage:
+                targets = (
+                    "UpdaterCE.appimage",
+                    "UpdaterCE-Linux-Portable.tar.gz",
+                    "UpdaterCE-Linux-Portable.zip",
+                    "mediatek installer.appimage",
+                    "mediatek installer.tar.gz",
+                )
+            else:
+                targets = (
+                    "UpdaterCE-Linux-Portable.tar.gz",
+                    "UpdaterCE.appimage",
+                    "UpdaterCE-Linux-Portable.zip",
+                    "mediatek installer.tar.gz",
+                    "mediatek installer.appimage",
+                )
+    elif platform == "win32":
+        if _host_is_arm64():
+            targets = ("installer-arm64.exe", "updaterce-setup.exe")
+        else:
+            targets = ("installer.exe", "updaterce-setup.exe")
+    else:
+        targets = UPDATE_TARGET_ASSETS.get(platform) or ()
+        if isinstance(targets, str):
+            targets = (targets,)
 
     # 1. Exact or canonical name matches in priority order. A target that
     #    carries an architecture tag only matches a machine of that architecture,
@@ -127,13 +173,13 @@ def pick_platform_asset(assets, platform=None):
     for a in assets:
         name = (a.get("name") or "").lower()
         if platform == "win32":
-            if (name.startswith("installer") or "setup" in name) and name.endswith(".exe"):
+            if (name.startswith("installer") or "setup" in name) and name.endswith(".exe") and _arch_ok(name, platform):
                 return a
         elif platform == "darwin":
             if "updater" in name and name.endswith(".dmg"):
                 return a
         elif platform == "linux":
-            if _is_linux_asset(name) and "updater" in name and (name.endswith(".appimage") or name.endswith(".tar.gz") or name.endswith(".zip")):
+            if _is_linux_asset(name) and _arch_ok(name, platform) and "updater" in name and (name.endswith(".appimage") or name.endswith(".tar.gz") or name.endswith(".zip")):
                 return a
             # Filenames with spaces (the branded AppImage/portable package) are
             # valid release assets too, but need not contain the slug "updater".
@@ -154,7 +200,7 @@ def pick_platform_asset(assets, platform=None):
             continue
         if platform == "darwin" and ("linux" in name or "win32" in name or "windows" in name or name.endswith(".exe")):
             continue
-        if platform == "linux" and not _is_linux_asset(name):
+        if platform == "linux" and not (_is_linux_asset(name) and _arch_ok(name, platform)):
             continue
 
         arch_rank = len(UPDATE_ASSET_ARCH_PRIORITY)

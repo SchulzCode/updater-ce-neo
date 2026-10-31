@@ -20,7 +20,12 @@ cd "$(dirname "$0")"
 
 export BUILD_BRAND="${BUILD_BRAND:-}"
 VERSION=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' src/config.py 2>/dev/null || echo "2.5.1")
-ARCH="${ARCH:-x86_64}"
+# Default to the host architecture; appimagetool and the release names use aarch64, not arm64.
+case "$(uname -m)" in
+    aarch64|arm64) HOST_ARCH="aarch64" ;;
+    *) HOST_ARCH="$(uname -m)" ;;
+esac
+ARCH="${ARCH:-$HOST_ARCH}"
 
 DIST_DIR="${DIST_DIR:-dist/linux}"
 BUILD_DIR="build/linux"
@@ -536,9 +541,11 @@ OUTPUT_LATEST="$DIST_DIR/${BRAND_SLUG}-${ARCH}.AppImage"
 log_step 6 "$TOTAL_STEPS" "Generating Standalone Linux AppImage" "Compressing AppDir into squashfs runtime ($OUTPUT_VERSIONED)..."
 
 echo "  -> Creating AppImage with appimagetool..."
-if ! ARCH="$ARCH" "$APPIMAGETOOL_BIN" "$APPDIR" "$OUTPUT_VERSIONED" >/dev/null 2>&1; then
+# appimagetool mis-resolves a relative AppDir path ("no such file or directory"), so pass an absolute one.
+APPDIR_ABS="$(realpath "$APPDIR")"
+if ! ARCH="$ARCH" "$APPIMAGETOOL_BIN" "$APPDIR_ABS" "$OUTPUT_VERSIONED" >/dev/null 2>&1; then
     echo "  -> Notice: retrying with --no-appstream flag..."
-    ARCH="$ARCH" "$APPIMAGETOOL_BIN" --no-appstream "$APPDIR" "$OUTPUT_VERSIONED" >/dev/null 2>&1
+    ARCH="$ARCH" "$APPIMAGETOOL_BIN" --no-appstream "$APPDIR_ABS" "$OUTPUT_VERSIONED" >/dev/null 2>&1
 fi
 
 # Create standard unversioned link/copy for auto-update and release naming

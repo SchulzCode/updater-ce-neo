@@ -67,6 +67,8 @@ class FwPackage:
     has_rockbox: bool = False
     has_rockbox_240p: bool = False
     has_ini: bool = False
+    has_preserve_data_scatter: bool = False
+    is_y2linux: bool = False
 
     @property
     def display_name(self) -> str:
@@ -189,6 +191,121 @@ def _single_scatter(folder: Path) -> Optional[Path]:
         return matches[0] if len(matches) == 1 else None
     except OSError:
         return None
+
+
+def pick_scatter(folder: Union[str, Path]) -> Optional[Path]:
+    """Return the best *scatter*.txt from folder.
+
+    Selection rules:
+    1. Collect all *.txt files with "scatter" in the name.
+    2. Preference non-preserve_data scatters when present.
+    3. Preference *ndroid_scatter*.txt over generic *scatter*.txt.
+    4. If exactly one scatter matches the preferred criteria, return it.
+    """
+    try:
+        folder_p = Path(folder)
+        matches = [
+            p for p in folder_p.iterdir()
+            if p.is_file() and p.suffix.lower() == ".txt" and "scatter" in p.name.lower()
+        ]
+    except OSError:
+        return None
+
+    if not matches:
+        return None
+    if len(matches) == 1:
+        return matches[0]
+
+    # Preference non-preserve_data scatters when present
+    non_preserve = [p for p in matches if "preserve_data" not in p.name.lower()]
+    candidates = non_preserve if non_preserve else matches
+
+    # Preference *ndroid_scatter*.txt over generic *scatter*.txt
+    android = [p for p in candidates if "ndroid_scatter" in p.name.lower()]
+    if len(android) == 1:
+        return android[0]
+    elif len(android) > 1:
+        candidates = android
+
+    if len(candidates) == 1:
+        return candidates[0]
+
+    return None
+
+
+def scatter_has_preserve_data_variant(folder: Union[str, Path]) -> bool:
+    """True when folder or its subfolders contain a *preserve_data* scatter file.
+
+    Indicates the firmware shipped with a preserve-data variant, and the
+    Keep My Data checkbox should default to checked.
+    """
+    try:
+        f = Path(folder)
+        if not f.exists():
+            return False
+        if f.is_file():
+            f = f.parent
+        return any(
+            p.is_file() and p.suffix.lower() == ".txt"
+            and "scatter" in p.name.lower()
+            and "preserve_data" in p.name.lower()
+            for p in f.rglob("*.txt")
+        )
+    except OSError:
+        return False
+
+
+def scatter_has_userdata(scatter_path: Union[str, Path]) -> bool:
+    """True if the scatter file lists a downloadable userdata partition.
+
+    Reads the scatter file and returns True if any partition whose name
+    or file name contains "user" or "usr" (case-insensitive) has ``is_download: true``.
+    """
+    try:
+        p = Path(scatter_path)
+        if not p.is_file():
+            return False
+        text = p.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return False
+
+    lines = text.splitlines()
+    blocks: list[list[str]] = []
+    current: Optional[list[str]] = None
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("- partition_index:") or stripped.startswith("partition_index:"):
+            if current is not None:
+                blocks.append(current)
+            current = [line]
+        elif current is not None:
+            current.append(line)
+    if current is not None:
+        blocks.append(current)
+
+    for block in blocks:
+        name = ""
+        file_name = ""
+        is_dl = False
+        for line in block:
+            stripped = line.strip()
+            key, _, value = stripped.partition(":")
+            key = key.strip().lstrip("- ").lower()
+            value = value.strip().strip('"\'')
+            if key == "partition_name" and not name:
+                name = value
+            elif key == "file_name" and not file_name:
+                file_name = value
+            elif key == "is_download":
+                is_dl = (value.lower() == "true")
+
+        if is_dl and file_name.upper() != "NONE":
+            for val in (name, file_name):
+                low = val.lower()
+                if "user" in low or "usr" in low:
+                    return True
+
+    return False
 
 
 def _package_image(folder: Path) -> Optional[Path]:
@@ -326,7 +443,7 @@ def read_package(
             return None
         meta = FwIni(enabled=True)
 
-    scatter = _single_scatter(folder_p)
+    scatter = pick_scatter(folder_p)
     if scatter is None:
         return None
 
@@ -366,6 +483,15 @@ def read_package(
         # fw_package.ini beside the app: its updater image may sit there too.
         image = _package_image(ini.parent)
 
+    eff_name_low = eff_name.lower()
+    meta_name_low = (meta.name or "").lower()
+    folder_low = folder_p.name.lower()
+    all_source = " ".join(str(s).lower() for s in source_names)
+    is_y2linux = any(
+        k in eff_name_low or k in meta_name_low or k in folder_low or k in all_source
+        for k in ("y2linux", "y2reborn")
+    )
+
     return FwPackage(
         folder=folder_p.resolve(),
         scatter=scatter.resolve(),
@@ -378,6 +504,8 @@ def read_package(
         has_rockbox=has_rockbox,
         has_rockbox_240p=has_rockbox_240p,
         has_ini=has_ini,
+        has_preserve_data_scatter=scatter_has_preserve_data_variant(folder_p),
+        is_y2linux=is_y2linux,
     )
 
 

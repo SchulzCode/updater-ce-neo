@@ -93,6 +93,10 @@ def parse_manifest_xml(xml_text: str):
             image = (node.get("image") or "").strip()
             # Dark mode may set either name, preferring the explicit icon key.
             icon_dark = (node.get("icon_dark") or node.get("image_dark") or "").strip()
+            min_version = (node.get("min_version") or node.get("min_app_version") or "").strip()
+            pkg_name = (node.get("package_name") or node.get("package") or "").strip()
+            y2linux_attr = (node.get("y2linux_fw") or node.get("y2reborn_fw") or "").strip().lower()
+            is_y2linux = y2linux_attr == "true" or any(k in name.lower() for k in ("y2linux", "y2reborn"))
         except Exception:
             continue
         if not name or not repo or device not in ("Y1", "Y2", "A5"):
@@ -103,17 +107,27 @@ def parse_manifest_xml(xml_text: str):
             continue
         if handler and "firmware" not in handler.lower():
             continue
+        if min_version:
+            from .config import APP_VERSION
+            from .updates import parse_version
+            cur_v = parse_version(APP_VERSION)
+            req_v = parse_version(min_version)
+            if cur_v and req_v and cur_v < req_v:
+                continue
+        if not pkg_name:
+            pkg_name = "rom_a5.zip" if device == "A5" else ("rom_y2.zip" if device == "Y2" else "rom.zip")
         entries.append(
             FirmwarePackage(
                 slug=_slug_for(name, device),
                 name=name,
                 model=device,
                 repo=resolve_firmware_repo(repo),
-                package_name="rom_a5.zip" if device == "A5" else ("rom_y2.zip" if device == "Y2" else "rom.zip"),
+                package_name=pkg_name,
                 description="",
                 icon=icon,
                 icon_dark=icon_dark,
                 image=image,
+                is_y2linux=is_y2linux,
             )
         )
     return entries
@@ -176,7 +190,8 @@ def cache_manifest(entries):
              "package_name": e.package_name, "slug": e.slug,
              "icon": getattr(e, "icon", "") or "",
              "icon_dark": getattr(e, "icon_dark", "") or "",
-             "image": getattr(e, "image", "") or ""}
+             "image": getattr(e, "image", "") or "",
+             "is_y2linux": bool(getattr(e, "is_y2linux", False))}
             for e in entries
         ]
         _cache_root().joinpath("packages.json").write_text(
@@ -203,6 +218,7 @@ def load_cached_manifest():
                 icon=e.get("icon", "") or "",
                 icon_dark=e.get("icon_dark", "") or "",
                 image=e.get("image", "") or "",
+                is_y2linux=bool(e.get("is_y2linux", False)),
             )
             for e in data
             if e.get("name") and e.get("repo")

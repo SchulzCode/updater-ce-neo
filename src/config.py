@@ -4,7 +4,7 @@ Values mirror the InniUpdaterChin app (APP_VERSION 1.1.2, contact email) and
 the online catalogue / donation endpoints used by Updater CE and innioasis.app.
 """
 
-APP_VERSION = "2.5.1"
+APP_VERSION = "2.5.2"
 APP_NAME = "Updater CE"
 CONTACT_EMAIL = "updater-feedback@innioasis.com"
 
@@ -136,15 +136,17 @@ UPDATE_CHECK_STARTUP_DELAY_MS = 3000  # silent auto-check shortly after launch
 # Specific target release asset filenames per operating system for updater-ce-neo releases.
 # If these files don't exist in a newer release, it is assumed the user is running the latest build.
 UPDATE_TARGET_ASSETS = {
-    "win32": ("installer.exe", "updaterce-setup.exe"),
+    "win32": ("installer.exe", "installer-arm64.exe", "updaterce-setup.exe"),
     "darwin": ("innioasis.updater.for.mac.dmg",),
     "linux": (
         "UpdaterCE.appimage",
         "UpdaterCE-arm64.appimage",
         "UpdaterCE-Linux-Portable.tar.gz",
         "UpdaterCE-Linux-Portable-arm64.tar.gz",
+        "Updater-CE-Linux-Portable-arm64.tar.gz",
         "UpdaterCE-Linux-Portable.zip",
         "UpdaterCE-Linux-Portable-arm64.zip",
+        "Updater-CE-Linux-Portable-arm64.zip",
         "mediatek installer.appimage",
         "mediatek installer.tar.gz",
     ),

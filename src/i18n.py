@@ -1550,6 +1550,34 @@ _STRINGS: dict = {
         "fr": "Veuillez connecter votre {model}",
         "es": "Por favor conecta tu {model}",
     },
+    # The tick on the power-off / connect card. Off unless the user asks for
+    # it, and then their user data partition is never written or erased.
+    "flash_keep_data_option": {
+        "en": "Try to keep my data",
+        "zh-CN": "尝试保留我的数据",
+        "de": "Meine Daten behalten",
+        "fr": "Essayer de conserver mes données",
+        "es": "Intentar conservar mis datos",
+        "ja": "データを保持する",
+    },
+    # Only reached when the firmware folder cannot take the scatter copy that
+    # leaves the user data partition out; the run stops rather than write it.
+    "err_keep_data_failed": {
+        "en": "Could not keep your data: the firmware folder is not writable. No partitions were written.",
+        "zh-CN": "无法保留数据：固件文件夹不可写入。未写入任何分区。",
+        "de": "Daten konnten nicht behalten werden: Der Firmware-Ordner ist nicht beschreibbar. Es wurden keine Partitionen geschrieben.",
+        "fr": "Impossible de conserver vos données : le dossier du firmware n'est pas accessible en écriture. Aucune partition n'a été écrite.",
+        "es": "No se pudieron conservar tus datos: la carpeta del firmware no permite escritura. No se escribió ninguna partición.",
+        "ja": "データを保持できませんでした：ファームウェアフォルダーに書き込めません。パーティションは書き込まれていません。",
+    },
+    "flash_keep_data_tooltip": {
+        "en": "Leaves this player's user data partition untouched. The rest of the firmware is written as usual.",
+        "zh-CN": "不写入或清除播放器上的用户数据分区，其余固件照常刷写。",
+        "de": "Der Benutzerdaten-Bereich des Players bleibt unberührt; der Rest der Firmware wird wie gewohnt geschrieben.",
+        "fr": "La partition de données utilisateur du lecteur n'est pas modifiée ; le reste du firmware est écrit normalement.",
+        "es": "La partición de datos de usuario del reproductor no se toca; el resto del firmware se escribe como siempre.",
+        "ja": "プレーヤーのユーザーデータ領域には書き込まず、それ以外のファームウェアは通常どおり書き込みます。",
+    },
     "flash_please_wait": {
         "zh-CN": "请稍候",
         "en": "Please wait",
@@ -1975,6 +2003,38 @@ _STRINGS: dict = {
         "en": "SP Flash Tool GUI",
         "fr": "SP Flash Tool GUI",
         "es": "SP Flash Tool GUI",
+    },
+    "y2reborn_view_guide_btn": {
+        "en": "View Guide",
+        "zh-CN": "查看指南",
+        "fr": "Voir le guide",
+        "es": "Ver guía",
+        "de": "Anleitung anzeigen",
+        "ja": "ガイドを表示",
+    },
+    "y2reborn_post_setup_tooltip": {
+        "en": "View Y2Reborn post-setup guide (innioasis.app)",
+        "zh-CN": "查看 Y2Reborn 后续设置指南 (innioasis.app)",
+        "fr": "Voir le guide de configuration Y2Reborn (innioasis.app)",
+        "es": "Ver la guía de configuración de Y2Reborn (innioasis.app)",
+        "de": "Y2Reborn Einrichtungsanleitung ansehen (innioasis.app)",
+        "ja": "Y2Reborn セットアップガイドを表示 (innioasis.app)",
+    },
+    "y2reborn_post_setup_note": {
+        "en": "Additional steps are required to set up Wi-Fi and Bluetooth when using Y2Reborn. MediaTek firmware files must be loaded onto your player.",
+        "zh-CN": "使用 Y2Reborn 设置 Wi-Fi 和蓝牙需要额外的后续步骤，必须将联发科固件文件加载到播放器中。",
+        "fr": "Des étapes supplémentaires sont nécessaires pour configurer le Wi-Fi et le Bluetooth avec Y2Reborn. Les fichiers de micrologiciel MediaTek doivent être chargés sur votre lecteur.",
+        "es": "Se requieren pasos adicionales para configurar Wi-Fi y Bluetooth con Y2Reborn. Los archivos de firmware de MediaTek deben cargarse en su reproductor.",
+        "de": "Für die Einrichtung von WLAN und Bluetooth unter Y2Reborn sind zusätzliche Schritte erforderlich. MediaTek-Firmware-Dateien müssen auf den Player geladen werden.",
+        "ja": "Y2Reborn で Wi-Fi と Bluetooth を設定するには追加の手順が必要です。MediaTek ファームウェアファイルをプレーヤーに読み込む必要があります。",
+    },
+    "y2reborn_post_setup_click_globe": {
+        "en": "Click the globe button above to open the guide (innioasis.app/y2reborn_post_setup.html).",
+        "zh-CN": "点击上方的地球图标打开指南 (innioasis.app/y2reborn_post_setup.html)。",
+        "fr": "Cliquez sur l'icône de globe ci-dessus pour ouvrir le guide (innioasis.app/y2reborn_post_setup.html).",
+        "es": "Haga clic en el icono del globo arriba para abrir la guía (innioasis.app/y2reborn_post_setup.html).",
+        "de": "Klicken Sie oben auf das Globus-Symbol, um die Anleitung zu öffnen (innioasis.app/y2reborn_post_setup.html).",
+        "ja": "上の地球アイコンをクリックしてガイドを開いてください (innioasis.app/y2reborn_post_setup.html)。",
     },
     "sp_gui_launch_intro": {
         "zh-CN": "SP Flash Tool 图形界面即将启动。\n\n• 如果设备尚未关机，请将其关机。\n• 如果已连接 USB 线，请先断开连接。\n• 在 SP Flash Tool 中根据需要点击 Download（或 Format All + Download）。\n\n准备就绪后连接 USB 线即可开始刷机。",

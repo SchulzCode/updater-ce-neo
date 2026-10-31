@@ -11,6 +11,7 @@ from PySide6.QtCore import QEvent, QEventLoop, QRect, QSize, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QPainter, QPalette, QPen, QPixmap
 from PySide6.QtWidgets import (
     QBoxLayout,
+    QCheckBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -49,7 +50,7 @@ from .widgets import (
     StatusTag,
     fade_in,
 )
-from .dark import T, link_html, page_top_margin
+from .dark import T, apply_explicit_foreground, link_html, page_top_margin
 
 
 def _themed_link(href: str, text: str) -> str:
@@ -1662,6 +1663,18 @@ class FlashPage(QWidget):
         )
         self._wait_prompt_label.setWordWrap(True)
         copy.addWidget(self._wait_prompt_label)
+
+        # "Try to keep my data": a tick on the connect / power-off card, off
+        # unless the user asks for it. The state is read when Next is pressed,
+        # so what the flash does is what the card showed at that moment.
+        self._keep_data_cb = QCheckBox(tr("flash_keep_data_option"))
+        self._keep_data_cb.setCursor(Qt.ArrowCursor)
+        self._keep_data_cb.setChecked(False)
+        self._keep_data_cb.setToolTip(tr("flash_keep_data_tooltip"))
+        self._keep_data_cb.setAccessibleName(tr("flash_keep_data_option"))
+        apply_explicit_foreground(self._keep_data_cb, " font-size: 12px; border: none;")
+        self._keep_data_cb.setVisible(False)
+        copy.addWidget(self._keep_data_cb)
         self._wait_col = copy
 
         # Retained for attribute compatibility, but kept hidden and not added to layout
@@ -1912,6 +1925,11 @@ class FlashPage(QWidget):
         appeal_layout.addWidget(self._appeal_body)
         actions = QHBoxLayout()
         actions.setSpacing(8)
+        self._view_guide_btn = QPushButton(tr("y2reborn_view_guide_btn"))
+        self._view_guide_btn.setCursor(Qt.ArrowCursor)
+        self._view_guide_btn.setStyleSheet("")
+        self._view_guide_btn.clicked.connect(self._open_y2reborn_guide)
+        self._view_guide_btn.setVisible(False)
         self._coffee_btn = QPushButton(tr("donate_completion_coffee"))
         self._coffee_btn.setCursor(Qt.ArrowCursor)
         self._coffee_btn.setStyleSheet("")
@@ -1920,6 +1938,7 @@ class FlashPage(QWidget):
         self._not_now_btn.setCursor(Qt.ArrowCursor)
         self._not_now_btn.setStyleSheet("")
         self._not_now_btn.clicked.connect(self._on_not_now)
+        actions.addWidget(self._view_guide_btn)
         actions.addWidget(self._coffee_btn)
         actions.addWidget(self._not_now_btn)
         actions.addStretch(1)
@@ -2443,6 +2462,10 @@ class FlashPage(QWidget):
         self.dismiss_prompt_stop()
         self._failed = True
         self._prompt_only = False
+        # The failure card is not the connect prompt, so the "keep my data"
+        # tick does not belong on it.
+        if hasattr(self, "_keep_data_cb"):
+            self._keep_data_cb.setVisible(False)
         self.show_flashing()
         self._warning.setVisible(False)
         if hasattr(self, "_appeal"):
@@ -2660,6 +2683,9 @@ class FlashPage(QWidget):
         self._power_off_recovery_kwargs = dict(prompt_kwargs or {})
         self.clear_install_failure()
         self.show_waiting()
+        if hasattr(self, "_keep_data_cb"):
+            has_ud = getattr(self, "_has_userdata", True)
+            self._keep_data_cb.setVisible(has_ud)
         msg = self._power_off_prompt_text()
         self._wait_prompt_label.setText(msg)
         if hasattr(self._wait_progress_bar, "set_failed"):
@@ -3355,6 +3381,11 @@ class FlashPage(QWidget):
         self.show_waiting()
         prompt = self._power_off_prompt_text()
         self._wait_prompt_label.setText(prompt)
+        if hasattr(self, "_keep_data_cb"):
+            # The one-time access step is not a flash prompt: its Next only
+            # installs the udev rules, so the tick belongs on the run after it.
+            has_ud = getattr(self, "_has_userdata", True)
+            self._keep_data_cb.setVisible(not permission and has_ud)
         self._set_determinate(self._wait_progress_bar, 0)
         # Nothing has been flashed yet, so stepping back needs no question:
         # the cancel chip stops the run outright.
@@ -3366,16 +3397,39 @@ class FlashPage(QWidget):
         self._update_paperclip_hint()
         self._apply_stop_hold()
 
+    def set_has_userdata(self, has_userdata: bool, preserve_data_default: bool = False) -> None:
+        """Control whether the Keep My Data checkbox is visible and its default state."""
+        self._has_userdata = bool(has_userdata)
+        if hasattr(self, "_keep_data_cb"):
+            if self._has_userdata:
+                self._keep_data_cb.setChecked(bool(preserve_data_default))
+            else:
+                self._keep_data_cb.setChecked(False)
+                self._keep_data_cb.setVisible(False)
+
     def show_gui_handoff_prompt(self, hint: str) -> None:
         """Power-off line plus a small download-mode hint. Continue does not flash."""
         self.show_power_off_prompt()
+        # The user drives SP Flash Tool's own GUI here, so this run's scatter
+        # (and therefore the keep-data option) is not ours to set.
+        if hasattr(self, "_keep_data_cb"):
+            self._keep_data_cb.setVisible(False)
         if hasattr(self, "_wait_mode_hint"):
             self._wait_mode_hint.setText(hint or "")
             self._wait_mode_hint.setVisible(False)
 
+    def keep_data_checked(self) -> bool:
+        """Whether the user asked this run to leave their user data untouched."""
+        if not getattr(self, "_has_userdata", True):
+            return False
+        cb = getattr(self, "_keep_data_cb", None)
+        return bool(cb is not None and cb.isChecked())
+
     def leave_power_off_prompt(self) -> None:
         self._prompt_only = False
         self._permission_prompt = False
+        if hasattr(self, "_keep_data_cb"):
+            self._keep_data_cb.setVisible(False)
         if hasattr(self, "_wait_continue_btn"):
             self._wait_continue_btn.setVisible(True)
             self._wait_continue_btn.setEnabled(False)
@@ -3941,6 +3995,10 @@ class FlashPage(QWidget):
             self._wait_prompt_label.setText(tr(self._step_key))
         if hasattr(self, "_wait_mode_hint"):
             self._wait_mode_hint.setVisible(False)
+        if hasattr(self, "_keep_data_cb"):
+            self._keep_data_cb.setText(tr("flash_keep_data_option"))
+            self._keep_data_cb.setToolTip(tr("flash_keep_data_tooltip"))
+            self._keep_data_cb.setAccessibleName(tr("flash_keep_data_option"))
         self._update_paperclip_hint()
         if hasattr(self, "_flash_retry_btn"):
             self._flash_retry_btn.setText(tr("flash_btn_retry"))

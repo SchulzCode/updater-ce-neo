@@ -881,11 +881,14 @@ class DiagnosticsDialog(QDialog):
 
 
 class UpdateAvailableDialog(QDialog):
-    """Wizard-style update dialog with platform-specific assisted installation."""
+    """Wizard-style update dialog with platform-specific assisted installation.
+
+    Shown inline in the main window, so it takes no window-level theme: the
+    host window keeps its own glass and the cards keep their material.
+    """
 
     def __init__(self, parent=None, info=None, current_version="", on_skip=None):
         super().__init__(parent)
-        apply_dialog_theme(self)
         self._info = info
         self._on_skip = on_skip
         self._worker = None
@@ -1071,16 +1074,17 @@ class UpdateAvailableDialog(QDialog):
         from ..browser import open_browser
         from ..downloads import DownloadWorker
 
-        # Linux: take to the install instructions page on innioasis.app/guide.html
-        if sys.platform.startswith("linux"):
-            open_browser("https://innioasis.app/guide.html")
-            self.accept()
-            return
-
         # Identify platform download asset
         target_asset = self._asset
         if not target_asset and self._info:
             target_asset = pick_platform_asset(self._info.assets)
+
+        # Linux: AppImages and portable tar.gz / zip packages are downloaded.
+        # Fall back to the guide only when no suitable asset exists.
+        if sys.platform.startswith("linux") and not target_asset:
+            open_browser("https://innioasis.app/guide.html")
+            self.accept()
+            return
 
         if not target_asset:
             open_browser(self._info.html_url if self._info else "https://innioasis.app/guide.html")
@@ -1097,12 +1101,21 @@ class UpdateAvailableDialog(QDialog):
             "Innioasis.Updater.for.Mac.dmg" if sys.platform == "darwin" else f"UpdaterCE-Setup-{self._info.version}.exe"
         )
 
-        if sys.platform == "darwin":
+        if sys.platform == "darwin" or sys.platform.startswith("linux"):
             dest_dir = Path.home() / "Downloads"
             dest_dir.mkdir(parents=True, exist_ok=True)
             self._dest_path = dest_dir / filename
         else:
             self._dest_path = Path(tempfile.gettempdir()) / filename
+
+        # A file from an earlier download of this name is not this release. The
+        # downloader resumes any file it finds, so an old installer would be
+        # kept as the start of the new one. Clear it, and any partial copy.
+        for stale in (self._dest_path, Path(f"{self._dest_path}.part")):
+            try:
+                stale.unlink(missing_ok=True)
+            except OSError as e:
+                logger.debug("Could not remove stale update file %s: %s", stale, e)
 
         # Switch to wizard progress view
         self._download_state = "downloading"
@@ -1145,7 +1158,18 @@ class UpdateAvailableDialog(QDialog):
                     QApplication.quit()
                     return
 
-                # Windows: ready to install
+                if sys.platform.startswith("linux"):
+                    # Linux portable packages (.tar.gz / .zip): reveal in file manager and quit
+                    if not str(self._dest_path).lower().endswith(".appimage"):
+                        try:
+                            from ..diagnostics import reveal_in_file_manager
+                            reveal_in_file_manager(self._dest_path)
+                        except Exception as e:
+                            logger.debug("Failed to reveal download in file manager: %s", e)
+                        QApplication.quit()
+                        return
+
+                # Windows and Linux AppImage: ready to install
                 self._download_state = "ready"
                 self._icon_label.setText("🎉")
                 self._progress_label.setText("Ready to install.")
@@ -1169,10 +1193,21 @@ class UpdateAvailableDialog(QDialog):
         from PySide6.QtWidgets import QApplication
 
         if self._dest_path and self._dest_path.is_file():
-            try:
-                os.startfile(str(self._dest_path))
-            except Exception:
-                subprocess.Popen([str(self._dest_path)], shell=True)
+            if sys.platform.startswith("linux"):
+                # An AppImage is a program: make it executable and run it
+                # directly (no shell), then let this older build exit.
+                try:
+                    self._dest_path.chmod(self._dest_path.stat().st_mode | 0o755)
+                    subprocess.Popen([str(self._dest_path)], start_new_session=True)
+                except Exception as e:
+                    logger.error("Could not start the AppImage %s: %s", self._dest_path, e)
+                    self._progress_label.setText(f"Could not start the update: {e}")
+                    return
+            else:
+                try:
+                    os.startfile(str(self._dest_path))
+                except Exception:
+                    subprocess.Popen([str(self._dest_path)], shell=True)
             QApplication.quit()
         else:
             self.reject()

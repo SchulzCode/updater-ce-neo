@@ -14,7 +14,7 @@ over in the console configuration file instead::
         <authentication>custom.auth</authentication>
         <connection type="BromUSB" high-speed="true" without-battery="true" .../>
       </general>
-      <commands><format-download/></commands>
+      <commands><download-only/></commands>
     </flashtool-config>
 
 ``without-battery="true"`` is the documented equivalent of the CLI's
@@ -22,9 +22,11 @@ over in the console configuration file instead::
 ``-r`` still redirects the debug log to us alongside ``-i``, so the app keeps
 parsing the same progress lines.
 
-``<format-download/>`` is Format All + Download, the same operation as the
-CLI's ``-c format-download``, which the shipped 1.1.7 build runs with or
-without an authentication file, so the two paths erase and write alike.
+``<download-only/>`` is Download Only, the same operation as the CLI's
+``-c download``: it writes the scatter's downloadable images and formats
+nothing. Format All + Download (``<format-download/>``) is never used, so a
+partition the app leaves out of the scatter -- the user data one, when the
+user asked to keep their data -- is not erased either.
 
 Auth files are optional — most targets are not secure-booted — so the plain
 ``-c download -s ... -d ... -t without -r`` command line stays the
@@ -111,6 +113,9 @@ def build_console_config_xml(
 ) -> str:
     """Console configuration XML for a flash that needs an auth file.
 
+    The command is always ``<download-only/>``: partitions are written, none
+    are formatted. User data is kept only by leaving it out of ``scatter``.
+
     Raises :class:`SpConfigError` when the scatter does not tell us the chip
     or storage type, since a wrong guess there is worse than no flash.
 
@@ -142,7 +147,7 @@ def build_console_config_xml(
             f' timeout-count="{int(connection_timeout_ms)}" com-port="" />',
             "    </general>",
             "    <commands>",
-            "        <format-download/>",
+            "        <download-only/>",
             "    </commands>",
             "</flashtool-config>",
             "",

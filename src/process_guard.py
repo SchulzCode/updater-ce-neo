@@ -460,11 +460,13 @@ def sweep_async(reason: str = "", on_done=None, force: bool = False) -> threadin
 
 
 def free_com_ports(log_cb=None) -> list[str]:
-    """Free COM / serial ports (such as /dev/ttyACM* and /dev/ttyUSB*) held by processes or services.
+    """Free COM / serial ports (such as /dev/ttyACM* and /dev/ttyUSB*) held by processes.
 
-    On Linux, checks for ModemManager, brltty, and any processes holding open
-    /dev/ttyACM* or /dev/ttyUSB* ports, releasing them so SP Flash Tool and MTKClient
-    can open the COM port cleanly without S_COM_PORT_OPEN_FAIL (1013).
+    On Linux, releases /dev/ttyACM* and /dev/ttyUSB* from this user's own
+    processes so SP Flash Tool and MTKClient can open the port cleanly without
+    S_COM_PORT_OPEN_FAIL (1013), and reports ModemManager / brltty when they are
+    running. It never stops a service: that needs polkit, and this runs on
+    launch and after every install (see the note on the service check below).
     """
     released = []
     if sys.platform.startswith("win") or os.name == "nt":
@@ -510,19 +512,28 @@ def free_com_ports(log_cb=None) -> list[str]:
             except Exception:
                 pass
 
-    # 2. Check ModemManager / brltty
+    # 2. Report ModemManager / brltty. Never stop them from here.
+    #
+    # Stopping a system service is a polkit action: from a normal user it opens
+    # the desktop's authentication dialog. This function is called on the
+    # startup sweep and again after every install, so stopping here asked for a
+    # password the user never requested — and the short timeout the call needed
+    # killed ``systemctl``, which dismisses the dialog a second or two after it
+    # opens. The only place these services are stopped is the SP Flash Tool
+    # setup script, which already runs as root from the single prompt that an
+    # SP Flash Tool install starts with.
     for svc in ("ModemManager", "brltty"):
         try:
             chk = subprocess.run(
                 ["systemctl", "is-active", "--quiet", svc],
                 capture_output=True,
-                timeout=1,
+                timeout=2,
             )
-            if chk.returncode == 0:
-                subprocess.run(["systemctl", "stop", svc], capture_output=True, timeout=2)
-                released.append(f"stopped {svc}")
-                if log_cb:
-                    log_cb(f"Temporarily stopped {svc} to prevent serial port lock")
+            if chk.returncode == 0 and log_cb:
+                log_cb(
+                    f"{svc} is running; SP Flash Tool setup stops it so it cannot "
+                    "claim the player's serial port"
+                )
         except Exception:
             pass
 

@@ -153,6 +153,16 @@ _SVG_TEMPLATES = {
         <line x1="2" y1="12" x2="22" y2="12"/>
         <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
     </svg>""",
+    "globe": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="2" y1="12" x2="22" y2="12"/>
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+    </svg>""",
+    "www": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="2" y1="12" x2="22" y2="12"/>
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+    </svg>""",
     "diagnostics": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
     </svg>""",
@@ -202,6 +212,8 @@ _SF_SYMBOL_MAP = {
     "back": "arrow.left",
     "settings": "gearshape",
     "translate": "globe",
+    "globe": "globe",
+    "www": "globe",
     "diagnostics": "waveform.path.ecg",
     "update": "arrow.triangle.2.circlepath",
     "support": "heart",
@@ -223,6 +235,8 @@ _SEGOE_SYMBOL_MAP = {
     "back": 0xE72B,        # Back
     "settings": 0xE713,    # Settings
     "translate": 0xE774,   # Globe
+    "globe": 0xE774,       # Globe
+    "www": 0xE774,         # Globe
     "diagnostics": 0xEC7A, # Diagnostic
     "update": 0xE72C,      # Refresh
     "support": 0xEB51,     # Heart
@@ -258,6 +272,8 @@ _FREEDESKTOP_MAP = {
         "settings-configure",
     ],
     "translate": ["preferences-desktop-locale-symbolic", "preferences-desktop-locale", "locale-symbolic", "locale"],
+    "globe": ["applications-internet", "web-browser", "network-workgroup"],
+    "www": ["applications-internet", "web-browser", "network-workgroup"],
     "diagnostics": ["utilities-system-monitor-symbolic"],
     "update": ["view-refresh-symbolic", "view-refresh", "system-software-update-symbolic", "system-software-update"],
     "support": ["emblem-favorite-symbolic", "emblem-favorite", "love"],

@@ -54,6 +54,7 @@ class FirmwarePackage:
     icon: str = ""
     icon_dark: str = ""
     image: str = ""
+    is_y2linux: bool = False
 
 
 # Live manifest entries (see ``manifest.py``) replace the static table once
@@ -177,11 +178,13 @@ def _classify_variant_model(name, tag_name="", repo=""):
 
 
 def _parse_rom_asset_variant(asset, tag_name="", repo=""):
-    """Classify a rom*.zip asset into hardware type (A/B), resolution, model."""
+    """Classify a rom*.zip or *install*.zip asset into hardware type (A/B), resolution, model."""
     try:
         name = asset.get("name", "")
         lower = name.lower()
-        if not fnmatch(lower, "rom*.zip"):
+        is_rom = fnmatch(lower, "rom*.zip")
+        is_install = fnmatch(lower, "*install*.zip")
+        if not (is_rom or is_install):
             return None
         tag_lower = (tag_name or "").lower()
         is_type_b = "_type_b" in lower or "type-b" in lower or " type b" in lower
@@ -194,11 +197,22 @@ def _parse_rom_asset_variant(asset, tag_name="", repo=""):
             resolution = "240p"
         else:
             resolution = "native"
+        if is_install and not is_rom:
+            # *install*.zip without a rom* prefix: classify by explicit model tags only,
+            # otherwise "dual" (catalogue-declared model governs).
+            if "_y2" in lower or "-y2" in lower:
+                model = "Y2"
+            elif "_a5" in lower or "-a5" in lower:
+                model = "A5"
+            else:
+                model = "dual"
+        else:
+            model = _classify_variant_model(name, tag_name, repo)
         return {
             "asset": asset,
             "type": hw_type,
             "resolution": resolution,
-            "model": _classify_variant_model(name, tag_name, repo),
+            "model": model,
         }
     except Exception:
         return None
@@ -293,13 +307,17 @@ def _model_ok_for_package(variant_model, package_model, repo, model):
         if pd in ("Y1", "Y2"):
             return False
         if variant_model == "DUAL":
-            if pd == "A5" and "a5" not in repo_name:
-                return False
-            return True
+            if pd == "A5" or "a5" in repo_name:
+                return True
+            return False
         return False
 
     if selecting_y2:
-        return variant_model == "Y2"
+        if variant_model == "Y2":
+            return True
+        if variant_model == "DUAL" and pd == "Y2":
+            return True
+        return False
 
     # Y1 / generic selection
     if pd in ("Y2", "A5"):
@@ -1420,6 +1438,17 @@ class ReleasesClient:
         assets = release.get("assets", [])
         rom_variants = [_parse_rom_asset_variant(a, tag_name, repo) for a in assets]
         rom_variants = [v for v in rom_variants if v]
+        # Fallback: when no rom*.zip / *install*.zip matched, accept a single .zip asset.
+        if not rom_variants:
+            zip_assets = [a for a in assets if (a.get("name") or "").lower().endswith(".zip")]
+            if len(zip_assets) == 1:
+                a = zip_assets[0]
+                rom_variants = [{
+                    "asset": a,
+                    "type": "A",
+                    "resolution": "native",
+                    "model": "dual",
+                }]
         preferred = select_preferred_rom_asset(rom_variants)
         if not preferred:
             return None
@@ -1451,6 +1480,17 @@ class ReleasesClient:
             assets = release.get("assets", [])
             rom_variants = [_parse_rom_asset_variant(a, tag_name, repo) for a in assets]
             rom_variants = [v for v in rom_variants if v]
+            # Fallback: when no rom*.zip / *install*.zip matched, accept a single .zip asset.
+            if not rom_variants:
+                zip_assets = [a for a in assets if (a.get("name") or "").lower().endswith(".zip")]
+                if len(zip_assets) == 1:
+                    a = zip_assets[0]
+                    rom_variants = [{
+                        "asset": a,
+                        "type": "A",
+                        "resolution": "native",
+                        "model": "dual",
+                    }]
             preferred = select_preferred_rom_asset(rom_variants)
             if not preferred:
                 continue

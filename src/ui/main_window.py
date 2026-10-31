@@ -721,6 +721,9 @@ class MainWindow(QMainWindow):
         self._sp_1013_seen = False
         self._reboot_suggestion_shown = False
         self._power_off_prompt = False
+        # "Try to keep my data", as read from the install card when the user
+        # confirmed the player was off. Off means the firmware is written whole.
+        self._keep_data = False
         self._gui_handoff_prepare = False
         self._gui_handoff_ready = False
         self._gui_launch_when_ready = False
@@ -3803,6 +3806,8 @@ class MainWindow(QMainWindow):
         self._cache_recovery_needed = False
         self._fallback_attempted = False
         self._sp_1013_seen = False
+        # A new install starts with the tick off; the card can turn it on again.
+        self._keep_data = False
         self._flash_method = self._preferred_flash_method()
         if hasattr(self, "_flash_page"):
             self._flash_page.set_method(self._flash_method)
@@ -4083,12 +4088,9 @@ class MainWindow(QMainWindow):
         if backend_method(self._flash_method) == METHOD_MTK:
             # MTKClient talks to the player through libusb as the normal user:
             # there is nothing to elevate and no system change to make, so no
-            # password prompt is shown for an MTKClient install. SP Flash Tool
-            # still gets its one-time setup when the run falls back to it.
-            try:
-                linux_sp_flash.silent_system_prep()
-            except Exception as exc:
-                logger.info("Optional Linux user-space prep did not complete: %s", exc)
+            # SP Flash Tool preparation, password prompt or tool sweep runs for
+            # an MTKClient install. SP Flash Tool gets its own setup only when
+            # it is the selected engine.
             self._linux_permission_pending = False
             return True
         try:
@@ -4097,11 +4099,14 @@ class MainWindow(QMainWindow):
             # No device probing here: SP Flash Tool and mtk.py report their own
             # connection problems. Prep only makes the system ready for them.
             report = linux_sp_flash.run_system_checker()
+            # Only the udev rules need root, so only they justify a password
+            # prompt. The rules carry TAG+="uaccess", which is what actually
+            # opens the player to the logged-in seat; group membership is a
+            # fallback the setup script adds for free. Asking again because
+            # the user is not in dialout/plugdev (Arch and Fedora use neither)
+            # made a prepared machine prompt for every install.
             needs_access = any(
                 item.get("key") == "udev_rules" and item.get("status") != "ok"
-                for item in (report.get("items") or [])
-            ) or any(
-                item.get("key") == "user_groups" and item.get("status") != "ok"
                 for item in (report.get("items") or [])
             )
             if needs_access and not getattr(self, "_linux_permission_confirmed", False):
@@ -4156,6 +4161,11 @@ class MainWindow(QMainWindow):
         """
         from .. import elevation
 
+        # Linux never restarts the whole app under pkexec: the SP Flash Tool
+        # elevates its own launch when the switch is on, and MTKclient never
+        # needs root. A whole-app restart would prompt for MTKclient installs.
+        if platform.system() == "Linux":
+            return True
         if not elevation.run_as_admin_enabled(self.settings) or elevation.is_elevated():
             return True
         if os.environ.get("QT_QPA_PLATFORM") == "offscreen" or os.environ.get("CI"):
@@ -4212,16 +4222,25 @@ class MainWindow(QMainWindow):
         self._flash_page.set_model(self._package_model)
         self._flash_page.set_method(self._flash_method)
         try:
-            from ..flash_service import completed_extract_dir, _find_scatter, _parse_scatter_platform
-            ed = completed_extract_dir(self._package_path)
-            if ed:
-                sc = _find_scatter(Path(ed))
-                if sc:
-                    platform = _parse_scatter_platform(sc) or ""
-                    if hasattr(self._flash_page, "set_platform"):
-                        self._flash_page.set_platform(platform)
-        except Exception:
-            pass
+            from ..flash_service import completed_extract_dir, compute_extract_dir, _find_scatter, _parse_scatter_platform
+            from ..fw_package import scatter_has_userdata, scatter_has_preserve_data_variant
+            ed = completed_extract_dir(self._package_path) or compute_extract_dir(self._package_path)
+            sc = None
+            if ed and Path(ed).is_dir():
+                sc = _find_scatter(Path(ed), allow_raise=False)
+            elif self._package_path and Path(self._package_path).is_file():
+                p = Path(self._package_path)
+                if p.suffix.lower() == ".txt" or "scatter" in p.name.lower():
+                    sc = p
+            if sc:
+                platform = _parse_scatter_platform(sc) or ""
+                if hasattr(self._flash_page, "set_platform"):
+                    self._flash_page.set_platform(platform)
+                has_ud = scatter_has_userdata(sc)
+                has_preserve = scatter_has_preserve_data_variant(sc.parent)
+                self._flash_page.set_has_userdata(has_ud, preserve_data_default=has_preserve)
+        except Exception as e:
+            logger.debug("Could not inspect scatter in _show_device_prep: %s", e)
         # This screen shows the release's own image, not only the settings
         # stand-in: it is the first thing the user sees when the install starts,
         # and the catalogue already has the image by then.
@@ -4329,9 +4348,12 @@ class MainWindow(QMainWindow):
             return
         if not self._ensure_elevated_for_install():
             return
-        if self._needs_linux_device_prep():
+        if self._needs_linux_device_prep() and backend_method(self._flash_method) != METHOD_MTK:
             if not self._start_linux_install_prep():
                 return
+        else:
+            # MTKClient never runs the SP Flash Tool access step.
+            self._linux_permission_pending = False
         if not getattr(self, "_fallback_attempted", False):
             self._flash_method = self._preferred_flash_method()
             self._flash_page.set_method(self._flash_method)
@@ -4409,13 +4431,22 @@ class MainWindow(QMainWindow):
         )
         try:
             from ..flash_service import compute_extract_dir, _find_scatter, _parse_scatter_platform
+            from ..fw_package import scatter_has_userdata, scatter_has_preserve_data_variant
 
             ed = pre_extracted or compute_extract_dir(self._package_path)
-            sc = _find_scatter(Path(ed)) if Path(ed).is_dir() else None
-            if sc and hasattr(self._flash_page, "set_platform"):
-                platform = _parse_scatter_platform(sc) or ""
-                if platform:
-                    self._flash_page.set_platform(platform)
+            sc = _find_scatter(Path(ed), allow_raise=False) if Path(ed).is_dir() else None
+            if not sc and self._package_path and Path(self._package_path).is_file():
+                p = Path(self._package_path)
+                if p.suffix.lower() == ".txt" or "scatter" in p.name.lower():
+                    sc = p
+            if sc:
+                if hasattr(self._flash_page, "set_platform"):
+                    platform = _parse_scatter_platform(sc) or ""
+                    if platform:
+                        self._flash_page.set_platform(platform)
+                has_ud = scatter_has_userdata(sc)
+                has_preserve = scatter_has_preserve_data_variant(sc.parent)
+                self._flash_page.set_has_userdata(has_ud, preserve_data_default=has_preserve)
         except Exception as e:
             logger.debug("Could not inspect scatter platform in _begin_flash_flow: %s", e)
         da_file, auth_file = self._flash_inputs()
@@ -4432,6 +4463,7 @@ class MainWindow(QMainWindow):
             da_file=da_file,
             auth_file=auth_file,
             is_rockbox=self._is_360p_rockbox,
+            keep_data=getattr(self, "_keep_data", False),
         )
         self.service.stop_device_monitor()
 
@@ -5454,6 +5486,10 @@ class MainWindow(QMainWindow):
 
     def _on_power_off_continue(self):
         """The user confirmed the device is off and unplugged. Start the run."""
+        # Read the card's "Try to keep my data" tick here: this is the moment
+        # the user confirmed the player is off and unplugged, so the run that
+        # follows has to obey what the card showed then.
+        self._keep_data = self._flash_page.keep_data_checked()
         if getattr(self, "_linux_permission_pending", False):
             self._on_linux_permission_next()
             return

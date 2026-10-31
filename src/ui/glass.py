@@ -1258,7 +1258,10 @@ class _DialogThemeWatcher(QObject):
         return cls._instance
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
-        if event.type() == QEvent.Type.Show:
+        # Only a real top-level window owns its native window. A dialog shown
+        # inline (reparented into the main window) must not restyle that host
+        # window's titlebar, appearance or backdrop.
+        if event.type() == QEvent.Type.Show and getattr(watched, "isWindow", lambda: False)():
             try:
                 from .dark import is_dark
                 dark = is_dark()
