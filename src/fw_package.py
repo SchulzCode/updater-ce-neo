@@ -52,6 +52,8 @@ class FwIni:
     model: str = ""
     type: str = ""
     description: str = ""
+    post_install: str = ""
+    post_install_2: str = ""
 
 
 @dataclass(frozen=True)
@@ -69,6 +71,8 @@ class FwPackage:
     has_ini: bool = False
     has_preserve_data_scatter: bool = False
     is_y2linux: bool = False
+    post_install: str = ""
+    post_install_2: str = ""
 
     @property
     def display_name(self) -> str:
@@ -170,6 +174,8 @@ def read_fw_package_ini(path: Union[str, Path]) -> FwIni:
     model = get_first("target_model", "target model", "model", "target")
     sw_type = get_first("target_type", "target type", "type", "type_variant", "variant")
     desc = get_first("description", "desc")
+    post_install = get_first("post_install", "post install")
+    post_install_2 = get_first("post_install_2", "post install 2")
 
     return FwIni(
         enabled=enabled,
@@ -178,6 +184,8 @@ def read_fw_package_ini(path: Union[str, Path]) -> FwIni:
         model=model,
         type=sw_type,
         description=desc,
+        post_install=post_install,
+        post_install_2=post_install_2,
     )
 
 
@@ -505,6 +513,8 @@ def read_package(
         has_rockbox_240p=has_rockbox_240p,
         has_ini=has_ini,
         has_preserve_data_scatter=scatter_has_preserve_data_variant(folder_p),
+        post_install=meta.post_install,
+        post_install_2=meta.post_install_2,
         is_y2linux=is_y2linux,
     )
 

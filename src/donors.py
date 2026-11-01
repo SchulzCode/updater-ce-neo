@@ -11,7 +11,7 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from .config import DONORS_CSV_URL, MONTHLY_GOAL_USD
+from .config import DONORS_CSV_URL, MONTHLY_GOAL_USD, github_fallback_url
 from .network import requests_module
 
 requests = requests_module()
@@ -202,22 +202,32 @@ def fetch_remote_donors_async(on_result):
     def _cached():
         text = load_donors_file([cached_donors_path()])
         if not text:
+            # First run (or a fresh install): use the copy baked into the app.
+            try:
+                from . import online_data
+
+                text = online_data.read_text("donors.csv")
+            except Exception:
+                text = ""
+        if not text:
             return None
         return parse_donors_csv_text(text) or None
+
+    def _fetch_text(url):
+        return requests.get(
+            url,
+            headers={
+                "User-Agent": "InnioasisUpdater/1.0",
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+            },
+            timeout=10.0,
+        )
 
     def _worker():
         reason = ""
         try:
-            url = f"{DONORS_CSV_URL}?_t={int(time.time())}"
-            resp = requests.get(
-                url,
-                headers={
-                    "User-Agent": "InnioasisUpdater/1.0",
-                    "Cache-Control": "no-cache, no-store, must-revalidate",
-                    "Pragma": "no-cache",
-                },
-                timeout=10.0,
-            )
+            resp = _fetch_text(f"{DONORS_CSV_URL}?_t={int(time.time())}")
             if resp.status_code == 200 and resp.text.strip():
                 text = resp.text
                 parsed = parse_donors_csv_text(text)
@@ -238,6 +248,25 @@ def fetch_remote_donors_async(on_result):
                 reason = f"{_DONORS_HOST} returned HTTP {resp.status_code}"
         except Exception as e:
             reason = f"{_DONORS_HOST} unreachable ({e})"
+
+        # innioasis.app is unavailable: try the same file from the website's GitHub repo.
+        try:
+            resp = _fetch_text(github_fallback_url(DONORS_CSV_URL))
+            if resp.status_code == 200:
+                parsed = parse_donors_csv_text(resp.text)
+                if parsed:
+                    try:
+                        cached_donors_path().write_text(resp.text, encoding="utf-8")
+                    except Exception as ce:
+                        logger.debug("Could not cache donors.csv to disk: %s", ce)
+                    _log_connectivity(True, "GitHub fallback responded")
+                    try:
+                        on_result(parsed)
+                    except RuntimeError:
+                        pass
+                    return
+        except Exception as e:
+            logger.debug("donors.csv GitHub fallback failed: %s", e)
 
         _log_connectivity(False, reason)
         # Falling back to the newest local copy keeps the app usable offline.

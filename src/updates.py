@@ -315,6 +315,34 @@ class UpdateChecker:
         logger.info("No newer releases contain assets for %s; staying on %s", asset_hint(), self.current)
         return UpdateInfo()
 
+    def simulate_latest(self, force=False) -> UpdateInfo:
+        """The latest release with a platform package, ignoring the running version.
+
+        Used by the Cmd/Ctrl+U test screen: it shows the update card even when
+        the latest release is the same as, or older than, this build.
+        """
+        try:
+            single = self.client.get_latest_release_info(self.repo, force=force)
+        except TypeError:
+            single = self.client.get_latest_release_info(self.repo)
+        except Exception as e:
+            logger.debug("Simulated update check failed for %s: %s", self.repo, e)
+            return UpdateInfo(failed=True)
+        if not single or not isinstance(single, dict) or not single.get("tag_name"):
+            return UpdateInfo(failed=True)
+        assets = single.get("assets") or []
+        if not pick_platform_asset(assets):
+            return UpdateInfo(failed=True)
+        return UpdateInfo(
+            tag=single.get("tag_name", ""),
+            name=single.get("name", ""),
+            body=single.get("body", ""),
+            published_at=single.get("published_at", ""),
+            html_url=single.get("html_url", ""),
+            assets=assets,
+            store_available=self._store_flag(assets),
+        )
+
     def _store_flag(self, assets) -> bool:
         """Whether this release advertises a Microsoft Store build.
 

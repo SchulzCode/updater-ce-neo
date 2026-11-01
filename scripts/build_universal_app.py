@@ -434,9 +434,27 @@ def install_universal_packages(site_packages: Path, dest_python: Path):
                 d.unlink()
 
 
+def fetch_online_snapshots():
+    """Refresh assets/online with the latest innioasis.app copies (best-effort).
+
+    The app reads these bundled files before trying the network, so a launch on a
+    slow or dead connection still lists firmware and shows notices.
+    """
+    script = ROOT / "scripts" / "fetch_online_data.py"
+    if not script.is_file():
+        return
+    import subprocess
+
+    try:
+        subprocess.run([sys.executable, str(script)], cwd=str(ROOT), timeout=180, check=False)
+    except Exception as e:
+        print(f"  ! Online snapshot refresh skipped: {e}")
+
+
 def build():
     print(f"=== Building Self-Contained Universal 2 macOS .app at {APP_DIR} ===")
     ensure_cached_assets()
+    fetch_online_snapshots()
 
     if APP_DIR.exists():
         shutil.rmtree(APP_DIR)
@@ -527,8 +545,8 @@ def build():
         "CFBundleInfoDictionaryVersion": "6.0",
         "CFBundleName": APP_DISPLAY_NAME,
         "CFBundlePackageType": "APPL",
-        "CFBundleShortVersionString": "2.5.1",
-        "CFBundleVersion": "2.5.1",
+        "CFBundleShortVersionString": "2.5.2",
+        "CFBundleVersion": "2.5.2",
         "LSApplicationCategoryType": "public.app-category.utilities",
         "LSMinimumSystemVersion": "12.0",
         "NSHighResolutionCapable": True,

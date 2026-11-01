@@ -87,7 +87,7 @@ TYPE_TIP_VISIBLE_MS = 12000
 # the file link sit directly below the items; past MAX rows it scrolls
 # internally instead of growing the window without bound. An empty list
 # keeps a small placeholder height instead of collapsing to nothing.
-MAX_VISIBLE_RELEASE_ROWS = 8
+MAX_VISIBLE_RELEASE_ROWS = 4
 EMPTY_RELEASE_LIST_ROWS = 3
 
 
@@ -326,6 +326,13 @@ class SelectPackagePage(QWidget):
         # connectivity probe would happily promise an online catalogue that can
         # never list a build, and the local-file screen is the honest offer.
         self._online_available = False
+        # True once the reader picked the local-file screen themselves. Their
+        # choice outranks the connection: coming back online must not drag them
+        # off the file they were about to install.
+        self._manual_local = False
+        # False until the first probe answers: the first answer is a starting
+        # state, not a connection change worth a toast.
+        self._connectivity_known = False
         self._build_ui()
         self._tabs = _TabsAdapter(self)
         self._update_view_links()
@@ -528,6 +535,21 @@ class SelectPackagePage(QWidget):
     def _on_connectivity_changed(self, is_online: bool):
         if is_generic_mtk():
             return
+        if is_online:
+            # A returning connection is the moment to replace stale snapshots:
+            # ttl-gated and off the UI thread, so a failure changes nothing.
+            try:
+                from .. import online_data
+
+                online_data.refresh_all_async()
+            except Exception:
+                pass
+            try:
+                from ..notice_service import NoticeService
+
+                NoticeService.instance().fetch_async()
+            except Exception:
+                pass
         self.set_online_mode(is_online)
 
     def set_online_mode(self, is_online: bool):
@@ -543,13 +565,49 @@ class SelectPackagePage(QWidget):
             or getattr(self, "_download_worker", None) is not None
             or (hasattr(win, "_install_run_active") and win._install_run_active())
         )
-        if not is_busy:
-            if is_online:
+        # Never move the screen under a running task, under a selection the
+        # reader made in the catalogue, or after they deliberately opened the
+        # local-file screen. The toast reports the change either way.
+        may_switch = (
+            not is_busy
+            and self.isVisible()
+            and not self._manual_local
+            and self._current_selected_rel is None
+        )
+        if is_online:
+            if may_switch:
                 self._show_online_view(refresh=not was_available)
-            else:
-                self._views.setCurrentWidget(self._local_tab)
-                if was_available:
-                    self._say(tr("sel_offline"), timeout_ms=3000)
+        elif may_switch and was_available:
+            self._views.setCurrentWidget(self._local_tab)
+        show_toast = self._connectivity_known and was_available != is_online
+        self._connectivity_known = True
+        if show_toast and self.isVisible():
+            self._show_connection_toast(is_online)
+
+    def _show_connection_toast(self, is_online: bool) -> None:
+        """Explain a connection change beside the catalogue, with one way out."""
+        toast = getattr(self, "_conn_toast", None)
+        if toast is None:
+            return
+        if is_online:
+            toast.show_message(
+                tr("conn_online"),
+                action_text=tr("conn_action_online"),
+                icon="\U0001F310",
+            )
+        else:
+            toast.show_message(
+                tr("conn_offline"),
+                action_text=tr("conn_action_local"),
+                icon="\U0001F4E1",
+            )
+
+    def _on_conn_toast_action(self) -> None:
+        """Go where the toast offered: the catalogue, or the local-file screen."""
+        if self._online_available:
+            self._show_online_view(refresh=True)
+        else:
+            self._show_local_view()
 
     def _build_ui(self):
         t = T()
@@ -563,15 +621,30 @@ class SelectPackagePage(QWidget):
             self._title.setStyleSheet(
                 "font-size: 13px; font-weight: 600; color: palette(window-text); letter-spacing: normal; background: transparent; border: none;"
             )
-        layout.addWidget(self._title)
+        title_row = QHBoxLayout()
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.setSpacing(8)
+        title_row.addWidget(self._title)
+        title_row.addStretch(1)
+        # Notices live in the sidebar's own page: a second text link beside the
+        # title only repeated the navigation and crowded the header.
+        layout.addLayout(title_row)
 
         # First-run reminder to charge the player/device battery before use
         self._toast_container = QWidget(self)
-        toast_layout = QHBoxLayout(self._toast_container)
+        # Two stacked cards: the battery reminder and, when the connection
+        # changes, a status line that explains it without moving the screen.
+        toast_layout = QVBoxLayout(self._toast_container)
         toast_layout.setContentsMargins(4, 0, 4, 0)
+        toast_layout.setSpacing(6)
         self._battery_toast = BatteryToast(self._toast_container)
         self._battery_toast.dismissed.connect(self._on_dismiss_battery_toast)
         toast_layout.addWidget(self._battery_toast)
+        from .widgets import ConnectivityToast
+
+        self._conn_toast = ConnectivityToast(self._toast_container)
+        self._conn_toast.action_clicked.connect(self._on_conn_toast_action)
+        toast_layout.addWidget(self._conn_toast)
         layout.addWidget(self._toast_container)
         self._check_battery_toast_visibility()
 
@@ -618,6 +691,9 @@ class SelectPackagePage(QWidget):
 
     def _show_local_view(self):
         """Show the local-file screen ("Install from a file")."""
+        # Reachable only from a link (a connection change switches the stack
+        # directly), so this records a deliberate choice.
+        self._manual_local = True
         self._current_selected_rel = None
         self._raw_release_pixmap = None
         self._views.setCurrentWidget(self._local_tab)
@@ -639,6 +715,7 @@ class SelectPackagePage(QWidget):
         """Show the catalogue ("Install from the catalogue")."""
         if is_generic_mtk():
             return
+        self._manual_local = False
         self._views.setCurrentWidget(self._online_tab)
         if (refresh or not self._release_list.count()) and not (
             self._releases_worker is not None and self._releases_worker.isRunning()
@@ -777,11 +854,14 @@ class SelectPackagePage(QWidget):
         self._model_toast_column.setContentsMargins(0, 0, 0, 0)
         layout.addLayout(self._model_toast_column)
 
+        self._active_notices = []
         self._notice_prompt = NoticeToast()
+        self._notice_prompt.list_requested.connect(self._open_notices_list)
         layout.addWidget(self._notice_prompt)
 
         from ..notice_service import NoticeService
         NoticeService.instance().notice_ready.connect(self._on_notice_ready)
+        NoticeService.instance().notices_ready.connect(self._on_notices_ready)
         NoticeService.instance().fetch_async()
 
         # ── Split Content: Left = Packages + Install; Right = Status + Notes ──
@@ -790,6 +870,14 @@ class SelectPackagePage(QWidget):
 
         # Left panel: Available System Software
         self._pkg_group = Card("sel_available_software")
+        # Busy bar on the title row while the manifest refreshes in the background;
+        # the cached list stays usable underneath it.
+        self._manifest_throbber = QProgressBar()
+        self._manifest_throbber.setRange(0, 0)
+        self._manifest_throbber.setTextVisible(False)
+        self._manifest_throbber.setFixedSize(60, 6)
+        self._manifest_throbber.setVisible(False)
+        self._pkg_group.put_widget_on_title_row(self._manifest_throbber)
         pkg_layout = QVBoxLayout()
         pkg_layout.setContentsMargins(0, 0, 0, 0)
         pkg_layout.setSpacing(6)
@@ -1127,7 +1215,9 @@ class SelectPackagePage(QWidget):
         grp_l.addWidget(self._local_status)
 
         self._local_rockbox_themes_cb = QCheckBox(tr("sel_local_rockbox_themes_option"))
-        self._local_rockbox_themes_cb.setChecked(False)
+        # Opt-out: themes and fonts are pushed after a Y1 Rockbox install unless
+        # the user clears this box (or turns the Settings toggle off).
+        self._local_rockbox_themes_cb.setChecked(True)
         self._local_rockbox_themes_cb.setVisible(not is_mediatek_installer())
         grp_l.addWidget(self._local_rockbox_themes_cb)
 
@@ -1830,6 +1920,23 @@ class SelectPackagePage(QWidget):
         if hasattr(self, "_notice_prompt") and self._notice_prompt is not None:
             self._notice_prompt.set_notice(notice)
 
+    def _on_notices_ready(self, notices) -> None:
+        self._active_notices = list(notices or [])
+
+    def _open_notices_list(self) -> None:
+        """Open the Notices tab in the main window."""
+        window = self.window()
+        if hasattr(window, "_nav_to_page") and hasattr(window, "_notices_btn"):
+            from .main_window import _PAGE_NOTICES
+
+            window._nav_to_page(_PAGE_NOTICES)
+            return
+        from .dialogs import NoticesDialog
+
+        notices = list(getattr(self, "_active_notices", []) or [])
+        dlg = NoticesDialog(self, notices)
+        dlg.exec()
+
     def _populate_software_combo(self, names, select=None) -> None:
         """Fill the Software dropdown with localised labels.
 
@@ -1986,13 +2093,16 @@ class SelectPackagePage(QWidget):
             self._manifest_worker = worker
             self._active_workers.add(worker)
             worker.finished.connect(lambda entries: self._on_manifest_worker_finished(worker, entries))
+            self._manifest_throbber.setVisible(True)
             worker.start()
         except Exception as e:
+            self._manifest_throbber.setVisible(False)
             logger.debug("Background manifest refresh failed: %s", e)
 
     def _on_manifest_worker_finished(self, worker, entries):
         self._active_workers.discard(worker)
         if worker is getattr(self, "_manifest_worker", None):
+            self._manifest_throbber.setVisible(False)
             self._on_manifest_refreshed(entries)
 
     def _on_manifest_refreshed(self, entries):
@@ -2401,7 +2511,7 @@ class SelectPackagePage(QWidget):
             msg = tr("translating_notes")
             open_txt = tr("open_in_google_translate")
             self._translate_label.setText(
-                f'<span style="color:{t.fg};">⏳ {msg} &nbsp;·&nbsp; '
+                f'<span style="color:{t.fg};">{msg} &nbsp;·&nbsp; '
                 f'<a href="{url}" style="color:{t.fg}; font-weight:700; text-decoration:none;">{open_txt} ↗</a></span>'
             )
         elif self._is_translated:
@@ -2409,7 +2519,7 @@ class SelectPackagePage(QWidget):
             show_orig = tr("show_original")
             open_txt = tr("open_in_google_translate")
             self._translate_label.setText(
-                f'✓ <span style="color:{t.fg};">{badge}</span> &nbsp;·&nbsp; '
+                f'<span style="color:{t.fg};">{badge}</span> &nbsp;·&nbsp; '
                 f'<a href="action:show_original" style="color:{t.fg}; font-weight:700; text-decoration:none;">{show_orig}</a> &nbsp;·&nbsp; '
                 f'<a href="{url}" style="color:{t.fg}; font-weight:700; text-decoration:none;">{open_txt} ↗</a>'
             )
@@ -2921,6 +3031,8 @@ class SelectPackagePage(QWidget):
             model=self._current_package_model or "",
             repo="",
             package_name="",
+            post_install=getattr(pkg, "post_install", "") or "",
+            post_install_2=getattr(pkg, "post_install_2", "") or "",
         )
         self._set_details_header(None, self._details_package)
 
@@ -3291,6 +3403,23 @@ class SelectPackagePage(QWidget):
         except Exception:
             return None
         return pkgs[0] if pkgs else None
+
+    def post_install_urls(self) -> tuple[str, str]:
+        """Post-install page URLs for the firmware being installed.
+
+        A local package's ``fw_package.ini`` wins; otherwise the catalogue entry
+        selected in the list supplies them (its ``post_install`` /
+        ``post_install_2`` attributes from ``slidia_manifest.xml``).
+        """
+        candidates = [
+            getattr(self, "_fw_package", None),
+            getattr(self, "_details_package", None),
+        ]
+        try:
+            candidates.append(self._package_for_selection())
+        except Exception:
+            pass
+        return catalog.post_install_urls_for(*candidates)
 
     def _set_details_header(self, rel, package) -> None:
         """Icon, software name, and the same version string as the release list."""

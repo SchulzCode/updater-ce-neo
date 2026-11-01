@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Notice feed for Updater CE, served from https://innioasis.app/notice.xml
+  (or the y1-community/innioasis-updater repository when that domain is unavailable).
+
+  Only notices listed in the remote feed are shown in the app's Notices list.
+  This bundled copy is a fallback for when neither is reachable, so it holds no notices.
+-->
+<notices updated="2026-10-25">
+</notices>

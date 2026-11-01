@@ -15,7 +15,7 @@ set "INSTALLER=0"
 set "MSIX=0"
 set "MSIXONLY=0"
 set "SKIT_PYI=0"
-set "VERSION=2.5.1"
+set "VERSION=2.5.2"
 set "DIST_DIR=dist\windows"
 set "BUILD_DIR=build\windows"
 

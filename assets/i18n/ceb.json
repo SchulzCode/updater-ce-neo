@@ -713,7 +713,7 @@
  "themepack_card_title": "I-install ang 360p Rockbox Theme Pack",
  "themepack_card_desc": "Naglakip sa matahum nga mga tema sa komunidad, mga backdrop nga adunay taas nga resolusyon, ug mga font nga gidisenyo alang sa 360p nga mga pasundayag.",
  "themepack_install_btn": "Pagkuha og 360p Theme Pack",
- "themepack_installed_success": "✓ Malampuson nga na-install ang 360p Theme Pack!",
+ "themepack_installed_success": "Malampuson nga na-install ang 360p Theme Pack!",
  "themepack_dialog_title": "Rockbox 360p Tema Pack Setup",
  "themepack_step1_title": "Lakang 1: Sumpaysumpaya sa USB Storage Mode",
  "themepack_step1_desc": "1. I-on ang imong player pinaagi sa pagpugong sa Power button.\n2. Sa diha nga ang Rockbox boots, i-plug ang USB cable sa imong computer.\n3. Kon giaghat sa screen sa player, kumpirmahi ang USB Storage mode aron makita ang device isip drive.",

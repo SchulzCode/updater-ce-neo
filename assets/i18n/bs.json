@@ -713,7 +713,7 @@
  "themepack_card_title": "Instalirajte 360p Rockbox Theme Pack",
  "themepack_card_desc": "Uključuje prekrasne teme zajednice, pozadine visoke rezolucije i fontove izrađene posebno za ekrane od 360p.",
  "themepack_install_btn": "Nabavite 360p tematski paket",
- "themepack_installed_success": "✓ 360p Theme Pack je uspješno instaliran!",
+ "themepack_installed_success": "360p Theme Pack je uspješno instaliran!",
  "themepack_dialog_title": "Postavljanje paketa tema Rockbox 360p",
  "themepack_step1_title": "Korak 1: Povežite se u USB Storage Modu",
  "themepack_step1_desc": "1. Uključite plejer držeći dugme za napajanje.\n2. Kada se Rockbox pokrene, priključite USB kabl u računar.\n3. Ako se to od vas zatraži na ekranu plejera, potvrdite režim USB memorije tako da se uređaj pojavi kao disk.",

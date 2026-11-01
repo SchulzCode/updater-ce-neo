@@ -713,7 +713,7 @@
  "themepack_card_title": "Instal·leu el paquet de temes Rockbox 360p",
  "themepack_card_desc": "Inclou bells temes de comunitat, fons d'alta resolució i tipus de lletra dissenyats específicament per a pantalles de 360p.",
  "themepack_install_btn": "Obteniu el paquet de temes de 360p",
- "themepack_installed_success": "✓ Paquet de temes 360p instal·lat correctament!",
+ "themepack_installed_success": "Paquet de temes 360p instal·lat correctament!",
  "themepack_dialog_title": "Configuració del paquet de temes Rockbox 360p",
  "themepack_step1_title": "Pas 1: connecteu-vos en mode d'emmagatzematge USB",
  "themepack_step1_desc": "1. Enceneu el reproductor mantenint premut el botó d'engegada.\n2. Quan el Rockbox arrenqui, connecteu el cable USB a l'ordinador.\n3. Si se us demana a la pantalla del reproductor, confirmeu el mode d'emmagatzematge USB perquè el dispositiu aparegui com a unitat.",

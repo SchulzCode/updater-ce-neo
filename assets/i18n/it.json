@@ -713,7 +713,7 @@
  "themepack_card_title": "Installa il pacchetto temi Rockbox 360p",
  "themepack_card_desc": "Include bellissimi temi della community, sfondi ad alta risoluzione e caratteri realizzati appositamente per i display a 360p.",
  "themepack_install_btn": "Ottieni il pacchetto temi 360p",
- "themepack_installed_success": "✓ Pacchetto temi 360p installato correttamente!",
+ "themepack_installed_success": "Pacchetto temi 360p installato correttamente!",
  "themepack_dialog_title": "Configurazione del pacchetto temi Rockbox 360p",
  "themepack_step1_title": "Passaggio 1: connettersi in modalità di archiviazione USB",
  "themepack_step1_desc": "1. Accendi il lettore tenendo premuto il pulsante di accensione.\n2. All'avvio di Rockbox, collega il cavo USB al computer.\n3. Se richiesto sullo schermo del lettore, confermare la modalità di archiviazione USB in modo che il dispositivo venga visualizzato come unità.",

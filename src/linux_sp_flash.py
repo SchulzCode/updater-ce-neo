@@ -980,8 +980,7 @@ def install_udev_rules() -> tuple:
                     askpass = get_askpass_helper()
                     if not askpass:
                         continue
-                    # No timeout: the askpass dialog waits for the user's password.
-                    pw_res = subprocess.run([str(askpass)], stdout=subprocess.PIPE, text=True)
+                    pw_res = subprocess.run([str(askpass)], stdout=subprocess.PIPE, text=True, timeout=60)
                     pw = pw_res.stdout.rstrip("\r\n")
                     if pw_res.returncode != 0 or not pw:
                         return False, "Authentication cancelled by user."
@@ -1002,12 +1001,11 @@ def install_udev_rules() -> tuple:
                         return True, "System rules configured successfully via doas."
                     return False, f"Setup script exited with code {proc.returncode}: {err.strip() or out.strip()}"
             elif tool == "pkexec":
-                # No timeout: the polkit/GNOME password dialog can stay open
-                # for as long as the user takes to type.
                 res = subprocess.run(
                     ["pkexec", "bash", str(script_path)],
                     capture_output=True,
                     text=True,
+                    timeout=30,
                 )
             elif tool == "sudo":
                 askpass = get_askpass_helper()
@@ -1018,6 +1016,7 @@ def install_udev_rules() -> tuple:
                     ["sudo", "-A" if askpass else "-n", "bash", str(script_path)],
                     capture_output=True,
                     text=True,
+                    timeout=30,
                     env=s_env,
                 )
             elif tool == "run0":
@@ -1025,18 +1024,21 @@ def install_udev_rules() -> tuple:
                     ["run0", "--pipe", "bash", str(script_path)],
                     capture_output=True,
                     text=True,
+                    timeout=30,
                 )
             elif tool == "lxqt-sudo":
                 res = subprocess.run(
                     ["lxqt-sudo", "bash", str(script_path)],
                     capture_output=True,
                     text=True,
+                    timeout=30,
                 )
             elif tool in ("kdesu", "kdesudo"):
                 res = subprocess.run(
                     [tool, "-c", f"bash {script_path}"],
                     capture_output=True,
                     text=True,
+                    timeout=30,
                 )
             else:
                 continue

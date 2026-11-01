@@ -713,7 +713,7 @@
  "themepack_card_title": "Telepítse a 360p Rockbox témacsomagot",
  "themepack_card_desc": "Gyönyörű közösségi témákat, nagy felbontású háttereket és kifejezetten 360p-s kijelzőkhöz tervezett betűtípusokat tartalmaz.",
  "themepack_install_btn": "Szerezze be a 360p témacsomagot",
- "themepack_installed_success": "✓ 360p témacsomag sikeresen telepítve!",
+ "themepack_installed_success": "360p témacsomag sikeresen telepítve!",
  "themepack_dialog_title": "Rockbox 360p témacsomag beállítása",
  "themepack_step1_title": "1. lépés: Csatlakozás USB-tároló módban",
  "themepack_step1_desc": "1. Kapcsolja be a lejátszót a Bekapcsoló gomb nyomva tartásával.\n2. Amikor a Rockbox elindul, csatlakoztassa az USB-kábelt a számítógépéhez.\n3. Ha a rendszer kéri a lejátszó képernyőjén, erősítse meg az USB Storage módot, hogy az eszköz meghajtóként jelenjen meg.",

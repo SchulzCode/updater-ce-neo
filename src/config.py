@@ -183,6 +183,19 @@ REPO_MIN_RELEASE_VERSION = {
 DONORS_CSV_URL = "https://innioasis.app/donors.csv"
 MONTHLY_GOAL_USD = 200.0
 
+# Online files served from innioasis.app. When that site cannot be reached the
+# same file is fetched from the repo that hosts the website (GitHub names are
+# case-insensitive, so this is the same repository as CATALOG_FALLBACK_URL).
+INNIOASIS_SITE_PREFIX = "https://innioasis.app/"
+INNIOASIS_GITHUB_FALLBACK_PREFIX = "https://raw.githubusercontent.com/y1-community/innioasis-updater/refs/heads/main/"
+
+
+def github_fallback_url(url: str) -> str:
+    """Map an innioasis.app file URL to its copy in the website's GitHub repo."""
+    if url.startswith(INNIOASIS_SITE_PREFIX):
+        return INNIOASIS_GITHUB_FALLBACK_PREFIX + url[len(INNIOASIS_SITE_PREFIX):].split("?", 1)[0]
+    return url
+
 DONATION_LINKS = {
     "kofi": "https://ko-fi.com/teamslide",
     "paypal": "https://paypal.me/ryanspecter282",

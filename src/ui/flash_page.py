@@ -848,10 +848,11 @@ class _RoundNextButton(QPushButton):
                 disc = QColor(getattr(T(), "bg_elev", "") or "#3a3f4b")
                 disc.setAlpha(_NEUTRAL_DISC_ALPHA)
         elif self._accent:
+            # The accent disc always takes a white glyph: the dark glyph read as
+            # a hole punched in a light-coloured disc on the confirm/next/tick chips.
             disc = QColor(getattr(T(), "accent", "") or "#52b036")
             disc.setAlpha(_ACCENT_DISC_ALPHA)
-            lum = (0.299 * disc.red() + 0.587 * disc.green() + 0.114 * disc.blue()) / 255.0
-            text = "#000000" if lum > 0.65 else "#ffffff"
+            text = "#ffffff"
         else:
             disc = QColor(getattr(T(), "bg_elev", "") or "#3a3f4b")
             disc.setAlpha(_NEUTRAL_DISC_ALPHA)
@@ -1594,7 +1595,7 @@ class FlashPage(QWidget):
         return card, head, copy
 
     def _build_preparing_view(self):
-        self._prep_icon = _make_squircle_icon("📦", "icon.png")
+        self._prep_icon = _make_squircle_icon()
         self._prep_pkg_label = _status_label(self._package_name or "\u2014", strong=True)
         self._prep_banner = Banner()
         self._prep_banner.setVisible(False)
@@ -1631,7 +1632,7 @@ class FlashPage(QWidget):
         return self._wrap_centered(self._prep_card)
 
     def _build_waiting_view(self):
-        self._wait_icon = _make_squircle_icon("🔌", "icon.png")
+        self._wait_icon = _make_squircle_icon()
         self._wait_pkg_label = _status_label(self._package_name or "\u2014", strong=True)
         self._wait_progress_bar = InstallProgress()
         _configure_progress(self._wait_progress_bar)
@@ -1664,7 +1665,7 @@ class FlashPage(QWidget):
         self._wait_prompt_label.setWordWrap(True)
         copy.addWidget(self._wait_prompt_label)
 
-        # "Try to keep my data": a tick on the connect / power-off card, off
+        # "Keep my data": a tick on the connect / power-off card, off
         # unless the user asks for it. The state is read when Next is pressed,
         # so what the flash does is what the card showed at that moment.
         self._keep_data_cb = QCheckBox(tr("flash_keep_data_option"))
@@ -1727,7 +1728,7 @@ class FlashPage(QWidget):
         return self._wrap_centered(self._wait_card)
 
     def _build_flashing_view(self):
-        self._flash_icon = _make_squircle_icon("⚙️", "icon.png")
+        self._flash_icon = _make_squircle_icon()
         self._flash_pkg_label = _status_label(self._package_name or "\u2014", strong=True)
         self._flash_banner = Banner()
         self._flash_banner.setVisible(False)
@@ -1781,6 +1782,18 @@ class FlashPage(QWidget):
         self._theme_back_btn.setVisible(False)
         self._theme_back_btn.clicked.connect(self._show_theme_fallback_usb_mode)
 
+        # Shown under the done mark when the software has post-install steps
+        # and donations are off: the globe opens them, and so does this link.
+        self._post_install_hint = QLabel(
+            f'{tr("post_install_explain")} '
+            f'<a href="post-install">{tr("post_install_find_out_more")}</a>'
+        )
+        self._post_install_hint.setTextFormat(Qt.TextFormat.RichText)
+        self._post_install_hint.setWordWrap(True)
+        self._post_install_hint.setProperty("cssClass", "dimmed")
+        self._post_install_hint.setVisible(False)
+        self._post_install_hint.linkActivated.connect(lambda _href: self._open_post_install_guide())
+
         self._progress_card, self._flash_head, copy = self._new_progress_card(
             self._flash_icon,
             self._flash_pkg_label,
@@ -1808,6 +1821,7 @@ class FlashPage(QWidget):
         self._status_flow = _FlowRow(self._step_label, self._eta_label)
         copy.addWidget(self._status_flow)
         copy.addWidget(self._partition_progress_label)
+        copy.addWidget(self._post_install_hint)
 
         self._theme_row = QWidget()
         theme_vbox = QVBoxLayout(self._theme_row)
@@ -1925,10 +1939,10 @@ class FlashPage(QWidget):
         appeal_layout.addWidget(self._appeal_body)
         actions = QHBoxLayout()
         actions.setSpacing(8)
-        self._view_guide_btn = QPushButton(tr("y2reborn_view_guide_btn"))
+        self._view_guide_btn = QPushButton(tr("post_install_view_guide_btn"))
         self._view_guide_btn.setCursor(Qt.ArrowCursor)
         self._view_guide_btn.setStyleSheet("")
-        self._view_guide_btn.clicked.connect(self._open_y2reborn_guide)
+        self._view_guide_btn.clicked.connect(self._open_post_install_guide)
         self._view_guide_btn.setVisible(False)
         self._coffee_btn = QPushButton(tr("donate_completion_coffee"))
         self._coffee_btn.setCursor(Qt.ArrowCursor)
@@ -1983,7 +1997,7 @@ class FlashPage(QWidget):
         return self._wrap_centered(self._progress_card, warning_container)
 
     def _build_downloading_view(self):
-        self._download_icon = _make_squircle_icon("📥", "icon.png")
+        self._download_icon = _make_squircle_icon()
         self._download_pkg_label = _status_label(self._package_name or "\u2014", strong=True)
         self._download_progress = InstallProgress()
         _configure_progress(self._download_progress)
@@ -2193,6 +2207,10 @@ class FlashPage(QWidget):
     def begin_run(self) -> None:
         """A new flash starts with the progress card up; donations apply at its end."""
         self._donations_shown = False
+        # Set per install by set_post_install_urls; the empty default keeps a
+        # completion screen reached without one from failing.
+        self._post_install_url = ""
+        self._post_install_url_2 = ""
 
     def show_preparing(self):
         self._complete = False
@@ -3401,11 +3419,10 @@ class FlashPage(QWidget):
         """Control whether the Keep My Data checkbox is visible and its default state."""
         self._has_userdata = bool(has_userdata)
         if hasattr(self, "_keep_data_cb"):
-            if self._has_userdata:
-                self._keep_data_cb.setChecked(bool(preserve_data_default))
-            else:
-                self._keep_data_cb.setChecked(False)
-                self._keep_data_cb.setVisible(False)
+            # Show it again for a package that does have userdata: the previous
+            # run may have hidden it (or the GUI handoff prompt did).
+            self._keep_data_cb.setChecked(self._has_userdata and bool(preserve_data_default))
+            self._keep_data_cb.setVisible(self._has_userdata)
 
     def show_gui_handoff_prompt(self, hint: str) -> None:
         """Power-off line plus a small download-mode hint. Continue does not flash."""
@@ -3520,11 +3537,42 @@ class FlashPage(QWidget):
     def _dont_ask_html(self) -> str:
         return _themed_link("dont-ask", tr("donate_dont_ask_link"))
 
+    def set_post_install_urls(self, post_install: str = "", post_install_2: str = "") -> None:
+        """Set the firmware's post-install steps URLs for the completion screen.
+
+        ``post_install`` is for users without donations: the done mark becomes a
+        globe that opens it. ``post_install_2`` is for donations-shown users: View
+        Guide and Buy Us A Coffee open it.
+        """
+        self._post_install_url = str(post_install or "").strip()
+        self._post_install_url_2 = str(post_install_2 or "").strip()
+        self._apply_post_install_state()
+
+    def _apply_post_install_state(self) -> None:
+        donations_shown = bool(getattr(self, "_donations_shown", False))
+        post_install = getattr(self, "_post_install_url", "")
+        post_install_2 = getattr(self, "_post_install_url_2", "")
+        if hasattr(self, "_done_mark"):
+            globe = bool(post_install) and not donations_shown
+            self._done_mark.set_symbol("www" if globe else "complete")
+            self._done_mark.setToolTip(tr("post_install_globe_tooltip") if globe else "")
+        if hasattr(self, "_post_install_hint"):
+            self._post_install_hint.setVisible(bool(post_install) and not donations_shown)
+        if hasattr(self, "_view_guide_btn"):
+            self._view_guide_btn.setVisible(bool(post_install_2) and donations_shown)
+
+    def _open_post_install_guide(self) -> None:
+        from ..browser import open_browser
+
+        url = getattr(self, "_post_install_url_2", "") or getattr(self, "_post_install_url", "")
+        if url:
+            open_browser(url)
+
     def _open_coffee_page(self) -> None:
         from ..browser import open_browser
         from ..config import DONATION_LINKS
 
-        open_browser(DONATION_LINKS["kofi"])
+        open_browser(getattr(self, "_post_install_url_2", "") or DONATION_LINKS["kofi"])
 
     def _render_appeal_copy(self) -> None:
         """(Re)write the appeal's words for this language, install and model.
@@ -3748,6 +3796,7 @@ class FlashPage(QWidget):
         if hasattr(self, "_done_mark"):
             self._done_mark.setVisible(not donations_shown)
             self._done_mark.setEnabled(True)
+        self._apply_post_install_state()
         if hasattr(self, "_flash_retry_btn"):
             self._flash_retry_btn.setVisible(False)
         if hasattr(self, "_flash_head") and hasattr(self._flash_head, "_sync_chips_pairing"):
@@ -4148,6 +4197,10 @@ class FlashPage(QWidget):
         self._install_done_cb = callback
 
     def _on_install_done(self) -> None:
+        if getattr(self, "_post_install_url", "") and not getattr(self, "_donations_shown", False):
+            from ..browser import open_browser
+
+            open_browser(self._post_install_url)
         if callable(getattr(self, "_install_done_cb", None)):
             self._install_done_cb()
 

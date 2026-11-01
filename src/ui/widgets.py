@@ -1166,6 +1166,155 @@ class BatteryToast(QFrame):
         _paint_bento_surface(self, event)
 
 
+class Throbber(QWidget):
+    """Small indeterminate spinner for content that is being fetched.
+
+    A painted arc rather than an image or an animated GIF: nothing extra to
+    package, and it follows the interface accent in light and dark. It is shown
+    only while a refresh is actually running, so a wait reads as a wait instead
+    of a screen that looks finished.
+    """
+
+    def __init__(self, parent=None, size: int = 16):
+        super().__init__(parent)
+        from PySide6.QtCore import QTimer
+
+        self._size = int(size)
+        self._angle = 0
+        self.setFixedSize(self._size, self._size)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self._timer = QTimer(self)
+        self._timer.setInterval(60)
+        self._timer.timeout.connect(self._tick)
+        self.setVisible(False)
+
+    def _tick(self) -> None:
+        self._angle = (self._angle + 30) % 360
+        self.update()
+
+    def start(self) -> None:
+        """Show the spinner and animate it."""
+        self.setVisible(True)
+        if not self._timer.isActive():
+            self._timer.start()
+
+    def stop(self) -> None:
+        """Hide the spinner and stop its timer (no idle repaints)."""
+        self._timer.stop()
+        self.setVisible(False)
+
+    def paintEvent(self, event):  # noqa: N802 (Qt naming)
+        from PySide6.QtCore import Qt as _Qt
+        from PySide6.QtGui import QColor, QPainter, QPen
+
+        from .dark import T
+
+        t = T()
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        rect = self.rect().adjusted(2, 2, -2, -2)
+        track = QPen(QColor(t.fg_muted))
+        track.setWidthF(2.0)
+        painter.setPen(track)
+        painter.setOpacity(0.25)
+        painter.drawEllipse(rect)
+        painter.setOpacity(1.0)
+        arc = QPen(QColor(getattr(t, "accent", t.fg)))
+        arc.setWidthF(2.0)
+        arc.setCapStyle(_Qt.PenCapStyle.RoundCap)
+        painter.setPen(arc)
+        painter.drawArc(rect, -self._angle * 16, 100 * 16)
+        painter.end()
+
+
+class ConnectivityToast(QFrame):
+    """Short-lived status line for a connection change.
+
+    Same card surface and circular buttons as the battery reminder. It never
+    moves the screen by itself: the single action is there for the user to
+    take, so a connection change is explained without yanking the catalogue
+    away from under a selection they were making.
+    """
+
+    action_clicked = Signal()
+    dismissed = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        from PySide6.QtCore import QTimer
+
+        self.setObjectName("connectivityToast")
+        self.setProperty("cssClass", "card")
+        self.setAutoFillBackground(False)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setMinimumHeight(38)
+
+        row = QHBoxLayout(self)
+        row.setContentsMargins(14, 8, 12, 8)
+        row.setSpacing(10)
+
+        self._icon = QLabel("", self)
+        self._icon.setStyleSheet("font-size: 14px; background: transparent; border: none;")
+        row.addWidget(self._icon, 0, Qt.AlignVCenter)
+
+        self._label = QLabel("", self)
+        self._label.setWordWrap(True)
+        self._label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        font = self._label.font()
+        font.setPixelSize(12)
+        font.setWeight(QFont.Weight.Medium)
+        self._label.setFont(font)
+        _apply_banner_text(self._label)
+        row.addWidget(self._label, 1, Qt.AlignVCenter)
+
+        from .flash_page import _RoundNextButton
+
+        self._action = _RoundNextButton(symbol="next", accent=True)
+        self._action.setObjectName("connectivityToastAction")
+        self._action.clicked.connect(self._on_action)
+        row.addWidget(self._action, 0, Qt.AlignVCenter)
+
+        self._close = _RoundNextButton(symbol="cancel", accent=False)
+        self._close.setObjectName("connectivityToastClose")
+        self._close.setToolTip(tr("toast_dismiss"))
+        self._close.clicked.connect(self._dismiss)
+        row.addWidget(self._close, 0, Qt.AlignVCenter)
+
+        self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.timeout.connect(self._dismiss)
+        self.setVisible(False)
+
+    def show_message(self, text: str, *, action_text: str = "", icon: str = "\U0001F310", timeout_ms: int = 9000) -> None:
+        self._icon.setText(icon)
+        self._label.setText(text)
+        self._label.setToolTip(text)
+        self._action.setVisible(bool(action_text))
+        self._action.setToolTip(action_text or "")
+        self.setVisible(True)
+        self._timer.start(max(2000, int(timeout_ms)))
+
+    def _on_action(self) -> None:
+        self._dismiss()
+        self.action_clicked.emit()
+
+    def _dismiss(self) -> None:
+        self._timer.stop()
+        if self.isVisible():
+            self.setVisible(False)
+            self.dismissed.emit()
+
+    def refresh_theme(self) -> None:
+        _apply_banner_text(self._label)
+        for btn in (self._action, self._close):
+            if hasattr(btn, "refresh_theme"):
+                btn.refresh_theme()
+        self.update()
+
+    def paintEvent(self, event):  # noqa: N802 (Qt naming)
+        _paint_bento_surface(self, event)
+
+
 class NoticeToast(QFrame):
     """On-screen toast display for notice.xml announcements.
 
@@ -1175,6 +1324,7 @@ class NoticeToast(QFrame):
 
     action_clicked = Signal(str)
     dismissed = Signal()
+    list_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1189,9 +1339,11 @@ class NoticeToast(QFrame):
         row.setContentsMargins(14, 6, 8, 6)
         row.setSpacing(8)
 
-        self._icon = QLabel("📢", self)
-        self._icon.setStyleSheet("font-size: 14px; background: transparent; border: none;")
+        self._icon = QLabel(self)
+        self._icon.setFixedSize(16, 16)
+        self._icon.setStyleSheet("background: transparent; border: none;")
         row.addWidget(self._icon, 0, Qt.AlignVCenter)
+        self._update_notice_icon(None)
 
         text_col = QVBoxLayout()
         text_col.setContentsMargins(0, 0, 0, 0)
@@ -1238,31 +1390,38 @@ class NoticeToast(QFrame):
         if notice is not None:
             self._title_label.setText(getattr(notice, "title", "") or "")
             self._content_label.setText(getattr(notice, "content", "") or "")
-            link = getattr(notice, "link", "") or ""
-            self._action.setVisible(bool(link))
-            if link:
-                self._action.setToolTip(link)
-            severity = getattr(notice, "severity", "info")
-            if severity == "critical":
-                self._icon.setText("⚠️")
-            elif severity == "warning":
-                self._icon.setText("⚡")
-            else:
-                self._icon.setText("📢")
+            # The banner has no action of its own: clicking it opens the notices list.
+            self._action.setVisible(False)
+            self.setToolTip(tr("notices_banner_tooltip"))
+            self._update_notice_icon(notice)
             self.setVisible(True)
         else:
             self.setVisible(False)
 
+    def _update_notice_icon(self, notice) -> None:
+        """Use the host's info/warning mark, never an emoji."""
+        severity = str(getattr(notice, "severity", "info") or "info")
+        symbol = "warning" if severity in ("critical", "warning") else "info"
+        from .dark import T
+        from .icons import get_symbol_icon
+
+        self._icon.setPixmap(get_symbol_icon(symbol, 16, color=T().fg).pixmap(16, 16))
+
     def notice(self):
         return self._notice
 
+    def mousePressEvent(self, event):  # noqa: N802 (Qt naming)
+        if event.button() == Qt.MouseButton.LeftButton and self._notice is not None:
+            self.list_requested.emit()
+        super().mousePressEvent(event)
+
     def _on_action_clicked(self) -> None:
-        if self._notice and self._notice.link:
+        if self._notice and self._notice.url:
             from PySide6.QtCore import QUrl
             from PySide6.QtGui import QDesktopServices
 
-            QDesktopServices.openUrl(QUrl(self._notice.link))
-            self.action_clicked.emit(self._notice.link)
+            QDesktopServices.openUrl(QUrl(self._notice.url))
+            self.action_clicked.emit(self._notice.url)
 
     def _on_dismiss_clicked(self) -> None:
         if self._notice:
@@ -1275,6 +1434,7 @@ class NoticeToast(QFrame):
     def refresh_theme(self) -> None:
         _apply_banner_text(self._title_label)
         _apply_banner_text(self._content_label)
+        self._update_notice_icon(self._notice)
         self.update()
 
     def paintEvent(self, event):  # noqa: N802 (Qt naming)

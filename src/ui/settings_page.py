@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import catalog, device_tracking, paths
+from .. import catalog, device_tracking, paths, shortcut_manager
 from ..config import (
     DEVICE_MODELS,
     device_label_for_model,
@@ -187,7 +187,8 @@ class SettingsPage(QWidget):
         for name in (
             "_method_card", "_terminal_card", "_reminders_card", "_rockbox_card",
             "_donations_card", "_cache_card", "_prep_card", "_offline_mode_card",
-            "_install_themes_card",
+            "_install_themes_card", "_notifications_card",
+            "_background_card",
             "_legacy_cleanup_card", "_advanced_card",
         ):
             card = getattr(self, name, None)
@@ -636,6 +637,64 @@ class SettingsPage(QWidget):
         )
         layout.addWidget(self._offline_mode_card)
 
+        # --- Card: Notifications ---
+        # One master switch over the notice types, plus the route to the
+        # background card for notifications while the window is closed.
+        self._notifications_card = Card("settings_notifications_group")
+        notif_layout = QVBoxLayout()
+        notif_layout.setSpacing(8)
+        self._cb_notifications = self._add_title_row_switch(
+            self._notifications_card,
+            "settings_notifications_group",
+            tooltip=tr("settings_notifications_desc"),
+        )
+        self._cb_notifications.setStyleSheet("")  # no host style override
+        self._cb_notifications.toggled.connect(self._on_notifications_toggled)
+
+        self._notifications_desc = QLabel(tr("settings_notifications_desc"))
+        self._notifications_desc.setWordWrap(True)
+        self._notifications_desc.setProperty("cssClass", "dimmed")
+        notif_layout.addWidget(self._notifications_desc)
+
+        from ..notice_alerts import (
+            CATEGORY_APP, CATEGORY_GENERAL, CATEGORY_PLAYER, CATEGORY_WARNING,
+        )
+
+        self._notification_switches = {}
+        for category, caption_key in (
+            (CATEGORY_GENERAL, "settings_notifications_general"),
+            (CATEGORY_WARNING, "settings_notifications_warning"),
+            (CATEGORY_PLAYER, "settings_notifications_player"),
+            (CATEGORY_APP, "settings_notifications_app"),
+        ):
+            switch = self._add_switch(notif_layout, tr(caption_key))
+            switch.setStyleSheet("")  # no host style override
+            switch.toggled.connect(
+                lambda checked, c=category: self._on_notification_category_toggled(c, checked)
+            )
+            self._notification_switches[category] = switch
+
+        self._notifications_unavailable = QLabel(tr("settings_notifications_unavailable"))
+        self._notifications_unavailable.setWordWrap(True)
+        self._notifications_unavailable.setProperty("cssClass", "dimmed")
+        self._notifications_unavailable.setVisible(False)
+        notif_layout.addWidget(self._notifications_unavailable)
+
+        self._notifications_background_btn = QPushButton(
+            tr("settings_notifications_background_btn")
+        )
+        self._notifications_background_btn.setCursor(Qt.PointingHandCursor)
+        self._notifications_background_btn.setFlat(True)
+        self._notifications_background_btn.setStyleSheet(
+            f"QPushButton {{ border: none; background: transparent; color: {T().fg_muted};"
+            " padding: 0; text-align: left; }"
+        )
+        self._notifications_background_btn.clicked.connect(self._focus_background_card)
+        notif_layout.addWidget(self._notifications_background_btn, alignment=Qt.AlignLeft)
+
+        self._notifications_card.set_layout(notif_layout)
+        layout.addWidget(self._notifications_card)
+
         # --- Card: Run in background (opt-in, off by default) ---
         self._background_card = Card("settings_run_in_background_group")
         bg_layout = QVBoxLayout()
@@ -727,6 +786,32 @@ class SettingsPage(QWidget):
 
         self._legacy_cleanup_card.set_layout(leg_layout)
         layout.addWidget(self._legacy_cleanup_card)
+
+        # --- Card: App shortcuts (Windows and Linux only) ---
+        self._shortcuts_card = Card("settings_shortcuts_title")
+        sc_layout = QVBoxLayout()
+        sc_layout.setSpacing(8)
+        self._shortcut_switches: dict[tuple[str, str], QCheckBox] = {}
+        for sid, name_key in (
+            ("updater", "settings_shortcut_updater"),
+            ("sp_flash_tool", "settings_shortcut_sp_flash"),
+        ):
+            for kind, kind_key in (
+                ("desktop", "settings_shortcut_desktop"),
+                ("menu", "settings_shortcut_menu"),
+            ):
+                sw = self._add_switch(sc_layout, tr(kind_key))
+                sw.setText(f"{tr(name_key)} — {tr(kind_key)}")
+                sw.toggled.connect(
+                    lambda checked, s=sid, k=kind: self._on_shortcut_toggled(s, k, checked)
+                )
+                self._shortcut_switches[(sid, kind)] = sw
+        self._shortcuts_card.set_layout(sc_layout)
+        layout.addWidget(self._shortcuts_card)
+        self._shortcuts_card.setVisible(
+            shortcut_manager.supported() and self._may_show_card(self._shortcuts_card)
+        )
+        self.refresh_shortcut_state()
 
         # --- Card: Advanced Settings ---
         self._advanced_card = Card("settings_advanced_group")
@@ -1163,6 +1248,20 @@ class SettingsPage(QWidget):
             and self._may_show_card(self._rockbox_card)
         )
 
+    def refresh_shortcut_state(self):
+        """Set each checkbox from the real shortcut files on disk."""
+        if not hasattr(self, "_shortcut_switches"):
+            return
+        state = shortcut_manager.get_state()
+        for (sid, kind), sw in self._shortcut_switches.items():
+            sw.blockSignals(True)
+            sw.setChecked(state.get(sid, {}).get(kind, False))
+            sw.blockSignals(False)
+
+    def _on_shortcut_toggled(self, shortcut_id: str, kind: str, checked: bool):
+        shortcut_manager.set_shortcut(shortcut_id, kind, checked)
+        self.refresh_shortcut_state()
+
     def _update_legacy_cleanup_visibility(self):
         """Show the removal card only while a pre-3.0 install is on disk.
 
@@ -1366,6 +1465,7 @@ class SettingsPage(QWidget):
     # ------------------------------------------------------------------
     def refresh_settings(self):
         """Reload and update all controls to reflect current settings."""
+        self.refresh_shortcut_state()
         persisted_adv = QSettings("innioasis", "updater").value("advanced_settings", False, type=bool)
         self._advanced_revealed = bool(persisted_adv)
         if hasattr(self, "_cb_advanced_settings"):
@@ -1442,6 +1542,9 @@ class SettingsPage(QWidget):
             self._cb_run_as_admin.blockSignals(False)
             self._sync_run_as_admin_controls()
 
+        # Notification switches: master, then each notice category.
+        self._sync_notification_controls()
+
         # Offline mode toggle
         self._cb_offline_mode.blockSignals(True)
         self._cb_offline_mode.setChecked(is_offline_mode())
@@ -1484,6 +1587,53 @@ class SettingsPage(QWidget):
         from ..login_item import set_login_item
         QSettings("innioasis", "updater").setValue(RUN_IN_BACKGROUND_KEY, bool(checked))
         set_login_item(bool(checked))
+
+    # ------------------------------------------------------------------
+    # Notifications
+    # ------------------------------------------------------------------
+    def _on_notifications_toggled(self, checked: bool):
+        from ..notice_alerts import set_notifications_enabled
+
+        set_notifications_enabled(bool(checked))
+        self._sync_notification_controls()
+
+    def _on_notification_category_toggled(self, category: str, checked: bool):
+        from ..notice_alerts import set_category_enabled
+
+        set_category_enabled(category, bool(checked))
+
+    def _sync_notification_controls(self) -> None:
+        """Mirror the stored switches, and follow the host's permission state."""
+        from ..notice_alerts import (
+            category_preference,
+            notifications_enabled,
+            system_notifications_available,
+        )
+
+        supported = system_notifications_available()
+        master_on = supported and bool(notifications_enabled())
+        self._cb_notifications.blockSignals(True)
+        self._cb_notifications.setChecked(master_on)
+        self._cb_notifications.blockSignals(False)
+        self._cb_notifications.setEnabled(supported)
+        for category, switch in self._notification_switches.items():
+            switch.blockSignals(True)
+            switch.setChecked(bool(category_preference(category)))
+            switch.blockSignals(False)
+            switch.setEnabled(master_on)
+        self._notifications_unavailable.setVisible(not supported)
+
+    def _focus_background_card(self) -> None:
+        """Take the reader from Notifications to the card that keeps the app open."""
+        card = getattr(self, "_background_card", None)
+        if card is None:
+            return
+        if self._solo_card is not None:
+            self.clear_card_focus()
+        scroll = getattr(self, "_settings_scroll", None)
+        if scroll is not None:
+            scroll.ensureWidgetVisible(card, 0, 24)
+        card.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _sync_install_mode_switches(self) -> None:
         """One install choice at a time. Guided is the one that is on by default."""

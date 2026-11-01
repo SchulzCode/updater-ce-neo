@@ -11,7 +11,7 @@ import logging
 import sys
 from typing import Callable, Optional
 
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QObject, QSettings, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
@@ -51,10 +51,15 @@ def _macos_template_icon(fallback: QIcon) -> QIcon:
         return fallback
 
 
-class BackgroundTray:
+class BackgroundTray(QObject):
     """Owns the tray icon and its menu for one app session."""
 
+    # A notification shown through this tray was clicked; the window decides
+    # which page that opens (a notice, or the waiting app update).
+    message_clicked = Signal()
+
     def __init__(self, app: QApplication, show_window: Callable[[], None], quit_app: Callable[[], None], fallback_icon: QIcon):
+        super().__init__(app)
         self._app = app
         self._show_window = show_window
         self._quit_app = quit_app
@@ -68,6 +73,7 @@ class BackgroundTray:
         self._menu = menu
         self._tray.setContextMenu(menu)
         self._tray.activated.connect(self._on_activated)
+        self._tray.messageClicked.connect(self.message_clicked.emit)
 
     def show(self) -> None:
         self._tray.show()

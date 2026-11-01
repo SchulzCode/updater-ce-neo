@@ -713,7 +713,7 @@
  "themepack_card_title": "360p Rockbox テーマ パックをインストールする",
  "themepack_card_desc": "美しいコミュニティ テーマ、高解像度の背景、360p ディスプレイ用に特別に作成されたフォントが含まれています。",
  "themepack_install_btn": "360p テーマ パックを入手",
- "themepack_installed_success": "✓ 360p テーマ パックが正常にインストールされました。",
+ "themepack_installed_success": "360p テーマ パックが正常にインストールされました。",
  "themepack_dialog_title": "Rockbox 360p テーマ パックのセットアップ",
  "themepack_step1_title": "ステップ 1: USB ストレージ モードで接続する",
  "themepack_step1_desc": "1. 電源ボタンを押したままにして、プレーヤーの電源を入れます。\n2. Rockbox が起動したら、USB ケーブルをコンピュータに接続します。\n3. プレーヤー画面でプロンプトが表示されたら、USB ストレージ モードを確認して、デバイスがドライブとして表示されるようにします。",

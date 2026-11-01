@@ -97,6 +97,8 @@ def parse_manifest_xml(xml_text: str):
             pkg_name = (node.get("package_name") or node.get("package") or "").strip()
             y2linux_attr = (node.get("y2linux_fw") or node.get("y2reborn_fw") or "").strip().lower()
             is_y2linux = y2linux_attr == "true" or any(k in name.lower() for k in ("y2linux", "y2reborn"))
+            post_install = (node.get("post_install") or "").strip()
+            post_install_2 = (node.get("post_install_2") or "").strip()
         except Exception:
             continue
         if not name or not repo or device not in ("Y1", "Y2", "A5"):
@@ -128,6 +130,8 @@ def parse_manifest_xml(xml_text: str):
                 icon_dark=icon_dark,
                 image=image,
                 is_y2linux=is_y2linux,
+                post_install=post_install,
+                post_install_2=post_install_2,
             )
         )
     return entries
@@ -191,7 +195,9 @@ def cache_manifest(entries):
              "icon": getattr(e, "icon", "") or "",
              "icon_dark": getattr(e, "icon_dark", "") or "",
              "image": getattr(e, "image", "") or "",
-             "is_y2linux": bool(getattr(e, "is_y2linux", False))}
+             "is_y2linux": bool(getattr(e, "is_y2linux", False)),
+             "post_install": getattr(e, "post_install", "") or "",
+             "post_install_2": getattr(e, "post_install_2", "") or ""}
             for e in entries
         ]
         _cache_root().joinpath("packages.json").write_text(
@@ -219,6 +225,8 @@ def load_cached_manifest():
                 icon_dark=e.get("icon_dark", "") or "",
                 image=e.get("image", "") or "",
                 is_y2linux=bool(e.get("is_y2linux", False)),
+                post_install=e.get("post_install", "") or "",
+                post_install_2=e.get("post_install_2", "") or "",
             )
             for e in data
             if e.get("name") and e.get("repo")
@@ -226,6 +234,26 @@ def load_cached_manifest():
     except Exception as e:
         logger.debug("Manifest cache read failed: %s", e)
         return None
+
+
+def load_snapshot_manifest():
+    """Parse the manifest snapshot bundled with the app (or last downloaded).
+
+    Used only when neither the parsed cache nor the network produced entries:
+    a fresh install with no connection still lists firmware from the copy
+    baked in at packaging time (``assets/online/slidia_manifest.xml``).
+    """
+    try:
+        from . import online_data
+
+        text = online_data.read_text("slidia_manifest.xml")
+    except Exception as e:
+        logger.debug("Manifest snapshot unreadable: %s", e)
+        return None
+    if not text.strip():
+        return None
+    entries = parse_manifest_xml(text)
+    return entries or None
 
 
 def refresh_catalog(force_refresh=False):
@@ -245,6 +273,9 @@ def refresh_catalog(force_refresh=False):
             cache_manifest(entries)
     if not entries and force_refresh:
         entries = load_cached_manifest()
+    if not entries:
+        # Baked in at build time: no connection, no cache, still a catalogue.
+        entries = load_snapshot_manifest()
     catalog.set_live_catalog(entries or [])
     return entries or []
 

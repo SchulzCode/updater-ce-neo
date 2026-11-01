@@ -34,7 +34,7 @@ Set-Location $ProjectRoot
 
 $DistDir = Join-Path $ProjectRoot "dist\windows"
 $BuildDir = Join-Path $ProjectRoot "build\windows"
-$Version = "2.5.1"
+$Version = "2.5.2"
 $ConfigFile = Join-Path $ProjectRoot "src\config.py"
 if (Test-Path $ConfigFile) {
     $match = Select-String -Path $ConfigFile -Pattern 'APP_VERSION\s*=\s*"([^"]+)"' | Select-Object -First 1
@@ -147,6 +147,11 @@ Write-Host "  Innioasis Updater Windows Package Builder (v$Version)" -Foreground
 Write-Host "  Target brand(s): $($BrandsToBuild -join ', ')"
 Write-Host "  Destination:     $DistDir"
 Write-Host "================================================================================" -ForegroundColor Cyan
+
+# Snapshot innioasis.app's catalogue/notices/donors/blocklist into the bundle so
+# a first launch works offline. Best-effort: existing copies are kept on failure.
+Write-Host "  -> Refreshing bundled online data (catalogue, notices, donors)..."
+& $PythonExe (Join-Path $ProjectRoot "scripts\fetch_online_data.py")
 
 try {
     $totalBrands = $BrandsToBuild.Count

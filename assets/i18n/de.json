@@ -713,7 +713,7 @@
  "themepack_card_title": "Installieren Sie das 360p Rockbox Theme Pack",
  "themepack_card_desc": "Enthält wunderschöne Community-Themen, hochauflösende Hintergründe und Schriftarten, die speziell für 360p-Displays entwickelt wurden.",
  "themepack_install_btn": "Holen Sie sich das 360p-Themenpaket",
- "themepack_installed_success": "✓ 360p Theme Pack erfolgreich installiert!",
+ "themepack_installed_success": "360p Theme Pack erfolgreich installiert!",
  "themepack_dialog_title": "Einrichtung des Rockbox 360p-Themenpakets",
  "themepack_step1_title": "Schritt 1: Verbinden Sie sich im USB-Speichermodus",
  "themepack_step1_desc": "1. Schalten Sie Ihren Player ein, indem Sie die Ein-/Aus-Taste gedrückt halten.\n2. Wenn Rockbox startet, schließen Sie das USB-Kabel an Ihren Computer an.\n3. Wenn Sie auf dem Player-Bildschirm dazu aufgefordert werden, bestätigen Sie den USB-Speichermodus, damit das Gerät als Laufwerk angezeigt wird.",

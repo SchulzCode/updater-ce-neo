@@ -713,7 +713,7 @@
  "themepack_card_title": "Magbugtak nin 360p Rockbox Theme Pack",
  "themepack_card_desc": "Kabali an magagayon na tema kan komunidad, mga backdrop na halangkaw an resolusyon, asin mga font na ginibo para sa 360p na mga display.",
  "themepack_install_btn": "Magkua nin 360p Theme Pack",
- "themepack_installed_success": "✓ 360p Theme Pack na-install nin matrayumpo!",
+ "themepack_installed_success": "360p Theme Pack na-install nin matrayumpo!",
  "themepack_dialog_title": "Rockbox 360p Theme Pack Setup",
  "themepack_step1_title": "Lakdang 1: Magkonektar sa USB Storage Mode",
  "themepack_step1_desc": "1. I-on an saimong player sa paagi nin pagpugol kan Power button.\n2. Kun mag-boot an Rockbox, isaksak an USB cable sa saimong kompyuter.\n3. Kun hinapot sa screen kan player, kumpirmaron an USB Storage mode tanganing an aparato maglataw bilang sarong drive.",

@@ -713,7 +713,7 @@
  "themepack_card_title": "Asenna 360p Rockbox Theme Pack",
  "themepack_card_desc": "Sisältää kauniita yhteisöteemoja, korkearesoluutioisia taustakuvia ja kirjasimia, jotka on suunniteltu erityisesti 360p-näytöille.",
  "themepack_install_btn": "Hanki 360p-teemapaketti",
- "themepack_installed_success": "✓ 360p-teemapaketti asennettu onnistuneesti!",
+ "themepack_installed_success": "360p-teemapaketti asennettu onnistuneesti!",
  "themepack_dialog_title": "Rockbox 360p -teemapaketin asetukset",
  "themepack_step1_title": "Vaihe 1: Yhdistä USB-tallennustilassa",
  "themepack_step1_desc": "1. Käynnistä soitin pitämällä virtapainiketta painettuna.\n2. Kun Rockbox käynnistyy, kytke USB-kaapeli tietokoneeseen.\n3. Vahvista USB-tallennustila, jos sitä kehotetaan soittimen näytössä, jotta laite näkyy asemana.",

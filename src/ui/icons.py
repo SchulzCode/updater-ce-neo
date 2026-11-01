@@ -166,6 +166,24 @@ _SVG_TEMPLATES = {
     "diagnostics": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
     </svg>""",
+    # A notice board reads as an announcement; the ECG line it used to share
+    # with diagnostics said "system monitor" instead.
+    "bell": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+    </svg>""",
+    # Information and warning marks for notices and status copy. They are
+    # native symbols, not emoji: the same glyph the OS uses in its own alerts.
+    "info": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="16" x2="12" y2="12"/>
+        <line x1="12" y1="8" x2="12.01" y2="8"/>
+    </svg>""",
+    "warning": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+        <line x1="12" y1="9" x2="12" y2="13"/>
+        <line x1="12" y1="17" x2="12.01" y2="17"/>
+    </svg>""",
     "update": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="23 4 23 10 17 10"/>
         <polyline points="1 20 1 14 7 14"/>
@@ -215,6 +233,9 @@ _SF_SYMBOL_MAP = {
     "globe": "globe",
     "www": "globe",
     "diagnostics": "waveform.path.ecg",
+    "bell": "bell",
+    "info": "info.circle.fill",
+    "warning": "exclamationmark.triangle.fill",
     "update": "arrow.triangle.2.circlepath",
     "support": "heart",
     "tools": "wrench.and.screwdriver",
@@ -238,6 +259,7 @@ _SEGOE_SYMBOL_MAP = {
     "globe": 0xE774,       # Globe
     "www": 0xE774,         # Globe
     "diagnostics": 0xEC7A, # Diagnostic
+    "bell": 0xEA8F,        # Ringer
     "update": 0xE72C,      # Refresh
     "support": 0xEB51,     # Heart
     "tools": 0xE756,       # Repair
@@ -247,6 +269,8 @@ _SEGOE_SYMBOL_MAP = {
     "check": 0xE73E,       # CheckMark
     "trash": 0xE74D,       # Delete
     "retry": 0xE72C,       # Refresh
+    "info": 0xE946,        # Info
+    "warning": 0xE7BA,     # Warning
     "chevron.left": 0xE76B,
     "chevron.right": 0xE76C,
 }
@@ -275,6 +299,13 @@ _FREEDESKTOP_MAP = {
     "globe": ["applications-internet", "web-browser", "network-workgroup"],
     "www": ["applications-internet", "web-browser", "network-workgroup"],
     "diagnostics": ["utilities-system-monitor-symbolic"],
+    "bell": [
+        "preferences-system-notifications-symbolic",
+        "notification-active-symbolic",
+        "dialog-information",
+    ],
+    "info": ["dialog-information-symbolic", "dialog-information"],
+    "warning": ["dialog-warning-symbolic", "dialog-warning"],
     "update": ["view-refresh-symbolic", "view-refresh", "system-software-update-symbolic", "system-software-update"],
     "support": ["emblem-favorite-symbolic", "emblem-favorite", "love"],
     "tools": ["applications-utilities-symbolic", "applications-utilities", "system-run-symbolic", "system-run"],

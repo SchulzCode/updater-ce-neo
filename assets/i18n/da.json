@@ -713,7 +713,7 @@
  "themepack_card_title": "Installer 360p Rockbox Theme Pack",
  "themepack_card_desc": "Indeholder smukke fællesskabstemaer, baggrunde i høj opløsning og skrifttyper, der er lavet specielt til 360p-skærme.",
  "themepack_install_btn": "Få 360p temapakke",
- "themepack_installed_success": "✓ 360p Theme Pack installeret med succes!",
+ "themepack_installed_success": "360p Theme Pack installeret med succes!",
  "themepack_dialog_title": "Opsætning af Rockbox 360p temapakke",
  "themepack_step1_title": "Trin 1: Tilslut i USB-lagringstilstand",
  "themepack_step1_desc": "1. Tænd for din afspiller ved at holde tænd/sluk-knappen nede.\n2. Når Rockbox starter, skal du sætte USB-kablet i din computer.\n3. Hvis du bliver bedt om det på afspillerens skærm, skal du bekræfte USB-lagringstilstand, så enheden vises som et drev.",

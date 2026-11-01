@@ -19,7 +19,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 export BUILD_BRAND="${BUILD_BRAND:-}"
-VERSION=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' src/config.py 2>/dev/null || echo "2.5.1")
+VERSION=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' src/config.py 2>/dev/null || echo "2.5.2")
 # Default to the host architecture; appimagetool and the release names use aarch64, not arm64.
 case "$(uname -m)" in
     aarch64|arm64) HOST_ARCH="aarch64" ;;
@@ -222,6 +222,12 @@ if [ "$SKIP_PYINSTALLER" -eq 0 ]; then
         exit 1
     fi
     echo "  -> Required modules verified (PySide6, PyInstaller)"
+fi
+
+# Snapshot innioasis.app's catalogue/notices/donors/blocklist into the bundle so
+# a first launch works offline. Best-effort: existing copies are kept on failure.
+if [ -n "$PYTHON" ] && [ -x "$PYTHON" ]; then
+    "$PYTHON" scripts/fetch_online_data.py || echo "  ! Online snapshot refresh skipped (using the copies already in assets/online)"
 fi
 
 # --- Clean if requested -------------------------------------------------------

@@ -713,7 +713,7 @@
  "themepack_card_title": "Instalatu 360p Rockbox Theme Pack",
  "themepack_card_desc": "Komunitate-gai ederrak, bereizmen handiko atzeko planoak eta 360p-ko pantailetarako bereziki landutako letra-tipoak biltzen ditu.",
  "themepack_install_btn": "Lortu 360p-ko gai-paketea",
- "themepack_installed_success": "✓ 360p Theme Pack behar bezala instalatu!",
+ "themepack_installed_success": "360p Theme Pack behar bezala instalatu!",
  "themepack_dialog_title": "Rockbox 360p gai-paketearen konfigurazioa",
  "themepack_step1_title": "1. urratsa: Konektatu USB biltegiratze moduan",
  "themepack_step1_desc": "1. Piztu erreproduzigailua pizteko botoia sakatuta.\n2. Rockbox abiaraztean, konektatu USB kablea ordenagailura.\n3. Erreproduzigailuaren pantailan eskatzen bazaio, berretsi USB biltegiratze modua gailua disko gisa ager dadin.",

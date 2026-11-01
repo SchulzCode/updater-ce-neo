@@ -3,34 +3,57 @@
   Template for https://innioasis.app/notice.xml
 
   Announcements and public service notices shown to users of the app.
-  Each <notice> is one message. Remove the ones you do not need.
+
+  The app shows the newest active notice in the on-screen banner, and the whole
+  active list behind it: clicking the banner (or the Notices link on the Select
+  screen) opens a pop-out where every notice can be expanded and read in full.
 
   Attributes on <notice>:
     id          required, unique. Give a new id to publish a notice again.
     persistent  boolean ("true" | "false", default: "false").
                 If false, the notice can be dismissed without returning at next run.
                 If true, the notice returns on every app launch even after dismissal.
-                If remote notice.xml contents change from locally cached file,
-                the new notice is immediately loaded and shown.
+                Dismissals follow notice ids, not the file: a changed feed shows
+                its new notices while dismissed notices stay hidden.
     severity    info | warning | critical   (default: info)
-    from        optional, ISO date YYYY-MM-DD. Shown on or after this date.
-    until       optional, ISO date YYYY-MM-DD. Shown on or before this date.
+    type        optional player_update | app_update. Chooses the system
+                notification category; omission means an ordinary notice.
+    from        optional posting date or timestamp: YYYY-MM-DD, or YYYY-MM-DDTHH:MM
+                (also :SS, or a space instead of the T). Shown on the notice as
+                "Posted ...". The notice is shown on or after this time.
+    until       optional, ISO date YYYY-MM-DD. Shown on or before this date. Not
+                shown to users.
     models      optional, comma-separated Y1,Y2,A5. Blank or missing = all models.
 
   Child elements:
-    <title>     required, short heading.
-    <content>   required, plain text (also accepts <body>).
-    <link>      optional, an https:// URL the user can open.
+    <title>         required, short heading (the banner's first line).
+    <content>       required, the short text shown in the banner. Plain text,
+                    also accepts <body>.
+    <full_content>  optional, the complete text shown when the notice is
+                    expanded in the notices pop-out. Use this for the detail
+                    that does not fit in a banner (affected hardware
+                    revisions, workarounds, links to a release). Falls back to
+                    <content> when omitted.
+    <url>           optional, https:// URL behind the notice's "See More"
+                    button. When the app is not in English the button opens
+                    the page's Google Translate view so the notice reads in
+                    the user's language. <link> is accepted as an alias.
+
+  A notice is the way to warn about firmware that should not be installed on a
+  particular hardware revision, or about a new revision older releases do not
+  support: put the one-line warning in <content>, the full explanation and the
+  affected revision in <full_content>, and the detail page in <url>.
 -->
 <notices updated="2026-10-25">
-  <notice id="2026-10-25-example" persistent="false" severity="info" from="2026-10-25" until="2026-12-31" models="Y1,Y2">
+  <notice id="2026-10-25-example" persistent="false" severity="info" from="2026-10-25T09:00" until="2026-12-31" models="Y1,Y2">
     <title>Welcome to Updater CE</title>
     <content>Firmware is downloaded from the community catalogue. Keep your player charged and plugged in during an install.</content>
-    <link>https://innioasis.app</link>
+    <full_content>Firmware and community software are downloaded from the catalogue and installed with SP Flash Tool or MTKClient. Keep the player charged and plugged in for the whole install, and do not unplug it until the app says the install is complete.</full_content>
+    <url>https://innioasis.app</url>
   </notice>
 
   <notice id="2026-10-20-psa-usb" persistent="true" severity="warning" from="2026-10-20" until="2026-11-20">
     <title>Use a direct USB port</title>
-    <content>Avoid USB hubs during an install. Some hubs drop the connection partway through a flash.</content>
+    <content>Avoid USB hubs during an install. Some hubs drop the connection partway through.</content>
   </notice>
 </notices>

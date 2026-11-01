@@ -108,6 +108,7 @@ from ..state import FlashState, StateMachine
 from .dialogs import (
     DiagnosticsView,
     FlashCompleteDialog,
+    NoticesPage,
     RetryGuidanceDialog,
     UpdateAvailableDialog,
 )
@@ -148,6 +149,7 @@ _PAGE_SETTINGS = 4
 _PAGE_DIAGNOSTICS = 5
 _PAGE_NOTICE = 6
 _PAGE_SUPPORT = 7
+_PAGE_NOTICES = 8
 
 # Choose Software, and the app's starting size: the compact window the app has
 # always fitted on small screens. It is also the floor, and the ceiling is the
@@ -187,6 +189,23 @@ def default_window_size(screen=None) -> tuple[int, int]:
 
 # The sidebar brand title and the version badge beside it share one size.
 _BRAND_FONT_SIZE = "14px"
+
+
+class _SimulatedUpdateWorker(QThread):
+    """Runs the Cmd/Ctrl+U test lookup of the latest release off the UI thread."""
+
+    finished = Signal(object)
+
+    def __init__(self, checker, parent=None):
+        super().__init__(parent)
+        self._checker = checker
+
+    def run(self):
+        try:
+            info = self._checker.simulate_latest(force=True)
+        except Exception:
+            info = None
+        self.finished.emit(info)
 
 
 class DeviceUpdateCheckWorker(QThread):
@@ -699,6 +718,14 @@ class MainWindow(QMainWindow):
         self._worker_eta = ETA_UNKNOWN
         self._elapsed_timer = QTimer(self)
         self._elapsed_timer.timeout.connect(self._tick_elapsed)
+        # Catalogue, notices, donors and blocklist are re-checked while the app
+        # stays open, so a long-running window never shows last week's data.
+        # The refresh is ttl-gated and runs off the UI thread: free when the
+        # cached copies are current, silent when the network is not there.
+        self._online_refresh_timer = QTimer(self)
+        self._online_refresh_timer.setInterval(30 * 60 * 1000)
+        self._online_refresh_timer.timeout.connect(self._refresh_online_data)
+        self._online_refresh_timer.start()
         self._step_now = ""
         self._update_offered_once = False
         self._update_manual_pending = False
@@ -721,7 +748,7 @@ class MainWindow(QMainWindow):
         self._sp_1013_seen = False
         self._reboot_suggestion_shown = False
         self._power_off_prompt = False
-        # "Try to keep my data", as read from the install card when the user
+        # "Keep my data", as read from the install card when the user
         # confirmed the player was off. Off means the firmware is written whole.
         self._keep_data = False
         self._gui_handoff_prepare = False
@@ -1008,6 +1035,9 @@ class MainWindow(QMainWindow):
         ):
             paint_window_surface(w)
             self._stack.addWidget(w)
+        self._notices_page = NoticesPage()
+        paint_window_surface(self._notices_page)
+        self._stack.addWidget(self._notices_page)
         content_col = QWidget()
         content_col.setObjectName("contentColumn")
         paint_window_surface(content_col)
@@ -1042,6 +1072,28 @@ class MainWindow(QMainWindow):
         self._settings_page.themes_auto_install_changed.connect(
             self._on_themes_auto_install_changed
         )
+
+        # The Notices rail row exists only while there is something to read:
+        # dismissing the last notice removes it, and a new notice id in the
+        # feed brings it back.
+        try:
+            from ..notice_service import NoticeService
+
+            _notices = NoticeService.instance()
+            self._notices_available = bool(_notices.active_notices)
+            # Clicks on a system notification land on this window, so they
+            # must be routable before the first one can be delivered below.
+            app = QApplication.instance()
+            if app is not None:
+                app._notification_click_handler = self._on_notification_clicked
+            _notices.notices_ready.connect(self._on_notices_ready)
+            # Select Software starts a fetch while it is being built, before
+            # this signal could be heard: take its current answer now, then
+            # refetch once after the first paint so a changed feed is noticed.
+            _notices.replay()
+            QTimer.singleShot(700, _notices.fetch_async)
+        except Exception:
+            logger.debug("Notice notifications could not be connected", exc_info=True)
 
         self._donations = parse_donors_csv_text(load_donors_file([
             cached_donors_path(),
@@ -1369,6 +1421,13 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._settings_btn)
         self._nav_buttons["nav_settings"] = (self._settings_btn, _PAGE_SETTINGS)
         self._nav_btn_group.addButton(self._settings_btn, _PAGE_SETTINGS)
+
+        # Notices sits under Settings and follows the same hide rules.
+        self._notices_btn = self._make_nav_button(tr("nav_notices"), "bell")
+        self._notices_btn.clicked.connect(lambda: self._nav_to_page(_PAGE_NOTICES))
+        layout.addWidget(self._notices_btn)
+        self._nav_buttons["nav_notices"] = (self._notices_btn, _PAGE_NOTICES)
+        self._nav_btn_group.addButton(self._notices_btn, _PAGE_NOTICES)
 
         # Primary pages stay at the top. Everything else sits with the language
         # selector at the bottom of the window.
@@ -2555,6 +2614,36 @@ class MainWindow(QMainWindow):
         shortcut.activated.connect(self.start_rockbox_themes_manually)
         self._themes_shortcut = shortcut
 
+        # Cmd+U (Ctrl+U elsewhere) opens the App updates card on demand, for testing.
+        update_test = QShortcut(QKeySequence("Ctrl+U"), self)
+        update_test.setContext(Qt.ShortcutContext.WindowShortcut)
+        update_test.activated.connect(self._show_update_test)
+        self._update_test_shortcut = update_test
+
+    def _show_update_test(self) -> None:
+        """Present the App updates card from the latest release, even if not newer."""
+        from ..updates import UpdateChecker
+        from ..config import UPDATE_REPO
+
+        worker = getattr(self, "_update_test_worker", None)
+        if worker is not None and worker.isRunning():
+            return
+        worker = _SimulatedUpdateWorker(UpdateChecker(UPDATE_REPO), self)
+        self._update_test_worker = worker
+        self._active_workers.add(worker)
+        worker.finished.connect(lambda info: self._on_update_test_done(worker, info))
+        worker.start()
+
+    def _on_update_test_done(self, worker, info) -> None:
+        self._active_workers.discard(worker)
+        if info is None or not getattr(info, "tag", ""):
+            self._present_message(
+                tr("nav_check_updates"),
+                tr("update_check_failed"),
+            )
+            return
+        self._offer_app_update(info)
+
     def _manual_themes_model(self) -> str:
         """Y1 or Y2 for a manually started themes stage."""
         candidates = []
@@ -2660,8 +2749,14 @@ class MainWindow(QMainWindow):
         is_240p = any("240p" in value for value in (name, path, asset_name, release_label))
         is_240p = is_240p or str(info.get("selected_resolution", "")).lower() == "240p"
         # Themes are Y1-only, and only for a Rockbox-named, non-240p release.
-        # Bundled-marker and local-checkbox routes do not bypass this.
-        return bool(model == "Y1" and is_rockbox and not is_240p), model
+        wanted = bool(model == "Y1" and is_rockbox and not is_240p)
+        # The per-install tickbox is an opt-out: checked by default, cleared by
+        # anyone who would rather install the firmware on its own. The Settings
+        # auto-install toggle still has the final say on the automatic stage.
+        opt_out = getattr(page, "_local_rockbox_themes_cb", None) if page else None
+        if wanted and opt_out is not None and not opt_out.isChecked():
+            wanted = False
+        return wanted, model
 
     def _rockbox_240p_detected(self) -> bool:
         """Whether this run installs a 240p Rockbox ROM (theme-site note, no bundled push)."""
@@ -3476,6 +3571,7 @@ class MainWindow(QMainWindow):
             if hasattr(self, "_settings_btn"):
                 self._settings_btn.setVisible(False)
                 self._settings_btn.setEnabled(False)
+            self._apply_notices_nav_visibility()
             if hasattr(self, "_support_btn"):
                 self._support_btn.setVisible(False)
             # The community marks follow the Donations setting even mid-install,
@@ -3516,6 +3612,7 @@ class MainWindow(QMainWindow):
                 self._settings_btn.blockSignals(True)
                 self._settings_btn.setChecked(True)
                 self._settings_btn.blockSignals(False)
+            self._apply_notices_nav_visibility()
             if hasattr(self, "_support_btn"):
                 self._support_btn.setVisible(False)
                 self._support_btn.setEnabled(False)
@@ -3548,6 +3645,7 @@ class MainWindow(QMainWindow):
             if hasattr(self, "_settings_btn"):
                 self._settings_btn.setVisible(True)
                 self._settings_btn.setEnabled(True)
+            self._apply_notices_nav_visibility()
             if hasattr(self, "_support_btn"):
                 self._support_btn.setVisible(True)
                 self._support_btn.setEnabled(True)
@@ -3637,8 +3735,12 @@ class MainWindow(QMainWindow):
             return getattr(self, "_failure_title", None) or tr("install_failed_title")
         if page_idx == _PAGE_RETRY:
             return tr("flash_retry_title")
+        if page_idx == _PAGE_NOTICES:
+            self._notices_page.refresh_from_service()
         if page_idx == _PAGE_NOTICE:
             return getattr(self, "_notice_title", "") or tr("sel_title")
+        if page_idx == _PAGE_NOTICES:
+            return tr("nav_notices")
         if page_idx == _PAGE_SUPPORT:
             return tr("nav_donate")
         return tr("sel_title")
@@ -3724,7 +3826,35 @@ class MainWindow(QMainWindow):
         if getattr(self, "_linux_setup_flow_active", False) and page_idx != _PAGE_SETTINGS:
             self._highlight_nav(_PAGE_SETTINGS, False)
             return
+        # The Notices row is hidden once every notice has been dismissed; a
+        # direct call (a stale toast, a shortcut) must not open a page the
+        # sidebar no longer offers.
+        if page_idx == _PAGE_NOTICES and not getattr(self, "_notices_available", False):
+            self._highlight_nav(self._stack.currentIndex(), self._install_run_active())
+            return
         self._stack.setCurrentIndex(page_idx)
+        # A row highlights itself when clicked, but navigation started anywhere
+        # else -- a notice toast, a shortcut, a hand-off from the flash page --
+        # has to move the selection too, or the old row stays lit. This is the
+        # helper the blocked-navigation paths already use: it sets the row
+        # without signalling and without leaving a focus ring behind.
+        if hasattr(self, "_nav_buttons"):
+            # Early startup navigation runs before the rail exists.
+            self._highlight_nav(page_idx, self._install_run_active())
+        # The battery reminder belongs to Select Software alone: the Notices
+        # page is for reading announcements, not for setup reminders.
+        select_page = getattr(self, "_select_page", None)
+        if select_page is not None and hasattr(select_page, "_battery_toast"):
+            if page_idx == _PAGE_SELECT:
+                select_page._check_battery_toast_visibility()
+            else:
+                select_page._battery_toast.setVisible(False)
+        if page_idx == _PAGE_NOTICES:
+            # Opening the page is the refresh gesture: cached notices appear at
+            # once, and a throbber covers the background fetch that follows.
+            notices_page = getattr(self, "_notices_page", None)
+            if notices_page is not None and hasattr(notices_page, "refresh"):
+                notices_page.refresh()
         if page_idx != _PAGE_SELECT:
             # The catalogue's fixed-size hold belongs to that page alone.
             self._release_select_window_size()
@@ -5021,6 +5151,7 @@ class MainWindow(QMainWindow):
             self._sync_install_nav_entry()
             self._flash_page.show_flashing()
             self._flash_page.set_device_done(donations_shown=not donation_disabled)
+            self._apply_post_install_urls()
             self._flash_page.set_rockbox_site_themes(is_240p_rockbox)
             self._flash_page.show_completion_appeal(False)
             self._flash_page.show_completion_note(
@@ -5104,6 +5235,45 @@ class MainWindow(QMainWindow):
         )
         self._adjust_window_geometry()
 
+    def _refresh_online_data(self) -> None:
+        """Replace stale online files and re-read notices without blocking the UI."""
+        if self._install_run_active():
+            # Never compete with a running download or flash for bandwidth.
+            return
+        try:
+            from ..online_data import refresh_all_async
+
+            refresh_all_async()
+        except Exception:
+            logger.debug("Online data refresh could not start", exc_info=True)
+        try:
+            from ..notice_service import NoticeService
+
+            NoticeService.instance().fetch_async()
+        except Exception:
+            logger.debug("Notice refresh could not start", exc_info=True)
+
+    def _apply_post_install_urls(self) -> None:
+        """Hand the selected firmware's post-install URLs to the completion screen.
+
+        A local package's ``fw_package.ini`` or the catalogue entry's
+        ``slidia_manifest.xml`` attributes supply them. Only completion routing
+        uses these; flashing and theme prep are unaffected.
+        """
+        page = getattr(self, "_select_page", None)
+        post = post_2 = ""
+        if page is not None and hasattr(page, "post_install_urls"):
+            try:
+                post, post_2 = page.post_install_urls()
+            except Exception:
+                logger.debug("Could not read post-install URLs", exc_info=True)
+                post = post_2 = ""
+        elif page is not None:
+            fw_pkg = getattr(page, "_fw_package", None)
+            post = str(getattr(fw_pkg, "post_install", "") or "")
+            post_2 = str(getattr(fw_pkg, "post_install_2", "") or "")
+        self._flash_page.set_post_install_urls(post, post_2)
+
     def _finish_themes_stage(self, donation_disabled: bool) -> None:
         if self.themes.completion_shown:
             return
@@ -5123,6 +5293,7 @@ class MainWindow(QMainWindow):
         self._sync_install_nav_entry()
         self._flash_page.show_flashing()
         self._flash_page.set_device_done(donations_shown=not donation_disabled)
+        self._apply_post_install_urls()
         self._apply_release_icon(complete=donation_disabled)
         self._nav_to_page(_PAGE_FLASH)
         # The themes stage only reaches this screen after its pack is placed,
@@ -5486,7 +5657,7 @@ class MainWindow(QMainWindow):
 
     def _on_power_off_continue(self):
         """The user confirmed the device is off and unplugged. Start the run."""
-        # Read the card's "Try to keep my data" tick here: this is the moment
+        # Read the card's "Keep my data" tick here: this is the moment
         # the user confirmed the player is off and unplugged, so the run that
         # follows has to obey what the card showed then.
         self._keep_data = self._flash_page.keep_data_checked()
@@ -6802,6 +6973,10 @@ class MainWindow(QMainWindow):
                 self._notify_app_update(info)
             else:
                 self._offer_app_update(info)
+                # The system notification is the second channel for a waiting
+                # build, not a replacement for the update view. It is skipped
+                # when the user turned app-update notifications off.
+                self._notify_app_update(info)
         else:
             self._pending_app_update = None
             self._sync_update_button()
@@ -6873,39 +7048,119 @@ class MainWindow(QMainWindow):
         tray = getattr(self, "_background_tray", None)
         return tray is not None and tray.is_visible() and not self.isVisible()
 
-    def _notify_app_update(self, info) -> None:
-        """Tray mode: the window is hidden, so the update is announced natively."""
-        import re
-        from ..notifications import show_completion_notification
+    def _notification_tray(self):
+        """The background tray, when one is up, so a click can be routed."""
+        tray = getattr(self, "_background_tray", None)
+        if tray is not None and tray.is_visible():
+            return tray
+        return None
 
+    def _notify_app_update(self, info) -> None:
+        """Announce a waiting app build natively; clicking opens its update view."""
+        import re
+
+        from .. import notice_alerts
+
+        if not notice_alerts.app_updates_enabled():
+            return
         version = str(getattr(info, "version", "") or "")
+        if not version:
+            return
+        if getattr(self, "_notified_app_update_version", "") == version:
+            return
         body = tr("update_available_fmt").format(new=version, current=APP_VERSION)
         body = re.sub(r"<[^>]+>", "", body)
-        try:
-            show_completion_notification(tr("update_available"), body)
-        except Exception:
-            logger.debug("App update notification failed", exc_info=True)
+        self._notified_app_update_version = version
+        notice_alerts.deliver(
+            tr("update_available"),
+            body,
+            tray=self._notification_tray(),
+            route="app_update",
+        )
 
     def _notify_device_updates(self, updates) -> None:
         """Post one system notification per device with a newer release.
 
         No window is passed, so the app is not brought to the front.
         """
-        from ..notifications import show_completion_notification
+        from .. import notice_alerts
 
+        if not notice_alerts.player_updates_enabled():
+            return
         title = tr("reminder_new_release_title")
         for upd in updates or []:
             software = str((upd or {}).get("software_name") or "")
             model = str((upd or {}).get("model") or "")
             if not software or not model:
                 continue
-            try:
-                show_completion_notification(
-                    title,
-                    tr("sel_update_available").format(software=software, model=model),
-                )
-            except Exception:
-                logger.debug("Device update notification failed", exc_info=True)
+            notice_alerts.deliver(
+                title,
+                tr("sel_update_available").format(software=software, model=model),
+                tray=self._notification_tray(),
+                route="player_update",
+            )
+
+    def _on_notices_ready(self, notices) -> None:
+        """Follow the live notice list: rail row, notification, and routing."""
+        self._notices_available = bool(notices)
+        logger.info("Notices: %d available", len(notices or []))
+        self._apply_notices_nav_visibility()
+        self._notify_about_notices(notices)
+        if (
+            not self._notices_available
+            and hasattr(self, "_stack")
+            and self._stack.currentIndex() == _PAGE_NOTICES
+        ):
+            # Nothing is left to read on the page the user is looking at.
+            self._nav_to_page(_PAGE_SELECT)
+
+    def _apply_notices_nav_visibility(self) -> None:
+        """Show the Notices row only when a notice survives dismissal."""
+        btn = getattr(self, "_notices_btn", None)
+        if btn is None:
+            return
+        visible = bool(
+            getattr(self, "_notices_available", False)
+            and not self._install_run_active()
+            and not getattr(self, "_linux_setup_flow_active", False)
+        )
+        btn.setVisible(visible)
+        btn.setEnabled(visible)
+
+    def _notify_about_notices(self, notices) -> None:
+        """Announce each genuinely new notice whose category is switched on.
+
+        Notices are marked seen whether or not a notification was sent, so
+        turning a category on later never replays old announcements.
+        """
+        from .. import notice_alerts
+
+        fresh = notice_alerts.unseen_notices(notices)
+        if not fresh:
+            return
+        logger.info("Notices: %d new since the last run", len(fresh))
+        notice_alerts.mark_notices_seen(n.id for n in fresh)
+        tray = self._notification_tray()
+        for notice in fresh:
+            if notice_alerts.category_enabled(notice_alerts.notice_category(notice)):
+                notice_alerts.notify_notice(notice, tray=tray, route="notices")
+
+    def _on_notification_clicked(self, route=None) -> None:
+        """Route a clicked system notification to the view it announces."""
+        from ..notifications import bring_window_to_front
+
+        if route is None:
+            app = QApplication.instance()
+            route = getattr(app, "_last_notification_route", "")
+        if route == "app_update":
+            bring_window_to_front(self)
+            self._on_check_updates_clicked()
+        elif route == "player_update":
+            bring_window_to_front(self)
+            self._nav_to_page(_PAGE_SELECT)
+        elif route == "notices" and getattr(self, "_notices_available", False):
+            bring_window_to_front(self)
+            self._nav_to_page(_PAGE_NOTICES)
 
     def _check_legacy_installations(self):
         try:
@@ -7423,6 +7678,7 @@ class MainWindow(QMainWindow):
                 self._quit_from_tray,
                 fallback,
             )
+            tray.message_clicked.connect(self._on_notification_clicked)
             self._background_tray = tray
         return tray
 

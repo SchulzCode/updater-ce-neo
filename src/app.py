@@ -506,6 +506,16 @@ def main():
     app.setApplicationName(config.get_app_name())
     app.setOrganizationName("innioasis")
 
+    # Every file from innioasis.app (catalogue, notices, donors, blocklist) is
+    # read from the copies shipped in the app and replaced in the background
+    # only when stale, so the first window never waits on the network.
+    try:
+        from . import online_data
+
+        online_data.refresh_all_async()
+    except Exception:
+        logging.getLogger(__name__).debug("Online data refresh could not start", exc_info=True)
+
     import sys as _sys
     if _sys.platform != "darwin":
         # On Windows and Linux, set the window/taskbar icon explicitly.
@@ -547,6 +557,15 @@ def main():
     from .ui.main_window import apply_interface_direction
 
     apply_interface_direction(app)
+
+    # One copy at a time. Two windows would compete for the same USB device, SP
+    # Flash Tool's settings files and the shared cache, so a second launch stops
+    # here -- after the theme is applied, so the explanation matches the app --
+    # and offers to end a copy left behind by a crash or hidden in the tray.
+    from .single_instance import ensure_single_instance
+
+    if not ensure_single_instance(app):
+        sys.exit(0)
 
     # PREPARE LINUX SYSTEM FOR SP FLASH TOOL before showing the window
     # (only when SP Flash Tool is the selected engine; MTKclient needs no prep)

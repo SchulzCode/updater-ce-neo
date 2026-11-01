@@ -713,7 +713,7 @@
  "themepack_card_title": "Nainstalujte 360p Rockbox Theme Pack",
  "themepack_card_desc": "Zahrnuje krásná komunitní témata, pozadí ve vysokém rozlišení a písma vytvořená speciálně pro displeje 360p.",
  "themepack_install_btn": "Získejte tématický balíček 360p",
- "themepack_installed_success": "✓ Balíček motivů 360p byl úspěšně nainstalován!",
+ "themepack_installed_success": "Balíček motivů 360p byl úspěšně nainstalován!",
  "themepack_dialog_title": "Nastavení balíčku témat Rockbox 360p",
  "themepack_step1_title": "Krok 1: Připojte se v režimu úložiště USB",
  "themepack_step1_desc": "1. Zapněte přehrávač přidržením tlačítka napájení.\n2. Když se Rockbox spustí, zapojte kabel USB do počítače.\n3. Pokud se na obrazovce přehrávače zobrazí výzva, potvrďte režim úložiště USB, aby se zařízení zobrazilo jako jednotka.",

@@ -2057,7 +2057,7 @@ KEEP_DATA_SCATTER_NAME = ".updater_keepdata.txt"
 
 
 def _scatter_partition_keeps_data(name, file_name="") -> bool:
-    """True for a user data partition the "Try to keep my data" option keeps.
+    """True for a user data partition the "Keep my data" option keeps.
 
     Matched on the partition name and on its image file name, in either case
     (``userdata``, ``USRDATA``, ``userdata.img``), because packages name the
@@ -2143,7 +2143,7 @@ def _write_scatter_preserving_data(scatter_path, log=None) -> Optional[Path]:
     )
     if log:
         log(
-            "Try to keep my data: leaving "
+            "Keep my data: leaving "
             + ", ".join(sorted({n for n in kept if n}))
             + " untouched"
         )
@@ -3033,7 +3033,7 @@ def build_mtk_write_plan(
         if skip_table_partitions and _is_device_table_partition(name, file_name):
             continue
         if skip_data_partitions and _scatter_partition_keeps_data(name, file_name):
-            # "Try to keep my data": the partition is never addressed, so the
+            # "Keep my data": the partition is never addressed, so the
             # run issues no write and no erase for it.
             continue
         image = _resolve_image_file(scatter_dir, file_name)
@@ -3320,7 +3320,7 @@ class FlashWorker(QThread):
         self.pre_extracted_dir = pre_extracted_dir
         self.model = (model or "").strip()
         self._primed_mtk = primed_mtk
-        # "Try to keep my data": user data partitions are written by neither
+        # "Keep my data": user data partitions are written by neither
         # backend. SP Flash Tool gets a scatter that leaves them out; the
         # MTKClient write plan simply never addresses them.
         self.keep_data = bool(keep_data)
@@ -4099,7 +4099,7 @@ class FlashWorker(QThread):
             except OSError as e:
                 # Without the copy the tool would write user data the user asked
                 # to keep, so this run stops instead of flashing the original.
-                self._log(f'Could not prepare "Try to keep my data": {e}')
+                self._log(f'Could not prepare "Keep my data": {e}')
                 self._log("No firmware images were written.")
                 self.finished.emit(False, tr("err_keep_data_failed"))
                 return
@@ -4817,6 +4817,19 @@ class FlashWorker(QThread):
             return
 
         self._tool_tag = "MTK"
+        if sys.platform.startswith("linux") or (os.name == "posix" and not sys.platform.startswith("darwin")):
+            try:
+                from . import linux_sp_flash
+                readiness = linux_sp_flash.verify_linux_flashing_readiness()
+                if not readiness.get("udev_ok"):
+                    self._log(
+                        f"Warning: {readiness.get('udev_msg')}. "
+                        f"If device is not detected, run: sudo bash {readiness.get('setup_script_path')}"
+                    )
+                for conf in readiness.get("service_conflicts", []):
+                    self._log(f"Notice: {conf.get('message')}")
+            except Exception as e:
+                logger.debug("Linux readiness check skipped: %s", e)
         self._announce_please_wait()
         self.action_changed.emit(tr("action_init_mtkclient"))
         self._log(tr("action_init_mtkclient"))
@@ -5158,7 +5171,7 @@ class FlashWorker(QThread):
             if hasattr(mtk, "port") and mtk.port is not None:
                 mtk.port.close(reset=not IS_WINDOWS)
         except OSError as e:
-            self._log(f"⚠️ Failed to close USB port: {e}")
+            self._log(f"Warning: Failed to close USB port: {e}")
         except Exception as e:
             logger.debug("Failed to close mtk session cleanly: %s", e)
 
@@ -5417,7 +5430,7 @@ class FlashWorker(QThread):
 
             primed_session.config.hwparam_path = str(extract_dir)
             if getattr(primed_session.config, "target_config", None) is None:
-                self._log("⚠️ Primed session target_config is missing; reconnect the device and try again.")
+                self._log("Warning: Primed session target_config is missing; reconnect the device and try again.")
                 try:
                     primed_session.port.close(reset=True)
                 except Exception:
@@ -5597,7 +5610,7 @@ class FlashWorker(QThread):
                 }
             )
             self._log(
-                "Try to keep my data: not writing "
+                "Keep my data: not writing "
                 + (", ".join(n for n in kept_names if n) or "any user data partition")
             )
 
@@ -6661,7 +6674,7 @@ class FlashWorker(QThread):
 
         raw = self._read_user_blob(mtk, 0, gpt_read_len)
         if raw is None or len(raw) < pagesize:
-            self._log("⚠️ GPT sync: could not read device table header from LBA 0; proceeding with scatter")
+            self._log("Warning: GPT sync: could not read device table header from LBA 0; proceeding with scatter")
             return gpt_cache
 
         if user_size <= pagesize * 34:
@@ -6672,7 +6685,7 @@ class FlashWorker(QThread):
 
         scatter_parts = _parse_scatter_all_user_partitions(scatter_file, user_size)
         if not scatter_parts:
-            self._log("⚠️ GPT sync: no EMMC_USER partition found in scatter; skipping sync")
+            self._log("Warning: GPT sync: no EMMC_USER partition found in scatter; skipping sync")
             return gpt_cache
 
         # Check GPT signature
@@ -6683,10 +6696,10 @@ class FlashWorker(QThread):
 
         if not has_gpt_sig:
             if not create_when_missing:
-                self._log("⚠️ GPT sync: standard GPT signature not detected on device; skipping sync")
+                self._log("Warning: GPT sync: standard GPT signature not detected on device; skipping sync")
                 return gpt_cache
             if user_size <= pagesize * 34:
-                self._log("⚠️ GPT sync: cannot create GPT without valid EMMC_USER capacity")
+                self._log("Warning: GPT sync: cannot create GPT without valid EMMC_USER capacity")
                 return gpt_cache
             self._log("GPT sync: standard GPT signature not detected on device; creating GPT from scatter")
             try:
@@ -6697,7 +6710,7 @@ class FlashWorker(QThread):
                 self._log(f"GPT created from scatter (primary=0x0, backup=0x{backup_addr:X})")
                 return new_cache
             except Exception as e:
-                self._log(f"⚠️ GPT creation from scatter encountered error: {e}")
+                self._log(f"Warning: GPT creation from scatter encountered error: {e}")
                 return gpt_cache
 
         # Existing GPT matches or needs update
@@ -6719,7 +6732,7 @@ class FlashWorker(QThread):
                 self._log(f"GPT rebuilt from scatter (primary=0x0, backup=0x{backup_addr:X})")
                 return new_cache
             except Exception as e:
-                self._log(f"⚠️ GPT rebuild from scatter encountered error: {e}")
+                self._log(f"Warning: GPT rebuild from scatter encountered error: {e}")
 
         self._log("GPT layout matches scatter; no sync needed")
         return gpt_cache
@@ -6849,7 +6862,7 @@ class FlashWorker(QThread):
                 mtk, table_images, before_preloader=False
             )
         except RuntimeError as e:
-            self._log(f"❌ Partition table verification failed: {e}")
+            self._log(f"Failed: Partition table verification failed: {e}")
             self.finished.emit(False, "PARTITION_TABLE_INVALID")
             return False
         return True
@@ -6970,7 +6983,7 @@ class FlashWorker(QThread):
             ):
                 return
             self._log(
-                "⚠️ Composite write was rejected, possibly due to DA version differences; "
+                "Warning: Composite write was rejected, possibly due to DA version differences; "
                 "falling back to separate mode"
             )
             mtk.config.last_error = None

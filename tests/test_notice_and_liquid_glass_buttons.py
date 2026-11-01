@@ -20,7 +20,7 @@ def test_parse_notice_xml():
       <notice id="test-1" persistent="false" severity="warning" models="Y1,Y2">
         <title>Advisory Title</title>
         <content>Important update content</content>
-        <link>https://innioasis.app/info</link>
+        <url>https://innioasis.app/info</url>
       </notice>
       <notice id="test-2" persistent="true">
         <title>Persistent PSA</title>
@@ -37,7 +37,7 @@ def test_parse_notice_xml():
     assert n1.content == "Important update content"
     assert n1.persistent is False
     assert n1.severity == "warning"
-    assert n1.link == "https://innioasis.app/info"
+    assert n1.url == "https://innioasis.app/info"
     assert n1.models == ("Y1", "Y2")
     assert n1.is_active_for("Y1") is True
     assert n1.is_active_for("G5") is False
@@ -47,7 +47,7 @@ def test_parse_notice_xml():
     assert n2.title == "Persistent PSA"
     assert n2.content == "Always charged"
     assert n2.persistent is True
-    assert n2.link == ""
+    assert n2.url == ""
     assert n2.is_active_for("any") is True
 
 
@@ -130,7 +130,7 @@ def test_toast_widgets_use_liquid_glass_round_buttons():
 
     # NoticeToast
     nt = NoticeToast()
-    notice = Notice(id="n1", title="Notice", content="Content", link="https://innioasis.app")
+    notice = Notice(id="n1", title="Notice", content="Content", url="https://innioasis.app")
     nt.set_notice(notice)
     assert nt.isVisible()
     n_action = nt.findChild(QPushButton, "noticeToastAction")

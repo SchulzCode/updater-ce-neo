@@ -22,7 +22,7 @@ APP_ID="com.innioasis.updater"
 # generic cross-platform MediaTek Installer instead: its own name and bundle
 # id, and an app that knows it is offline-only.
 BRAND="$(printf '%s' "${BUILD_BRAND:-updater_ce}" | tr '[:upper:]-' '[:lower:]_')"
-VERSION=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' src/config.py 2>/dev/null || echo "2.5.1")
+VERSION=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' src/config.py 2>/dev/null || echo "2.5.2")
 DIST_DIR="dist/macos"
 BUILD_DIR="build/macos"
 SPEC_FILE="macos.spec"
@@ -181,6 +181,10 @@ for mod in $CHECK_MODS; do
     fi
 done
 echo "  -> Environment verified: $("$PYTHON" --version 2>&1)"
+
+# Snapshot innioasis.app's catalogue/notices/donors/blocklist into the bundle so
+# a first launch works offline. Best-effort: existing copies are kept on failure.
+"$PYTHON" scripts/fetch_online_data.py || echo "  ! Online snapshot refresh skipped (using the copies already in assets/online)"
 if [ "$(uname -s)" = "Darwin" ]; then
     # PySide6 6.12.0 on Python < 3.12 leaks a None reference per paint call and
     # the app aborts ("none_dealloc: deallocating None") within a minute.

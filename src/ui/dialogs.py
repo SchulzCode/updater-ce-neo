@@ -245,6 +245,277 @@ class PreInstallGuidanceDialog(QDialog):
         layout.addLayout(btn_row)
 
 
+def notice_see_more_url(url: str, lang: str | None = None) -> str:
+    """The See More target: the notice page, or its Google Translate view outside English."""
+    from urllib.parse import quote
+
+    from ..i18n import current_language, is_english_language
+
+    code = lang if lang is not None else current_language()
+    if not url or is_english_language(code):
+        return url
+    return (
+        "https://translate.google.com/translate?sl=auto&tl="
+        f"{quote(code, safe='')}&u={quote(url, safe='')}"
+    )
+
+
+class NoticesDialog(QDialog):
+    """Pop-out list of active notices. Each notice expands to its full content."""
+
+    def __init__(self, parent=None, notices=()):
+        super().__init__(parent)
+        apply_dialog_theme(self)
+        t = T()
+        self.setWindowTitle(tr("notices_dialog_title"))
+        self.setMinimumSize(520, 380)
+        self.resize(560, 460)
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        heading = QLabel(f"<h3 style='color:{t.fg}; margin:0; padding:0;'>{tr('notices_dialog_title')}</h3>")
+        heading.setTextFormat(Qt.RichText)
+        layout.addWidget(heading)
+
+        from .flash_page import _RoundNextButton
+        from .scrollbars import configure_scroll_area
+
+        self._rows = []
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(8)
+        for notice in notices:
+            row = _NoticeRow(notice, parent=body)
+            self._rows.append(row)
+            body_layout.addWidget(row)
+        if not notices:
+            empty = QLabel(tr("notices_dialog_empty"))
+            empty.setWordWrap(True)
+            body_layout.addWidget(empty)
+        body_layout.addStretch()
+
+        from PySide6.QtWidgets import QScrollArea
+
+        from .surfaces import show_glass_backdrop
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setWidget(body)
+        show_glass_backdrop(scroll.viewport())
+        show_glass_backdrop(body)
+        configure_scroll_area(scroll)
+        layout.addWidget(scroll, 1)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        close_btn = _RoundNextButton(symbol="back", accent=False)
+        close_btn.setText(tr("toast_dismiss"))
+        close_btn.clicked.connect(self.accept)
+        btn_row.addWidget(close_btn, 0, Qt.AlignVCenter)
+        layout.addLayout(btn_row)
+
+
+class NoticesPage(QWidget):
+    """Notices as a main-window page: scrollable, self-refreshing, with dates."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("noticesPage")
+        from .scrollbars import configure_scroll_area
+        from .surfaces import show_glass_backdrop
+        from .widgets import Throbber
+        from PySide6.QtWidgets import QScrollArea
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(10)
+
+        # No refresh button: the feed refreshes itself in the background, and
+        # again whenever the sidebar row is clicked. The spinner is the only
+        # thing that appears here, and only while a fetch is actually running.
+        top = QHBoxLayout()
+        top.addStretch(1)
+        self._spinner = Throbber(self)
+        top.addWidget(self._spinner, 0, Qt.AlignVCenter)
+        layout.addLayout(top)
+
+        self._body = QWidget()
+        self._body_layout = QVBoxLayout(self._body)
+        self._body_layout.setContentsMargins(0, 0, 0, 0)
+        self._body_layout.setSpacing(8)
+
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QFrame.NoFrame)
+        self._scroll.setWidget(self._body)
+        show_glass_backdrop(self._scroll.viewport())
+        show_glass_backdrop(self._body)
+        configure_scroll_area(self._scroll)
+        layout.addWidget(self._scroll, 1)
+
+        try:
+            from ..notice_service import NoticeService
+
+            service = NoticeService.instance()
+            service.notices_ready.connect(self.set_notices)
+            service.refresh_started.connect(self._spinner.start)
+            service.refresh_finished.connect(self._spinner.stop)
+            service.start_passive_refresh()
+            self.set_notices(service.active_notices)
+        except Exception:
+            self.set_notices([])
+
+    def refresh_from_service(self) -> None:
+        """Reload the list from the notice service each time the tab opens."""
+        try:
+            from ..notice_service import NoticeService
+
+            self.set_notices(NoticeService.instance().active_notices)
+        except Exception:
+            self.set_notices([])
+
+    def set_notices(self, notices) -> None:
+        while self._body_layout.count():
+            item = self._body_layout.takeAt(0)
+            child = item.widget()
+            if child is not None:
+                child.setParent(None)
+                child.deleteLater()
+        notices = list(notices or [])
+        for notice in notices:
+            row = _NoticeRow(
+                notice, parent=self._body, show_dates=True, allow_dismiss=True
+            )
+            row.dismissed.connect(lambda _notice: self.refresh_from_service())
+            self._body_layout.addWidget(row)
+        if not notices:
+            empty = QLabel(tr("notices_dialog_empty"))
+            empty.setWordWrap(True)
+            self._body_layout.addWidget(empty)
+        self._body_layout.addStretch()
+
+    def refresh(self) -> None:
+        """Reload from the cache now, then fetch a fresh copy in the background."""
+        self.refresh_from_service()
+        try:
+            from ..notice_service import NoticeService
+
+            NoticeService.instance().fetch_async()
+        except Exception:
+            pass
+
+
+class _NoticeRow(QFrame):
+    """One notice in the list: its title, dates and the full content, always shown.
+
+    The body is Markdown and its links open in the browser. A notice with a
+    ``url`` gets a circular globe button that opens the page on the web. On the
+    full page each row can also be dismissed (the banner carries its own cross).
+    """
+
+    dismissed = Signal(object)
+
+    def __init__(self, notice, parent=None, show_dates=False, allow_dismiss=False):
+        super().__init__(parent)
+        self._notice = notice
+        self.setObjectName("noticeRow")
+        # Same bento card as the toasts: painted rounded plate, no opaque fill.
+        self.setProperty("cssClass", "card")
+        self.setAutoFillBackground(False)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        t = T()
+
+        col = QVBoxLayout(self)
+        col.setContentsMargins(12, 10, 12, 10)
+        col.setSpacing(6)
+
+        header = QHBoxLayout()
+        header.setContentsMargins(0, 0, 0, 0)
+        header.setSpacing(8)
+        title = QLabel(notice.title or notice.id, self)
+        title.setStyleSheet(f"font-weight: 600; color: {t.fg}; border: none; background: transparent;")
+        title.setWordWrap(True)
+        header.addWidget(title, 1)
+        if allow_dismiss:
+            from .flash_page import _RoundNextButton
+
+            self._dismiss = _RoundNextButton(symbol="cancel", accent=False)
+            self._dismiss.setToolTip(tr("toast_dismiss"))
+            self._dismiss.clicked.connect(self._on_dismiss_clicked)
+            header.addWidget(self._dismiss, 0, Qt.AlignTop)
+        col.addLayout(header)
+
+        if show_dates and notice.from_date:
+            posted = notice.from_date
+            # A bare date carries no time, so show only the date for it.
+            stamp = (
+                posted.strftime("%Y-%m-%d %H:%M")
+                if posted.time() != datetime.min.time()
+                else posted.strftime("%Y-%m-%d")
+            )
+            dates = QLabel(tr("notices_posted").format(date=stamp), self)
+            dates.setStyleSheet(f"font-size: 12px; color: {t.fg_muted};")
+            col.addWidget(dates)
+
+        body_text = notice.full_content or notice.content or ""
+        self._body = QTextBrowser(self)
+        self._body.setOpenExternalLinks(True)
+        self._body.setReadOnly(True)
+        self._body.setFrameShape(QFrame.NoFrame)
+        self._body.setStyleSheet(f"font-size: 13px; color: {t.fg}; background: transparent;")
+        self._body.setMarkdown(body_text)
+        self._body.document().setDocumentMargin(0)
+        self._body.document().setTextWidth(-1)
+        self._body.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._body.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._body.document().contentsChanged.connect(self._fit_body)
+        col.addWidget(self._body)
+
+        from .flash_page import _RoundNextButton
+
+        self._more = _RoundNextButton(symbol="www", accent=True)
+        self._more.setText(tr("notices_see_more"))
+        self._more.clicked.connect(self._open_see_more)
+        self._more.setVisible(bool(notice.url))
+        col.addWidget(self._more, 0, Qt.AlignLeft)
+        self._fit_body()
+
+    def _on_dismiss_clicked(self) -> None:
+        try:
+            from ..notice_service import NoticeService
+
+            NoticeService.instance().dismiss_notice(self._notice)
+        except Exception:
+            pass
+        self.dismissed.emit(self._notice)
+
+    def _fit_body(self) -> None:
+        """Size the body to its document, so the list scrolls instead of the text."""
+        doc = self._body.document()
+        width = self._body.viewport().width() or 400
+        doc.setTextWidth(width)
+        self._body.setFixedHeight(int(doc.size().height()) + 4)
+
+    def resizeEvent(self, event):  # noqa: N802 (Qt naming)
+        super().resizeEvent(event)
+        self._fit_body()
+
+    def _open_see_more(self) -> None:
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+
+        QDesktopServices.openUrl(QUrl(notice_see_more_url(self._notice.url)))
+
+    def paintEvent(self, event):  # noqa: N802 (Qt naming)
+        from .widgets import _paint_bento_surface
+
+        _paint_bento_surface(self, event)
+
+
 class RetryGuidanceDialog(QDialog):
     """Hardware reset instructions shown when the target stops answering.
 
@@ -895,6 +1166,13 @@ class UpdateAvailableDialog(QDialog):
         self._dest_path = None
         t = T()
 
+        # Shown inline on the window's glass. Paint the same rounded bento
+        # pane as the Settings and release-notes cards, instead of letting the
+        # dialog's own opaque plate cover the page.
+        self.setAutoFillBackground(False)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+
         self.setWindowTitle(tr("update_available"))
         self.setMinimumWidth(540)
         self.resize(580, 440)
@@ -928,10 +1206,9 @@ class UpdateAvailableDialog(QDialog):
             self._icon_label.setPixmap(pix)
             self._icon_label.setStyleSheet("background: transparent; border: none;")
         else:
-            self._icon_label.setStyleSheet(
-                f"background-color: {t.accent_bg}; border-radius: 12px; font-size: 24px;"
-            )
-            self._icon_label.setText("🚀")
+            # No pictograph when the app icon is unavailable: the header still
+            # reads without one, and no platform gets an emoji in its place.
+            self._icon_label.setVisible(False)
         header_row.addWidget(self._icon_label, 0, Qt.AlignVCenter)
 
         title_col = QVBoxLayout()
@@ -964,6 +1241,7 @@ class UpdateAvailableDialog(QDialog):
 
         self._notes = QTextBrowser()
         self._notes.setObjectName("updateNotes")
+        self._notes.setFrameShape(QFrame.NoFrame)
         self._notes.setOpenExternalLinks(True)
         self._notes.setMinimumHeight(170)
         self._notes.document().setDefaultStyleSheet(
@@ -976,9 +1254,15 @@ class UpdateAvailableDialog(QDialog):
             self._notes.setHtml(format_markdown_release_notes(body_text))
         else:
             self._notes.setPlainText(tr("update_no_notes"))
-        # No stylesheet: a local one replaces the platform scrollbar. The
-        # helper also restores as-needed policies and a light frame.
-        configure_scroll_area(self._notes, vertical=Qt.ScrollBarAsNeeded)
+        # No widget stylesheet: a local one would replace the platform
+        # scrollbar. The notes stay clear so the card pane behind them is what
+        # the reader sees, exactly as on the Select Software release notes.
+        configure_scroll_area(
+            self._notes, vertical=Qt.ScrollBarAsNeeded, transparent=True
+        )
+        from .surfaces import clear_glass_plate
+
+        clear_glass_plate(self._notes)
         self._main_layout.addWidget(self._notes, 1)
 
         # Progress bar container (hidden until download starts)
@@ -1030,6 +1314,12 @@ class UpdateAvailableDialog(QDialog):
         # release note gives a short dialog instead of a fixed 440 px one.
         QTimer.singleShot(0, self._fit_to_content)
 
+    def paintEvent(self, event):  # noqa: N802 (Qt naming)
+        """Draw the same bento pane as Settings and release-note cards."""
+        from .widgets import _paint_bento_surface
+
+        _paint_bento_surface(self, event)
+
     def _fit_to_content(self) -> None:
         """Size to the browser's document, bounded so it always fits a screen."""
         try:
@@ -1065,6 +1355,26 @@ class UpdateAvailableDialog(QDialog):
             return
         self._start_update_download()
 
+    @staticmethod
+    def _remove_older_update_packages(folder, keep: str) -> None:
+        """Delete earlier Updater CE packages in ``folder``, keeping ``keep``."""
+        import re
+
+        pattern = re.compile(r"^(UpdaterCE-Setup-|Innioasis\.Updater)", re.IGNORECASE)
+        try:
+            entries = list(folder.iterdir())
+        except OSError:
+            return
+        for entry in entries:
+            if entry.name == keep or not entry.is_file():
+                continue
+            if not pattern.match(entry.name):
+                continue
+            try:
+                entry.unlink()
+            except OSError as e:
+                logger.debug("Could not remove older update package %s: %s", entry, e)
+
     def _start_update_download(self):
         import os
         import subprocess
@@ -1073,6 +1383,20 @@ class UpdateAvailableDialog(QDialog):
         from PySide6.QtWidgets import QApplication
         from ..browser import open_browser
         from ..downloads import DownloadWorker
+
+        # Always download the newest release, not whatever this dialog was
+        # opened with. The lookup can only refresh the asset; if it fails the
+        # asset already on screen is used.
+        try:
+            from ..config import UPDATE_REPO
+            from ..updates import UpdateChecker
+
+            latest = UpdateChecker(UPDATE_REPO).simulate_latest(force=True)
+            if latest and latest.tag and latest.assets:
+                self._info = latest
+                self._asset = pick_platform_asset(latest.assets)
+        except Exception as e:
+            logger.debug("Could not refresh the latest update before download: %s", e)
 
         # Identify platform download asset
         target_asset = self._asset
@@ -1116,6 +1440,9 @@ class UpdateAvailableDialog(QDialog):
                 stale.unlink(missing_ok=True)
             except OSError as e:
                 logger.debug("Could not remove stale update file %s: %s", stale, e)
+        # Older app packages from earlier downloads are removed too, so only the
+        # latest build is ever kept on disk.
+        self._remove_older_update_packages(self._dest_path.parent, keep=self._dest_path.name)
 
         # Switch to wizard progress view
         self._download_state = "downloading"
@@ -1171,7 +1498,11 @@ class UpdateAvailableDialog(QDialog):
 
                 # Windows and Linux AppImage: ready to install
                 self._download_state = "ready"
-                self._icon_label.setText("🎉")
+                from .icons import get_symbol_icon
+
+                self._icon_label.setPixmap(
+                    get_symbol_icon("complete", 40, color=T().fg).pixmap(40, 40)
+                )
                 self._progress_label.setText("Ready to install.")
                 self._action_btn.setEnabled(True)
                 self._action_btn.setText(tr("install"))
@@ -1218,6 +1549,16 @@ class UpdateAvailableDialog(QDialog):
         self.reject()
 
 
+def _symbol_label(symbol: str, size: int, color: str) -> QLabel:
+    """A small host-drawn symbol label, for headers and status rows."""
+    from .icons import get_symbol_icon
+
+    label = QLabel()
+    label.setPixmap(get_symbol_icon(symbol, size, color=color).pixmap(size, size))
+    label.setStyleSheet("border: none; background: transparent;")
+    return label
+
+
 class LinuxSetupDialog(QDialog):
     """User-friendly Linux environment onboarding and SP Flash Tool setup."""
 
@@ -1241,9 +1582,9 @@ class LinuxSetupDialog(QDialog):
         # Header
         header_row = QHBoxLayout()
         header_row.setSpacing(14)
-        icon_badge = QLabel("⚡")
+        icon_badge = _symbol_label("tools", 26, t.fg)
         icon_badge.setStyleSheet(
-            f"font-size: 26px; background-color: {t.accent_bg}; color: {t.fg}; "
+            f"background-color: {t.accent_bg}; "
             f"border-radius: 16px; padding: 6px 12px;"
         )
         header_row.addWidget(icon_badge)
@@ -1291,8 +1632,7 @@ class LinuxSetupDialog(QDialog):
         )
         ec_layout = QHBoxLayout(self._engine_card)
         ec_layout.setContentsMargins(14, 12, 14, 12)
-        ec_icon = QLabel("⚙️")
-        ec_icon.setStyleSheet("font-size: 20px; border: none; background: transparent;")
+        ec_icon = _symbol_label("settings", 20, t.fg)
         ec_layout.addWidget(ec_icon)
 
         ec_text = QVBoxLayout()
@@ -1322,8 +1662,7 @@ class LinuxSetupDialog(QDialog):
         )
         uc_layout = QHBoxLayout(self._usb_card)
         uc_layout.setContentsMargins(14, 12, 14, 12)
-        uc_icon = QLabel("🔌")
-        uc_icon.setStyleSheet("font-size: 20px; border: none; background: transparent;")
+        uc_icon = _symbol_label("install", 20, t.fg)
         uc_layout.addWidget(uc_icon)
 
         uc_text = QVBoxLayout()
@@ -1357,8 +1696,7 @@ class LinuxSetupDialog(QDialog):
         )
         sc_layout = QHBoxLayout(self._sys_card)
         sc_layout.setContentsMargins(14, 12, 14, 12)
-        sc_icon = QLabel("🐧")
-        sc_icon.setStyleSheet("font-size: 20px; border: none; background: transparent;")
+        sc_icon = _symbol_label("diagnostics", 20, t.fg)
         sc_layout.addWidget(sc_icon)
 
         sc_text = QVBoxLayout()

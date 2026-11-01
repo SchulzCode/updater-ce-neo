@@ -1218,7 +1218,7 @@ class DonationDialog(QDialog):
         msg = tr("donate_copied").format(label=label)
         self._donor_label.setText(msg)
         if hasattr(self, "_status_label"):
-            self._status_label.setText(f"✓ {msg}")
+            self._status_label.setText(msg)
             self._status_label.show()
         try:
             QApplication.clipboard().setText(value)

@@ -260,9 +260,17 @@ class DownloadWorker(QThread):
                                 dl_mb = downloaded / (1024 * 1024)
                                 if total_size > 0:
                                     tot_mb = total_size / (1024 * 1024)
+                                    remaining = total_size - downloaded
+                                    eta_text = ""
+                                    if speed_bytes_sec > 1024:
+                                        from .progress_model import format_eta_seconds
+
+                                        eta_text = format_eta_seconds(remaining / speed_bytes_sec)
                                     status_str = tr("dl_progress_fmt").format(
                                         dl=f"{dl_mb:.1f}", tot=f"{tot_mb:.1f}", pct=percent, speed=f"{speed_mb:.1f}"
                                     )
+                                    if eta_text:
+                                        status_str = f"{status_str} · {eta_text}"
                                 else:
                                     status_str = tr("dl_progress_unknown_fmt").format(
                                         dl=f"{dl_mb:.1f}", speed=f"{speed_mb:.1f}"

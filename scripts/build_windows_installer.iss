@@ -36,7 +36,7 @@
   #define MyAppGroup MyAppName
 #endif
 #ifndef MyAppVersion
-  #define MyAppVersion "2.5.1"
+  #define MyAppVersion "2.5.2"
 #endif
 #ifndef MyAppPublisher
   #define MyAppPublisher "Ryan Specter"
@@ -723,9 +723,9 @@ Source: "{#MyDistDir}\_internal\mtkclient\*"; DestDir: "{app}\_internal\mtkclien
 Source: "{#MyRepoRoot}tools\DriverInstall.exe"; DestDir: "{tmp}"; Flags: ignoreversion skipifsourcedoesntexist; Check: ShouldInstallDriver
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: startmenuicon; Check: ShouldInstallMainApp
-Name: "{group}\{cm:SpFlashToolShortcut}"; Filename: "{app}\SP_Flash_Tool\flash_tool.exe"; WorkingDir: "{app}\SP_Flash_Tool"; IconFilename: "{app}\SP_Flash_Tool\flash_tool.exe"; Tasks: startmenuicon
-Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"; Tasks: startmenuicon
+Name: "{userprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: startmenuicon; Check: ShouldInstallMainApp
+Name: "{userprograms}\{cm:SpFlashToolShortcut}"; Filename: "{app}\SP_Flash_Tool\flash_tool.exe"; WorkingDir: "{app}\SP_Flash_Tool"; IconFilename: "{app}\SP_Flash_Tool\flash_tool.exe"; Tasks: startmenuicon
+Name: "{userprograms}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"; Tasks: startmenuicon
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; Check: ShouldInstallMainApp
 
 [Run]
@@ -1356,6 +1356,15 @@ begin
 end;
 
 { Runs at various stages of setup execution. }
+{ Removes the Innioasis Community folder left by earlier releases from both
+  the per-user and the all-users Start Menu, so its shortcuts are recreated
+  directly in the main Start Menu. }
+procedure RemoveInnioasisCommunityFolder;
+begin
+  DelTree(ExpandConstant('{userprograms}\Innioasis Community'), True, True, True);
+  DelTree(ExpandConstant('{commonprograms}\Innioasis Community'), True, True, True);
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssInstall then
@@ -1377,6 +1386,7 @@ begin
 
     ShowStep('StepShortcuts');
     PurgeRetiredShortcuts;
+    RemoveInnioasisCommunityFolder;
 
     ShowStep('StepLegacy');
     RemoveLegacyLocalAppData;
@@ -1395,6 +1405,17 @@ begin
     if ShouldInstallMainApp then
       RegisterRunOnceStartup;
   end;
+end;
+
+{ Delete this installer file once the run finishes, so a downloaded copy
+  does not linger. A cmd helper waits for Setup to exit, then removes it. }
+procedure DeinitializeSetup();
+var
+  ResultCode: Integer;
+begin
+  Exec(ExpandConstant('{sys}\cmd.exe'),
+    '/C ping 127.0.0.1 -n 3 > nul & del /F /Q "' + ExpandConstant('{srcexe}') + '"',
+    '', SW_HIDE, ewNoWait, ResultCode);
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);

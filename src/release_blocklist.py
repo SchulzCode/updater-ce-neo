@@ -169,20 +169,29 @@ def _cache_path() -> Path:
     return _cache_root() / CACHE_FILE_NAME
 
 
-def fetch_blocklist_text() -> Optional[str]:
-    """Download the CSV. Returns None when the server cannot give a usable file."""
-    try:
-        resp = requests_module().get(BLOCKLIST_URL, timeout=REQUEST_TIMEOUT)
-        resp.raise_for_status()
-        text = resp.text
-        # An HTML 404 page or a captive portal is not a blocklist.
-        if "software" not in text[:200].lower():
-            logger.info("release_blocklist.csv at innioasis.app is not a CSV; ignoring")
-            return None
-        return text
-    except Exception as e:
-        logger.info("Could not fetch release_blocklist.csv: %s", e)
+def _fetch_blocklist_from(url: str) -> Optional[str]:
+    resp = requests_module().get(url, timeout=REQUEST_TIMEOUT)
+    resp.raise_for_status()
+    text = resp.text
+    # An HTML 404 page or a captive portal is not a blocklist.
+    if "software" not in text[:200].lower():
+        logger.info("release_blocklist.csv at %s is not a CSV; ignoring", url)
         return None
+    return text
+
+
+def fetch_blocklist_text() -> Optional[str]:
+    """Download the CSV, falling back to the website's GitHub copy. None when neither is usable."""
+    from .config import github_fallback_url
+
+    for url in (BLOCKLIST_URL, github_fallback_url(BLOCKLIST_URL)):
+        try:
+            text = _fetch_blocklist_from(url)
+            if text is not None:
+                return text
+        except Exception as e:
+            logger.info("Could not fetch release_blocklist.csv from %s: %s", url, e)
+    return None
 
 
 def load_blocklist() -> list:
@@ -200,6 +209,15 @@ def load_blocklist() -> list:
             return parse_blocklist_csv(cached.read_text(encoding="utf-8"))
     except Exception:
         logger.debug("Could not read cached release_blocklist.csv", exc_info=True)
+    # The snapshot baked into the app still blocks known-bad releases offline.
+    try:
+        from . import online_data
+
+        text = online_data.read_text("release_blocklist.csv")
+        if text.strip():
+            return parse_blocklist_csv(text)
+    except Exception:
+        logger.debug("Could not read the bundled release_blocklist.csv", exc_info=True)
     return []
 
 

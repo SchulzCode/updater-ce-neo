@@ -713,7 +713,7 @@
  "themepack_card_title": "Settu upp 360p Rockbox þemapakka",
  "themepack_card_desc": "Inniheldur falleg samfélagsþemu, bakgrunn í hárri upplausn og leturgerðir sérstaklega gerðar fyrir 360p skjái.",
  "themepack_install_btn": "Fáðu þér 360p þemapakka",
- "themepack_installed_success": "✓ 360p þemapakki settur upp með góðum árangri!",
+ "themepack_installed_success": "360p þemapakki settur upp með góðum árangri!",
  "themepack_dialog_title": "Uppsetning Rockbox 360p þemapakka",
  "themepack_step1_title": "Skref 1: Tengdu í USB geymsluham",
  "themepack_step1_desc": "1. Kveiktu á spilaranum þínum með því að halda inni Power takkanum.\n2. Þegar Rockbox ræsir, stingdu USB snúrunni í tölvuna þína.\n3. Ef beðið er um það á spilaraskjánum skaltu staðfesta USB-geymslustillingu svo tækið birtist sem drif.",

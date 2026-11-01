@@ -37,7 +37,7 @@ if (-not $Version) {
             $Version = $match.Matches[0].Groups[1].Value
         }
     }
-    if (-not $Version) { $Version = "2.5.1" }
+    if (-not $Version) { $Version = "2.5.2" }
 }
 
 if (-not $OutDir) {

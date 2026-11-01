@@ -55,6 +55,26 @@ class FirmwarePackage:
     icon_dark: str = ""
     image: str = ""
     is_y2linux: bool = False
+    post_install: str = ""
+    post_install_2: str = ""
+
+
+def post_install_urls_for(*packages) -> tuple[str, str]:
+    """The first non-empty post-install URL pair among ``packages``.
+
+    ``slidia_manifest.xml`` names the page(s) to open once a software install
+    finishes (``post_install`` / ``post_install_2``), and a local package's
+    ``fw_package.ini`` can name them too. Callers pass the candidates in
+    precedence order; an absent entry simply falls through.
+    """
+    for pkg in packages:
+        if pkg is None:
+            continue
+        post = str(getattr(pkg, "post_install", "") or "").strip()
+        post_2 = str(getattr(pkg, "post_install_2", "") or "").strip()
+        if post or post_2:
+            return post, post_2
+    return "", ""
 
 
 # Live manifest entries (see ``manifest.py``) replace the static table once
@@ -216,6 +236,36 @@ def _parse_rom_asset_variant(asset, tag_name="", repo=""):
         }
     except Exception:
         return None
+
+
+def _is_rom_zip_name(name):
+    return fnmatch((name or "").lower(), "rom*.zip")
+
+
+def _release_rom_variants(assets, tag_name, repo, repo_has_rom=False):
+    """Variants a release offers: its rom*.zip assets, else its other zips.
+
+    A release that ships any rom*.zip follows the rom*.zip standard, so only
+    those assets are offered and the other zips are ignored. Other zips are
+    offered only when the repository has no rom*.zip releases at all, and then
+    only a ``*install*.zip`` or a lone zip of any name is used (Y2Reborn /
+    Y2Linux style releases).
+    """
+    rom_assets = [a for a in assets if _is_rom_zip_name(a.get("name"))]
+    if rom_assets:
+        variants = [_parse_rom_asset_variant(a, tag_name, repo) for a in rom_assets]
+        return [v for v in variants if v]
+    variants = [_parse_rom_asset_variant(a, tag_name, repo) for a in assets]
+    variants = [v for v in variants if v]
+    if variants or repo_has_rom:
+        return variants
+    zips = [a for a in assets if (a.get("name") or "").lower().endswith(".zip")]
+    installs = [a for a in zips if fnmatch((a.get("name") or "").lower(), "*install*.zip")]
+    chosen = installs or (zips if len(zips) == 1 else [])
+    return [
+        {"asset": a, "type": "A", "resolution": "native", "model": "dual"}
+        for a in chosen
+    ]
 
 
 def _resolution_priority(resolution, prefer_240p=False):
@@ -1436,19 +1486,7 @@ class ReleasesClient:
         if not release_version_ok(repo, tag_name, show_nightly=True):
             return None
         assets = release.get("assets", [])
-        rom_variants = [_parse_rom_asset_variant(a, tag_name, repo) for a in assets]
-        rom_variants = [v for v in rom_variants if v]
-        # Fallback: when no rom*.zip / *install*.zip matched, accept a single .zip asset.
-        if not rom_variants:
-            zip_assets = [a for a in assets if (a.get("name") or "").lower().endswith(".zip")]
-            if len(zip_assets) == 1:
-                a = zip_assets[0]
-                rom_variants = [{
-                    "asset": a,
-                    "type": "A",
-                    "resolution": "native",
-                    "model": "dual",
-                }]
+        rom_variants = _release_rom_variants(assets, tag_name, repo)
         preferred = select_preferred_rom_asset(rom_variants)
         if not preferred:
             return None
@@ -1468,6 +1506,12 @@ class ReleasesClient:
 
     def _build_releases(self, releases_data, repo):
         releases = []
+        # Non-rom zips are only offered when no release of this repo has a rom*.zip.
+        repo_has_rom = any(
+            _is_rom_zip_name(a.get("name"))
+            for release in releases_data or []
+            for a in release.get("assets", [])
+        )
         for release in releases_data or []:
             tag_name = release.get("tag_name", "")
             if is_base_release_tag(tag_name):
@@ -1478,19 +1522,7 @@ class ReleasesClient:
             if "stable" in tag_name.lower():
                 is_prerelease = False
             assets = release.get("assets", [])
-            rom_variants = [_parse_rom_asset_variant(a, tag_name, repo) for a in assets]
-            rom_variants = [v for v in rom_variants if v]
-            # Fallback: when no rom*.zip / *install*.zip matched, accept a single .zip asset.
-            if not rom_variants:
-                zip_assets = [a for a in assets if (a.get("name") or "").lower().endswith(".zip")]
-                if len(zip_assets) == 1:
-                    a = zip_assets[0]
-                    rom_variants = [{
-                        "asset": a,
-                        "type": "A",
-                        "resolution": "native",
-                        "model": "dual",
-                    }]
+            rom_variants = _release_rom_variants(assets, tag_name, repo, repo_has_rom)
             preferred = select_preferred_rom_asset(rom_variants)
             if not preferred:
                 continue
