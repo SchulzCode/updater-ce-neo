@@ -292,6 +292,7 @@ class DraggableHeaderBar(QWidget):
             if win is not None:
                 self._dragging = True
                 self._drag_offset = event.globalPosition().toPoint() - win.pos()
+                win._user_dragging = True
             if begin_unified_caption_drag(win):
                 event.accept()
                 return
@@ -312,6 +313,10 @@ class DraggableHeaderBar(QWidget):
     def mouseReleaseEvent(self, event):
         self._dragging = False
         self._drag_offset = None
+        win = self.window()
+        if win is not None and getattr(win, "_user_dragging", False):
+            win._user_dragging = False
+            QTimer.singleShot(0, win._adjust_window_geometry)
         super().mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event):
@@ -2054,11 +2059,13 @@ class MainWindow(QMainWindow):
         self._error_page.on_open_sp_gui(self._open_sp_flash_tool_gui)
         self._retry_page.on_cancel(self._on_cancel_flash)
         self.service.step_changed.connect(self._on_step_changed)
-        self.service.progress.connect(self._on_progress)
+        # Coalesced, not direct: a running tool can emit several progress lines
+        # per percent and every queued signal is an event-loop round trip.
+        self.service.progress.connect(self._queue_progress)
         self.service.action_changed.connect(self._flash_page.update_action)
         if hasattr(self.service, "partition_progress_changed"):
             self.service.partition_progress_changed.connect(
-                self._flash_page.update_partition_progress
+                self._queue_partition_progress
             )
         self.service.log_message.connect(self._on_log_message)
         self.service.flash_finished.connect(self._on_flash_finished)
@@ -2239,6 +2246,9 @@ class MainWindow(QMainWindow):
             ) is None:
                 self._mw_dragging = True
                 self._mw_drag_offset = event.globalPosition().toPoint() - self.pos()
+                # No programmatic resize may land mid-gesture: it makes the
+                # window stutter and can cancel the drag outright.
+                self._user_dragging = True
                 if begin_unified_caption_drag(self):
                     event.accept()
                     return
@@ -2257,6 +2267,9 @@ class MainWindow(QMainWindow):
     def mouseReleaseEvent(self, event):
         self._mw_dragging = False
         self._mw_drag_offset = None
+        if getattr(self, "_user_dragging", False):
+            self._user_dragging = False
+            QTimer.singleShot(0, self._adjust_window_geometry)
         super().mouseReleaseEvent(event)
 
     def changeEvent(self, event):
@@ -3390,6 +3403,26 @@ class MainWindow(QMainWindow):
         ):
             return
 
+        if getattr(self, "_user_dragging", False):
+            # The user owns the frame while they move it. A resize animation
+            # started here fights the drag, so try again after the gesture.
+            from PySide6.QtWidgets import QApplication
+
+            if QApplication.mouseButtons() != Qt.MouseButton.NoButton:
+                timer = getattr(self, "_drag_geometry_retry", None)
+                if timer is None:
+                    timer = QTimer(self)
+                    timer.setSingleShot(True)
+                    timer.setInterval(250)
+                    timer.timeout.connect(self._adjust_window_geometry)
+                    self._drag_geometry_retry = timer
+                if not timer.isActive():
+                    timer.start()
+                return
+            # A native drag can swallow the release event: no button held means
+            # the gesture is over, so the flag is stale and the fit may run.
+            self._user_dragging = False
+
         # If flash page is not yet set up, use minimum size to avoid crashes
         if not hasattr(self, "_flash_page"):
             self.setMinimumSize(MINIMUM_WINDOW_WIDTH, MINIMUM_WINDOW_HEIGHT)
@@ -3433,6 +3466,14 @@ class MainWindow(QMainWindow):
             # Hug the progress card. The minimum comes from the wrapped copy
             # (package name, prompt, buttons), not a fixed height that clips it.
             page = self._flash_page
+            # A running install only gets a new geometry when its stage's view
+            # changes. Re-measuring and animating the window from every action
+            # or progress line made dragging and minimising it impossible.
+            generation = getattr(page, "view_generation", None)
+            if self._install_run_active() and generation is not None:
+                if generation == getattr(self, "_install_fit_generation", None):
+                    return
+                self._install_fit_generation = generation
             if hasattr(page, "sync_text_fit"):
                 page.sync_text_fit()
             if page.layout() is not None:
@@ -3665,6 +3706,9 @@ class MainWindow(QMainWindow):
         """Ease a programmatic resize. Reduced motion and a maximized window snap."""
         from .widgets import prefers_reduced_motion
 
+        if getattr(self, "_user_dragging", False):
+            # Never move the frame out from under a caption drag.
+            return
         self._release_select_window_size()
         width = int(width)
         height = int(height)
@@ -4903,6 +4947,56 @@ class MainWindow(QMainWindow):
                 self._flash_start_ts = time.time()
             self._elapsed_timer.start(1000)
 
+    # One paint per tick, not per signal: 25 fps is more than a bar can show,
+    # and it leaves the event loop free for window drags and the caption.
+    _PROGRESS_COALESCE_MS = 40
+    _PARTITION_COALESCE_MS = 80
+
+    def _queue_progress(self, percent):
+        """Keep only the newest backend position for the next UI tick."""
+        self._pending_progress = percent
+        timer = getattr(self, "_progress_coalesce", None)
+        if timer is None:
+            timer = QTimer(self)
+            timer.setSingleShot(True)
+            timer.setInterval(self._PROGRESS_COALESCE_MS)
+            timer.timeout.connect(self._flush_progress)
+            self._progress_coalesce = timer
+        if not timer.isActive():
+            timer.start()
+
+    def _flush_progress(self):
+        value = getattr(self, "_pending_progress", None)
+        self._pending_progress = None
+        if value is not None:
+            self._on_progress(value)
+
+    def _drop_pending_progress(self):
+        """Forget a queued tick: a result card must not be repainted from it."""
+        timer = getattr(self, "_progress_coalesce", None)
+        if timer is not None and timer.isActive():
+            timer.stop()
+        self._pending_progress = None
+
+    def _queue_partition_progress(self, text):
+        """Keep only the newest partition line for the next UI tick."""
+        self._pending_partition_progress = text
+        timer = getattr(self, "_partition_coalesce", None)
+        if timer is None:
+            timer = QTimer(self)
+            timer.setSingleShot(True)
+            timer.setInterval(self._PARTITION_COALESCE_MS)
+            timer.timeout.connect(self._flush_partition_progress)
+            self._partition_coalesce = timer
+        if not timer.isActive():
+            timer.start()
+
+    def _flush_partition_progress(self):
+        text = getattr(self, "_pending_partition_progress", None)
+        self._pending_partition_progress = None
+        if text is not None:
+            self._flash_page.update_partition_progress(text)
+
     def _on_progress(self, percent):
         if (
             getattr(self, "_step_now", "") in (STEP_PLEASE_WAIT, STEP_WAITING)
@@ -4952,11 +5046,15 @@ class MainWindow(QMainWindow):
         self._log_lines.append(msg)
         if getattr(self, "_run_output_open", False):
             self._run_output.append(msg)
-            if len(self._run_output) > 4000:
-                self._run_output = self._run_output[-4000:]
+            if len(self._run_output) > 4000 + 512:
+                # Trim in blocks: a per-line slice of the retained output was
+                # another full copy on the GUI thread for every tool line.
+                del self._run_output[: len(self._run_output) - 4000]
         from ..diagnostics import LOG_RETAINED_LINES
-        if len(self._log_lines) > LOG_RETAINED_LINES:
-            self._log_lines = self._log_lines[-LOG_RETAINED_LINES:]
+        # Trim in blocks: slicing the retained list on every line copied 80k
+        # entries per tool line, which starved the event loop during a flash.
+        if len(self._log_lines) > LOG_RETAINED_LINES + 2048:
+            del self._log_lines[: len(self._log_lines) - LOG_RETAINED_LINES]
         try:
             from ..diagnostics import DiagnosticsManager
             DiagnosticsManager.instance().record_log(msg, dedupe=dedupe)
@@ -5238,6 +5336,8 @@ class MainWindow(QMainWindow):
         self._append_log(msg)
 
     def _on_flash_finished(self, ok, error_code):
+        # A coalesced earlier tick must not repaint the bar behind the result.
+        self._drop_pending_progress()
         self._elapsed_timer.stop()
         if hasattr(self, "_kill_process_timer") and self._kill_process_timer.isActive():
             self._kill_process_timer.stop()

@@ -516,7 +516,8 @@ def test_post_install_completion_uses_a_globe_and_view_guide(qapp, monkeypatch):
 
 def test_sp_flash_tool_console_arguments_are_always_download_only():
     args = sp_flash_tool_console_args("scatter.txt", "DA.bin")
-    # The scatter here names no chip, so the plain Download Only command line is used.
+    # The ordinary run is the reference command line, with Download Only in
+    # place of Format All + Download; only an auth-file run uses the XML.
     assert args[:2] == ["-c", "download"]
     assert "format" not in " ".join(args).lower()
 

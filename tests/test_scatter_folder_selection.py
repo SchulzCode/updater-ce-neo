@@ -18,6 +18,7 @@ from PySide6.QtWidgets import QApplication
 
 from src.flash_service import (
     ExtractWorker,
+    FlashWorker,
     completed_extract_dir,
     compute_extract_dir,
 )
@@ -110,6 +111,25 @@ def test_select_page_choose_scatter_file_does_not_prepare(tmp_path):
     assert page._prep_worker is None
     assert page._start_btn.isEnabled()
     assert Path(page._current_package_path).resolve() == Path(fw_dir).resolve()
+
+
+def test_validate_extract_uses_the_scatter_the_user_chose(tmp_path):
+    """Two scatters in one folder: the file the user picked is the one flashed.
+
+    Y2Linux ships its Android scatter and a preserve-data variant in the same
+    release folder, and a stock package can sit beside it. Re-discovering the
+    scatter in that folder used to hand the back-end a different layout than
+    the one the user selected.
+    """
+    fw_dir, android = _create_scatter_firmware_dir(tmp_path)
+    preserve = fw_dir / "MT6582_preserve_data_scatter.txt"
+    preserve.write_text(android.read_text(encoding="utf-8"), encoding="utf-8")
+
+    worker = FlashWorker(str(fw_dir))
+    found, missing = worker._validate_extract(fw_dir, scatter=preserve)
+
+    assert Path(found) == preserve
+    assert missing == []
 
 
 def test_begin_flash_flow_with_scatter_folder_shows_connect_not_extracting(tmp_path):

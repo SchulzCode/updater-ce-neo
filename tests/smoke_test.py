@@ -6491,7 +6491,8 @@ def test_sp_flash_auth_file():
                 assert e.reason == reason, (bad_scatter.name, e.reason)
             else:
                 raise AssertionError(f"{bad_scatter.name} should not produce a config")
-        # Without an auth file the config is still written (full speed, no auth).
+        # The helper can describe a run without an auth file; the app's normal
+        # (unauthenticated) run uses the plain command line instead.
         no_auth_xml = sp_console_config.build_console_config_xml(scatter, da, "")
         assert "<authentication>" not in no_auth_xml
         assert 'high-speed="true"' in no_auth_xml
@@ -6542,9 +6543,18 @@ def test_sp_flash_auth_file():
             assert res.returncode == 0, res.stderr
 
         # --- console arguments (guided flow and terminal install agree) -------
+        # The ordinary run is the reference command line, Download Only in
+        # place of Format All + Download. Nothing is routed through the XML
+        # configuration file unless an auth file must travel with it.
         plain = sp_flash_tool_console_args(str(scatter), str(da))
-        assert plain[:2] == ["-r", "-i"], plain
-        assert 'high-speed="true"' in Path(plain[2]).read_text(encoding="utf-8")
+        assert plain == [
+            "-c", "download",
+            "-s", str(scatter),
+            "-d", str(da),
+            "-t", "without",
+            "-r",
+        ], plain
+        assert "format" not in " ".join(plain).lower(), plain
 
         logged = []
         with_auth = sp_flash_tool_console_args(str(scatter), str(da), str(auth), logged.append)

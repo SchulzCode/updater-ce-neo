@@ -86,6 +86,11 @@ _MAX_RECENT_RAW = 256
 # is hit, the oldest lines are dropped and the count is the lines still kept.
 LOG_RETAINED_LINES = 80000
 
+# Buffers are trimmed in blocks rather than on every line. Slicing an 80,000
+# entry list per tool line copied it twice (once for the category, once for
+# "all") on the GUI thread, which starved the event loop while a flash ran.
+_BUFFER_TRIM_SLACK = 2048
+
 # Python logging writes every record to the console stream the flash capture
 # tees, so a record already stored by the logging handler would be stored a
 # second time from its console echo (with a different timestamp/colour prefix,
@@ -943,8 +948,9 @@ class DiagnosticsManager:
             for target_cat in (CAT_ALL, cat):
                 buf = self._buffers[target_cat]
                 buf.append(formatted)
-                if len(buf) > self._max_buffer:
-                    self._buffers[target_cat] = buf[-self._max_buffer:]
+                if len(buf) > self._max_buffer + _BUFFER_TRIM_SLACK:
+                    # Trim in place, in blocks: see _BUFFER_TRIM_SLACK.
+                    del buf[: len(buf) - self._max_buffer]
 
         _enqueue_log_disk(formatted, (CAT_ALL, cat))
         return formatted

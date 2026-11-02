@@ -44,7 +44,7 @@ def get_macos_version() -> tuple[int, int, int]:
 MACOS_VERSION = get_macos_version()
 
 # Compatibility checks:
-# macOS 11.0 = Big Sur (baseline target)
+# macOS 12.0 = Monterey (baseline target; Big Sur is below the bundle minimum)
 # macOS 12.0 = Monterey
 # macOS 13.0 = Ventura
 # macOS 14.0 = Sonoma
@@ -90,7 +90,7 @@ def is_windows_acrylic_supported() -> bool:
 
 
 def is_glass_supported() -> bool:
-    """Return True if running on supported macOS (macOS 11 Big Sur through Golden Gate+)."""
+    """Return True if running on supported macOS (macOS 12 Monterey through Golden Gate+)."""
     if not IS_MACOS:
         return False
     if not is_big_sur_or_newer():
@@ -745,9 +745,22 @@ def _pyobjc_prepare_window(window: QMainWindow | QWidget) -> bool:
         ns_window.setMovableByWindowBackground_(True)
         import AppKit
         if is_liquid_glass_supported():
-            # Liquid Glass keeps the appearance this path already used.
-            vibrant_dark = getattr(AppKit, "NSAppearanceNameVibrantDark", "NSAppearanceNameVibrantDark")
-            appr = AppKit.NSAppearance.appearanceNamed_(vibrant_dark)
+            # Liquid Glass follows the host appearance exactly as the legacy
+            # vibrancy path does. Forcing VibrantDark here made a light-mode
+            # window report a dark effective appearance, so Aqua drew dark
+            # controls on a light desktop (and vice versa).
+            try:
+                from .dark import is_dark
+
+                dark_mode = bool(is_dark())
+            except Exception:
+                dark_mode = True
+            name = (
+                "NSAppearanceNameVibrantDark"
+                if dark_mode
+                else "NSAppearanceNameVibrantLight"
+            )
+            appr = AppKit.NSAppearance.appearanceNamed_(getattr(AppKit, name, name))
             if appr:
                 ns_window.setAppearance_(appr)
         else:

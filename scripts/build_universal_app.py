@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""build_universal_app.py — Build a 100% self-contained macOS 11+ Universal 2 (Intel + Apple Silicon) .app bundle.
+"""build_universal_app.py — Build a 100% self-contained macOS 12+ Universal 2 (Intel + Apple Silicon) .app bundle.
 
 Bundles:
 1. Standalone Universal 2 Python 3.11 runtime (merged x86_64 + aarch64 via llvm-lipo).
@@ -7,7 +7,7 @@ Bundles:
 3. Universal 2 libusb-1.0.dylib.
 4. Pure Python dependencies (requests, pyusb, pyserial, colorama, certifi, urllib3, idna, charset_normalizer).
 5. All application sources, MTKClient, and assets.
-6. Compiled Universal 2 Mach-O launcher targeting macOS 11+.
+6. Compiled Universal 2 Mach-O launcher targeting macOS 12+.
 7. Apple codesignature with entitlements.plist.
 """
 
@@ -233,9 +233,15 @@ def ensure_cached_assets():
     targets = {
         "cpython_arm64.tar.gz": "https://github.com/astral-sh/python-build-standalone/releases/download/20260924/cpython-3.11.16%2B20260924-aarch64-apple-darwin-install_only_stripped.tar.gz",
         "cpython_x86_64.tar.gz": "https://github.com/astral-sh/python-build-standalone/releases/download/20260924/cpython-3.11.16%2B20260924-x86_64-apple-darwin-install_only_stripped.tar.gz",
-        "pyside6_essentials.whl": "https://files.pythonhosted.org/packages/bf/d8/053a3a95454ebc5313b3a4a9167b2f959fc6eaee3536b6e4269b75ce9716/PySide6_Essentials-6.7.3-cp39-abi3-macosx_11_0_universal2.whl",
-        "shiboken6.whl": "https://files.pythonhosted.org/packages/ef/7f/85d2234371fd260393760656e1f5977c0b6e270a0a6aca6bf7231a3e60de/shiboken6-6.7.3-cp39-abi3-macosx_11_0_universal2.whl",
-        "pyside6.whl": "https://files.pythonhosted.org/packages/d4/34/86b0fd9b5ce8eee35bd1311a620e8cdfd56d0ca36edca314a6189336682d/PySide6-6.7.3-cp39-abi3-macosx_11_0_universal2.whl",
+        # Qt 6.7.3 sat on macOS 11 wheels but predates Tahoe/Golden Gate: its
+        # Aqua style paints the combos as flat white fields with an accent
+        # arrow and mis-reads the host appearance, which is the dropdown /
+        # dark-window regression users hit in 2.5.2. 6.9.3 is the version 2.5.1
+        # shipped and is the oldest one that draws modern macOS controls. Its
+        # wheels need macOS 12, which is the bundle minimum anyway.
+        "pyside6_essentials.whl": "https://files.pythonhosted.org/packages/80/a9/51549844900837c70e5c89cbd840956c2533732ef4f05c2b656e35ca8182/pyside6_essentials-6.9.3-cp39-abi3-macosx_12_0_universal2.whl",
+        "shiboken6.whl": "https://files.pythonhosted.org/packages/6b/ed/eac552326349629f8c3a89b57a754a860d9665aea78c172777395905d36b/shiboken6-6.9.3-cp39-abi3-macosx_12_0_universal2.whl",
+        "pyside6.whl": "https://files.pythonhosted.org/packages/fe/15/1fa71e44d3b345b9eca82d38cf7e6d7505168b978fe98b3610c0e25d8c0e/pyside6-6.9.3-cp39-abi3-macosx_12_0_universal2.whl",
         "pycryptodome.whl": "https://files.pythonhosted.org/packages/db/6c/a1f71542c969912bb0e106f64f60a56cc1f0fabecf9396f45accbe63fa68/pycryptodome-3.23.0-cp37-abi3-macosx_10_9_universal2.whl",
         "pycryptodomex.whl": "https://files.pythonhosted.org/packages/bf/ae/48679004ab908818326a62c35586b51ccd6ba0e3a03d0ae637cd13e8df99/pycryptodomex-3.24.1-cp37-abi3-macosx_10_9_universal2.whl",
         "pyobjc_core.whl": "https://files.pythonhosted.org/packages/95/df/d2b290708e9da86d6e7a9a2a2022b91915cf2e712a5a82e306cb6ee99792/pyobjc_core-12.1-cp311-cp311-macosx_10_9_universal2.whl",
@@ -325,7 +331,7 @@ def compile_universal_launcher(out_path: Path):
         if sys.platform == "darwin":
             subprocess.run([
                 "clang", "-arch", "x86_64", "-arch", "arm64",
-                "-mmacosx-version-min=11.0",
+                "-mmacosx-version-min=12.0",
                 str(c_file), "-o", str(out_path)
             ], check=True)
             os.chmod(out_path, 0o755)
@@ -350,11 +356,11 @@ def compile_universal_launcher(out_path: Path):
 
         linker = "ld64.lld" if shutil.which("ld64.lld") else "lld"
         subprocess.run([
-            linker, "-arch", "x86_64", "-platform_version", "macos", "11.0.0", "11.0.0",
+            linker, "-arch", "x86_64", "-platform_version", "macos", "12.0.0", "12.0.0",
             str(x86_obj), str(tbd_file), "-o", str(x86_bin)
         ], check=True)
         subprocess.run([
-            linker, "-arch", "arm64", "-platform_version", "macos", "11.0.0", "11.0.0",
+            linker, "-arch", "arm64", "-platform_version", "macos", "12.0.0", "12.0.0",
             str(arm_obj), str(tbd_file), "-o", str(arm_bin)
         ], check=True)
 
@@ -452,12 +458,24 @@ def install_universal_packages(site_packages: Path, dest_python: Path):
             "Qt/qml", "Qt/libexec", "Qt/metatypes", "Qt/translations",
             "scripts", "typesystems", "svgtoqml",
             "Qt/plugins/designer", "Qt/plugins/qmllint", "Qt/plugins/qmltooling",
+            # The app uses no Qt SQL module. Its drivers link absolute
+            # build-host paths (/usr/local/opt/libiodbc, Postgres.app,
+            # ../../g_macosarm_64/...), which would be the only non-universal
+            # dependencies left in the arm64 slice and can never resolve on a
+            # user's Mac.
+            "Qt/plugins/sqldrivers",
         ]:
             d = pyside_dir / sub
             if d.is_dir():
                 shutil.rmtree(d)
             elif d.is_file():
                 d.unlink()
+        # PDF image-format plugin: nothing here renders PDF images, and it is
+        # the one remaining plugin whose @rpath dependency (QtPdf) is not
+        # shipped, so drop it instead of leaving an unloadable Mach-O behind.
+        qpdf_plugin = pyside_dir / "Qt/plugins/imageformats/libqpdf.dylib"
+        if qpdf_plugin.is_file():
+            qpdf_plugin.unlink()
 
 
 def fetch_online_snapshots():
@@ -550,7 +568,11 @@ def build():
         tools_res = RESOURCES / "tools"
         tools_res.mkdir(parents=True, exist_ok=True)
         try:
-            (tools_res / "unar").symlink_to(Path("../Frameworks/tools/unar"))
+            # Relative to Contents/Resources/tools/, so it must climb out of
+            # Resources before entering Frameworks. With one ".." the link
+            # points at Contents/Resources/Frameworks/tools/unar, which does not
+            # exist: it dangles, and codesign --strict then rejects the bundle.
+            (tools_res / "unar").symlink_to(Path("../../Frameworks/tools/unar"))
         except Exception:
             shutil.copy2(unar_src, tools_res / "unar")
 
@@ -577,7 +599,7 @@ def build():
         "CFBundleShortVersionString": "2.5.2",
         "CFBundleVersion": "2.5.2",
         "LSApplicationCategoryType": "public.app-category.utilities",
-        "LSMinimumSystemVersion": "11.0",
+        "LSMinimumSystemVersion": "12.0",
         "NSHighResolutionCapable": True,
         "NSRequiresAquaSystemAppearance": False,
         "NSPrincipalClass": "NSApplication",

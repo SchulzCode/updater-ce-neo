@@ -20,6 +20,27 @@ logger = logging.getLogger(__name__)
 # Host of the supporters feed, named in connectivity logs instead of the URL.
 _DONORS_HOST = "innioasis.app"
 
+# Ledger labels used when a supporter gave without a name. Every one of these
+# rows is a different person, so they must never be merged into one supporter.
+_ANONYMOUS_DONOR_NAMES = {
+    "", "supporter", "supporters", "a supporter", "top supporter",
+    "a top supporter", "someone", "anonymous", "anon", "none", "n/a",
+    "unknown", "null",
+}
+
+
+def is_anonymous_donor(name) -> bool:
+    """True when a ledger name identifies no specific person.
+
+    Anonymous rows arrive as an empty field, ``Supporter`` or ``Someone``, and
+    older cached feeds also carry the display label ``A supporter``. Matching
+    all of them keeps anonymous gifts from being grouped as one donor.
+    """
+    low = " ".join(str(name or "").split()).lower()
+    if low in _ANONYMOUS_DONOR_NAMES:
+        return True
+    return low.startswith(("supporter", "anonymous", "someone"))
+
 
 def parse_donors_csv_text(csv_text):
     """Parse raw CSV text into structured donation records (see donors.csv)."""

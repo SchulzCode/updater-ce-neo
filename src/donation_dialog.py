@@ -28,7 +28,12 @@ from PySide6.QtWidgets import (
 )
 
 from .config import DONATION_LINKS, device_label_for_model
-from .donors import fetch_remote_donors_async, get_monthly_goal_stats, relative_date
+from .donors import (
+    fetch_remote_donors_async,
+    get_monthly_goal_stats,
+    is_anonymous_donor,
+    relative_date,
+)
 from .i18n import tr, tr_brand
 from .ui.dark import T, is_dark
 from .ui.glass import apply_dialog_theme
@@ -638,8 +643,9 @@ class DonationStatusBar(QStatusBar):
             return [tr("donate_thanks_status")]
 
         def is_generic_name(n: str) -> bool:
-            clean = (n or "").strip().lower()
-            return not clean or clean in ("unknown", "supporter", "anonymous", "null")
+            # Anonymous rows are named people only by label, never by identity:
+            # each one keeps its own line and amount below.
+            return is_anonymous_donor(n)
 
         # Group by normalized donor name to compute totals and multiple donations (except generic names)
         groups = {}

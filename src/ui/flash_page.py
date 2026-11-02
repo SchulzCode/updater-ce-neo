@@ -1480,6 +1480,9 @@ class _SvgVectorWidget(QWidget):
 
 
 class FlashPage(QWidget):
+    # Bumped whenever the card changes stage; MainWindow fits the window to it.
+    view_generation = 0
+
     def __init__(self, parent=None, journey=None):
         super().__init__(parent)
         # One owner for the themes/fonts stage. The window passes its own in so
@@ -2089,6 +2092,11 @@ class FlashPage(QWidget):
     def _switch_view(self, target_view):
         if getattr(self, "_stop_open", False):
             return
+        if self._stack.currentWidget() is not target_view:
+            # The window is fitted to the card when the stage changes, and
+            # only then: a live install must not resize the window from its
+            # own progress/action lines (see MainWindow._adjust_window_geometry).
+            self.view_generation = getattr(self, "view_generation", 0) + 1
         self._stack.setCurrentWidget(target_view)
         self._update_paperclip_hint()
         self._notify_geometry_change()

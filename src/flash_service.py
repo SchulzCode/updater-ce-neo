@@ -2095,13 +2095,19 @@ class SpAuthFileError(Exception):
 def sp_flash_tool_console_args(scatter_arg, da_arg, auth_file="", log=None):
     """Console arguments for flash_tool, carrying an auth file when one is set.
 
-    SP Flash Tool has no ``--auth`` switch, so an authentication file is only
-    reachable through the console configuration file (``-i``). Runs use the
-    configuration file (Download Only, full speed) whenever the scatter names
-    its chip and storage type; otherwise the plain Download Only command line
-    is used. A set auth file that is missing, empty or cannot be written raises
-    :class:`SpAuthFileError`: flashing without the file the user chose would be
-    silently wrong.
+    The ordinary run is the reference build's own command line — the same
+    executable, Download Agent, scatter handling, battery mode and log redirection
+    — with ``-c download`` in place of ``-c format-download``: Download Only
+    writes the scatter's downloadable images and formats nothing, so a partition
+    left out of the scatter keeps its contents. That is the path the shipped
+    Chinese build drives, and the one that flashes a hand-selected scatter the
+    way users expect.
+
+    SP Flash Tool has no ``--auth`` switch, so a run *with* an authentication
+    file still goes through the console configuration file (``-i``), which
+    carries the file and the same Download Only command. A set auth file that is
+    missing, empty or cannot be written raises :class:`SpAuthFileError`: flashing
+    without the file the user chose would be silently wrong.
     """
     from . import sp_console_config
 
@@ -2109,29 +2115,15 @@ def sp_flash_tool_console_args(scatter_arg, da_arg, auth_file="", log=None):
     if auth:
         if not sp_console_config.auth_file_usable(auth):
             raise SpAuthFileError(auth, "missing")
-    # Every console run goes through the configuration file: its
-    # ``high-speed="true"`` is the only way to request SP Flash Tool's fastest
-    # write speed (USB 2.0 High Speed 480 Mbps). ``<download-only/>`` writes
-    # the scatter's images and formats nothing, so a partition left out of the
-    # scatter keeps its contents.
-    try:
-        config = sp_console_config.write_console_config(
-            scatter_arg, da_arg, auth or None
-        )
-    except sp_console_config.SpConfigError as e:
-        if auth:
+        try:
+            config = sp_console_config.write_console_config(scatter_arg, da_arg, auth)
+        except sp_console_config.SpConfigError as e:
             raise SpAuthFileError(auth, e.reason) from e
-        config = None
-    except OSError as e:
-        if auth:
+        except OSError as e:
             raise SpAuthFileError(auth, "write_failed") from e
-        config = None
-    if config is not None:
-        if auth and log:
+        if log:
             log(tr("sp_auth_loaded").format(path=auth))
         return ["-r", "-i", str(config)]
-    # Fallback when the scatter does not name its chip or storage type: the
-    # plain command line (Download Only, tool's default speed).
     return [
         "-c", "download",
         "-s", scatter_arg,
@@ -4005,8 +3997,11 @@ class FlashWorker(QThread):
 
         self._announce_please_wait()
 
+        explicit_scatter = p if is_scatter else None
         try:
-            scatter_file, missing = self._validate_extract(extract_dir)
+            scatter_file, missing = self._validate_extract(
+                extract_dir, scatter=explicit_scatter
+            )
         except ScatterDiscoveryError as e:
             self._log(f"Error: {e}")
             self.finished.emit(False, str(e))
@@ -4188,11 +4183,18 @@ class FlashWorker(QThread):
         extract_dir = worker._extract(self.package_path, force=force)
         return extract_dir
 
-    def _validate_extract(self, directory):
-        scatter = _find_scatter(directory)
-        if scatter is None:
+    def _validate_extract(self, directory, scatter=None):
+        """The scatter this run will flash, and any image it still needs.
+
+        ``scatter`` is an explicit choice (the user pointed at that file), and
+        it wins over discovery: with two scatters in one folder, guessing is
+        exactly how a hand-picked Y2Linux layout became the stock one.
+        """
+        explicit = Path(scatter) if scatter else None
+        found = explicit if explicit is not None and explicit.is_file() else _find_scatter(directory)
+        if found is None:
             return (None, [])
-        return (scatter, _missing_images(scatter))
+        return (found, _missing_images(found))
 
     def _linux_stage_progress(self, pct, msg):
         if msg:
