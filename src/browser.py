@@ -12,6 +12,29 @@ from . import paths
 
 logger = logging.getLogger(__name__)
 
+
+def _with_donation_preference(url: str) -> str:
+    """Tell innioasis.app not to show donation asks when the user opted out.
+
+    The site reads the query flag on every page it serves. GitHub and other
+    destinations are untouched.
+    """
+    try:
+        from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+        from . import player_update_check
+
+        parts = urlsplit(url)
+        if parts.hostname not in ("innioasis.app", "www.innioasis.app"):
+            return url
+        if not player_update_check.is_donation_ui_disabled():
+            return url
+        query = dict(parse_qsl(parts.query, keep_blank_values=True))
+        query["donations"] = "false"
+        return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+    except Exception:
+        logger.debug("Could not add the donations preference to %s", url, exc_info=True)
+        return url
+
 _KNOWN_LINUX_BROWSERS = (
     "firefox",
     "google-chrome",
@@ -80,6 +103,7 @@ def open_browser(url: str, new_window: bool = True) -> bool:
     url = str(url).strip()
     if not url.startswith(("http://", "https://", "file://")):
         url = "https://" + url
+    url = _with_donation_preference(url)
 
     # 1. Linux: prefer direct browser invocation with --new-window to guarantee
     # a new window is raised and focused by the window manager

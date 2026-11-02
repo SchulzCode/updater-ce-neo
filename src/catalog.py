@@ -57,6 +57,10 @@ class FirmwarePackage:
     is_y2linux: bool = False
     post_install: str = ""
     post_install_2: str = ""
+    # Repository handle of the firmware this release was built from, e.g.
+    # ``y1-community/y1-stock-rom``. Equal or related firmwares share a data
+    # partition, which is what the Keep Data feature depends on.
+    derivative: str = ""
 
 
 def post_install_urls_for(*packages) -> tuple[str, str]:

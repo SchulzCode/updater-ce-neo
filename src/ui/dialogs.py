@@ -10,8 +10,9 @@ import sys
 from datetime import datetime, timedelta
 
 from PySide6.QtCore import QDate, QDateTime, QSettings, QTime, Qt, QTimer, Signal
-from PySide6.QtGui import QFont, QTextCursor, QTextDocument
+from PySide6.QtGui import QColor, QFont, QPalette, QTextCursor, QTextDocument
 from PySide6.QtWidgets import (
+    QBoxLayout,
     QCheckBox,
     QComboBox,
     QDateTimeEdit,
@@ -25,6 +26,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QProgressBar,
+    QSizePolicy,
     QTextBrowser,
     QTextEdit,
     QVBoxLayout,
@@ -357,6 +359,21 @@ class NoticesPage(QWidget):
         configure_scroll_area(self._scroll)
         layout.addWidget(self._scroll, 1)
 
+        # A plain hint, not a different-coloured web link: it is the way to
+        # learn how these notices are written and moderated.
+        from PySide6.QtWidgets import QPushButton
+
+        self._how_btn = QPushButton(tr("notices_how_community"))
+        self._how_btn.setFlat(True)
+        self._how_btn.setCursor(Qt.PointingHandCursor)
+        self._how_btn.setStyleSheet(
+            f"QPushButton {{ border: none; background: transparent; color: {T().fg_muted};"
+            " font-size: 12px; padding: 2px 4px; }"
+            f"QPushButton:hover {{ color: {T().fg}; }}"
+        )
+        self._how_btn.clicked.connect(self._open_how_notices_work)
+        layout.addWidget(self._how_btn, 0, Qt.AlignHCenter)
+
         try:
             from ..notice_service import NoticeService
 
@@ -407,6 +424,17 @@ class NoticesPage(QWidget):
             NoticeService.instance().fetch_async()
         except Exception:
             pass
+
+    def _open_how_notices_work(self) -> None:
+        from ..browser import open_browser
+
+        open_browser(
+            "https://github.com/y1-community/updater-ce-neo/discussions/6"
+        )
+
+    def retranslate(self) -> None:
+        if hasattr(self, "_how_btn"):
+            self._how_btn.setText(tr("notices_how_community"))
 
 
 class _NoticeRow(QFrame):
@@ -1174,8 +1202,10 @@ class UpdateAvailableDialog(QDialog):
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
 
         self.setWindowTitle(tr("update_available"))
-        self.setMinimumWidth(540)
-        self.resize(580, 440)
+        # Inline in the host window: take the host's width and never ask for
+        # a wider one. Text and buttons wrap to whatever width is available.
+        self.setMinimumWidth(0)
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Expanding)
 
         from .flash_page import _RoundNextButton
         from ..updates import asset_hint, pick_platform_asset
@@ -1202,6 +1232,22 @@ class UpdateAvailableDialog(QDialog):
         from . import icons
 
         pix = icons.app_icon_pixmap(48)
+        if pix.isNull():
+            # Windows and Linux set the window icon at startup; use it when
+            # the resource path differs from the development checkout.
+            from PySide6.QtWidgets import QApplication
+
+            app = QApplication.instance()
+            if app is not None and not app.windowIcon().isNull():
+                pix = app.windowIcon().pixmap(48, 48)
+        if pix.isNull():
+            from .release_icon import app_icon_pixmap as bundled_app_icon
+
+            bundled = bundled_app_icon()
+            if not bundled.isNull():
+                pix = bundled.scaled(
+                    48, 48, Qt.KeepAspectRatio, Qt.SmoothTransformation
+                )
         if not pix.isNull():
             self._icon_label.setPixmap(pix)
             self._icon_label.setStyleSheet("background: transparent; border: none;")
@@ -1213,8 +1259,9 @@ class UpdateAvailableDialog(QDialog):
 
         title_col = QVBoxLayout()
         title_col.setSpacing(2)
-        self._title_label = QLabel(f"<h2 style='margin:0; padding:0; color:{t.fg_primary};'>{tr('update_available')}</h2>")
+        self._title_label = QLabel(f"<h2 style='margin:0; padding:0; color:{t.fg};'>{tr('update_available')}</h2>")
         self._title_label.setTextFormat(Qt.RichText)
+        self._title_label.setWordWrap(True)
         title_col.addWidget(self._title_label)
 
         ver_key = "update_store_available_fmt" if self._store else "update_available_fmt"
@@ -1242,10 +1289,23 @@ class UpdateAvailableDialog(QDialog):
         self._notes = QTextBrowser()
         self._notes.setObjectName("updateNotes")
         self._notes.setFrameShape(QFrame.NoFrame)
+        from PySide6.QtGui import QTextOption
+
+        self._notes.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
+        self._notes.setLineWrapMode(QTextBrowser.LineWrapMode.WidgetWidth)
+        self._notes.setMinimumWidth(0)
+        self._notes.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
+        self._notes.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
         self._notes.setOpenExternalLinks(True)
         self._notes.setMinimumHeight(170)
+        self._notes.viewport().setAutoFillBackground(False)
+        self._notes.viewport().setAttribute(Qt.WA_TranslucentBackground, False)
         self._notes.document().setDefaultStyleSheet(
-            f"a {{ color: {t.accent}; font-weight: 600; text-decoration: none; }}"
+            f"body {{ background: transparent; }} a {{ color: {t.accent}; font-weight: 600; text-decoration: none; }}"
         )
         body_text = self._info.body.strip() if self._info else ""
         if body_text:
@@ -1260,9 +1320,13 @@ class UpdateAvailableDialog(QDialog):
         configure_scroll_area(
             self._notes, vertical=Qt.ScrollBarAsNeeded, transparent=True
         )
+        self._notes.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
         from .surfaces import clear_glass_plate
 
         clear_glass_plate(self._notes)
+        self._make_notes_seamless()
         self._main_layout.addWidget(self._notes, 1)
 
         # Progress bar container (hidden until download starts)
@@ -1279,6 +1343,7 @@ class UpdateAvailableDialog(QDialog):
         self._main_layout.addWidget(self._progress_bar)
 
         self._progress_label = QLabel("")
+        self._progress_label.setWordWrap(True)
         self._progress_label.setStyleSheet(f"font-size: 12px; color: {t.fg_muted};")
         self._progress_label.setVisible(False)
         self._main_layout.addWidget(self._progress_label)
@@ -1320,19 +1385,53 @@ class UpdateAvailableDialog(QDialog):
 
         _paint_bento_surface(self, event)
 
+    def _make_notes_seamless(self) -> None:
+        """Let the update card's painted material show through the notes area.
+
+        A QTextBrowser paints its own Base plate by default. That plate is a
+        different shade from the rounded card behind it (and an obvious dark
+        rectangle on the glass themes), so both the scroll area and its
+        viewport are cleared to the card instead of to a theme surface.
+        """
+        clear = QColor(0, 0, 0, 0)
+        for widget in (self._notes, self._notes.viewport()):
+            if widget is None:
+                continue
+            widget.setAutoFillBackground(False)
+            widget.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+            widget.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+            palette = widget.palette()
+            for group in (
+                QPalette.ColorGroup.Active,
+                QPalette.ColorGroup.Inactive,
+                QPalette.ColorGroup.Disabled,
+            ):
+                palette.setColor(group, QPalette.ColorRole.Base, clear)
+                palette.setColor(group, QPalette.ColorRole.Window, clear)
+            widget.setPalette(palette)
+        self._notes.viewport().update()
+
     def _fit_to_content(self) -> None:
-        """Size to the browser's document, bounded so it always fits a screen."""
+        """Keep the notes inside the host's width and height; never resize the window.
+
+        The notes wrap to the host's width and take the space that is left, so
+        the update view follows the window instead of widening it.
+        """
         try:
-            doc_h = int(self._notes.document().size().height())
-            frame = self._notes.frameWidth() * 2
-            wanted_notes = max(170, min(520, doc_h + frame + 8))
-            if self._notes.height() != wanted_notes:
-                self._notes.setMinimumHeight(wanted_notes)
-                self._notes.setMaximumHeight(wanted_notes)
-            hint = self.sizeHint().height()
-            screen = self.screen()
-            limit = int(screen.availableGeometry().height() * 0.9) if screen else 900
-            self.resize(self.width(), max(320, min(hint, limit)))
+            self._notes.setMinimumHeight(120)
+            self._notes.setMaximumHeight(16777215)
+        except Exception:
+            pass
+
+    def resizeEvent(self, event):  # noqa: N802 (Qt naming)
+        super().resizeEvent(event)
+        # Stack the two action chips into a column when the window is too
+        # narrow for them side by side, so their labels are never clipped.
+        try:
+            narrow = self.width() < 420
+            direction = QBoxLayout.Direction.TopToBottom if narrow else QBoxLayout.Direction.LeftToRight
+            if self._btn_row.direction() != direction:
+                self._btn_row.setDirection(direction)
         except Exception:
             pass
 
@@ -1535,10 +1634,16 @@ class UpdateAvailableDialog(QDialog):
                     self._progress_label.setText(f"Could not start the update: {e}")
                     return
             else:
+                # The Windows installer understands -update: keep settings,
+                # downloads and the existing per-user data instead of treating
+                # this as a clean install.
                 try:
-                    os.startfile(str(self._dest_path))
+                    subprocess.Popen([str(self._dest_path), "-update"])
                 except Exception:
-                    subprocess.Popen([str(self._dest_path)], shell=True)
+                    try:
+                        os.startfile(str(self._dest_path))
+                    except Exception:
+                        subprocess.Popen([str(self._dest_path), "-update"], shell=True)
             QApplication.quit()
         else:
             self.reject()
@@ -1981,6 +2086,8 @@ def format_markdown_release_notes(body: str, name: str = "") -> str:
         margin-top: 4px;
         margin-bottom: 8px;
         color: {t.fg};
+        white-space: normal;
+        word-wrap: break-word;
     }}
     ul, ol {{
         margin-left: 18px;
@@ -1990,6 +2097,8 @@ def format_markdown_release_notes(body: str, name: str = "") -> str:
     li {{
         margin-bottom: 3px;
         color: {t.fg};
+        white-space: normal;
+        word-wrap: break-word;
     }}
     code {{
         background-color: {t.bg_input};

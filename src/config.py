@@ -119,7 +119,15 @@ def get_brand_name() -> str:
 # table below is the built-in fallback for offline first-run and matches
 # firmware-catalog.js / slidia_manifest.xml.
 CATALOG_MANIFEST_URL = "https://innioasis.app/slidia_manifest.xml"
-CATALOG_FALLBACK_URL = "https://raw.githubusercontent.com/y1-community/Innioasis-Updater/refs/heads/main/slidia_manifest.xml"
+# Data files are read from the website's repository first: GitHub serves the
+# committed copy immediately, while the GitHub Pages CDN behind innioasis.app
+# can lag behind it. The website remains the next source, and the maintainer's
+# fork is the last fallback if the organisation repository is unavailable.
+INNIOASIS_RAW_PREFIX = "https://raw.githubusercontent.com/y1-community/innioasis-updater/refs/heads/main/"
+INNIOASIS_RAW_FALLBACK_PREFIX = "https://raw.githubusercontent.com/ryan-specter/innioasis-updater/refs/heads/main/"
+CATALOG_RAW_URL = INNIOASIS_RAW_PREFIX + "slidia_manifest.xml"
+CATALOG_FALLBACK_URL = INNIOASIS_RAW_FALLBACK_PREFIX + "slidia_manifest.xml"
+CATALOG_MANIFEST_URLS = (CATALOG_RAW_URL, CATALOG_MANIFEST_URL, CATALOG_FALLBACK_URL)
 CATALOG_CACHE_DIR_NAME = "catalog"
 
 GITHUB_API = "https://api.github.com"
@@ -129,7 +137,11 @@ RELEASE_CACHE_TTL_SECONDS = 24 * 60 * 60  # 24 h, same as CE
 # --- App update checking ----------------------------------------------------
 # Where this app publishes its releases — Updater CE lives in this repo, so
 # Check for Updates reads its release channel here.
+# Application updates always come from the CE repository. If that repository
+# is temporarily unavailable (for example removed from the organisation), the
+# maintainer's fork is tried as the last fallback.
 UPDATE_REPO = "y1-community/updater-ce-neo"
+UPDATE_REPOS = (UPDATE_REPO, "ryan-specter/updater-ce-neo")
 UPDATE_CACHE_TTL_SECONDS = 24 * 60 * 60
 UPDATE_CHECK_STARTUP_DELAY_MS = 3000  # silent auto-check shortly after launch
 
@@ -187,7 +199,7 @@ MONTHLY_GOAL_USD = 200.0
 # same file is fetched from the repo that hosts the website (GitHub names are
 # case-insensitive, so this is the same repository as CATALOG_FALLBACK_URL).
 INNIOASIS_SITE_PREFIX = "https://innioasis.app/"
-INNIOASIS_GITHUB_FALLBACK_PREFIX = "https://raw.githubusercontent.com/y1-community/innioasis-updater/refs/heads/main/"
+INNIOASIS_GITHUB_FALLBACK_PREFIX = INNIOASIS_RAW_PREFIX
 
 
 def github_fallback_url(url: str) -> str:
@@ -195,6 +207,21 @@ def github_fallback_url(url: str) -> str:
     if url.startswith(INNIOASIS_SITE_PREFIX):
         return INNIOASIS_GITHUB_FALLBACK_PREFIX + url[len(INNIOASIS_SITE_PREFIX):].split("?", 1)[0]
     return url
+
+
+def site_source_urls(path: str) -> tuple[str, ...]:
+    """Sources for one website data file, freshest copy first.
+
+    The GitHub-hosted copy updates as soon as a commit lands; the Pages site
+    can trail it by a CDN cache interval. A fork fallback keeps the app working
+    if the organisation repository is removed.
+    """
+    clean = str(path or "").lstrip("/")
+    return (
+        INNIOASIS_RAW_PREFIX + clean,
+        INNIOASIS_SITE_PREFIX + clean,
+        INNIOASIS_RAW_FALLBACK_PREFIX + clean,
+    )
 
 DONATION_LINKS = {
     "kofi": "https://ko-fi.com/teamslide",

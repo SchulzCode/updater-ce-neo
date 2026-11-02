@@ -28,8 +28,7 @@ from .network import requests_module
 from .catalog import FirmwarePackage
 from .config import (
     CATALOG_CACHE_DIR_NAME,
-    CATALOG_FALLBACK_URL,
-    CATALOG_MANIFEST_URL,
+    CATALOG_MANIFEST_URLS,
     RELEASE_CACHE_TTL_SECONDS,
     resolve_firmware_repo,
 )
@@ -99,6 +98,7 @@ def parse_manifest_xml(xml_text: str):
             is_y2linux = y2linux_attr == "true" or any(k in name.lower() for k in ("y2linux", "y2reborn"))
             post_install = (node.get("post_install") or "").strip()
             post_install_2 = (node.get("post_install_2") or "").strip()
+            derivative = (node.get("derivative") or "").strip()
         except Exception:
             continue
         if not name or not repo or device not in ("Y1", "Y2", "A5"):
@@ -132,6 +132,7 @@ def parse_manifest_xml(xml_text: str):
                 is_y2linux=is_y2linux,
                 post_install=post_install,
                 post_install_2=post_install_2,
+                derivative=resolve_firmware_repo(derivative) if derivative else "",
             )
         )
     return entries
@@ -172,7 +173,7 @@ def fetch_manifest():
 
     Returns a list of ``FirmwarePackage`` or ``None`` when both sources fail.
     """
-    for url in (CATALOG_MANIFEST_URL, CATALOG_FALLBACK_URL):
+    for url in CATALOG_MANIFEST_URLS:
         try:
             text = _fetch_xml(url)
             entries = parse_manifest_xml(text)
@@ -197,7 +198,8 @@ def cache_manifest(entries):
              "image": getattr(e, "image", "") or "",
              "is_y2linux": bool(getattr(e, "is_y2linux", False)),
              "post_install": getattr(e, "post_install", "") or "",
-             "post_install_2": getattr(e, "post_install_2", "") or ""}
+             "post_install_2": getattr(e, "post_install_2", "") or "",
+             "derivative": getattr(e, "derivative", "") or ""}
             for e in entries
         ]
         _cache_root().joinpath("packages.json").write_text(
@@ -227,6 +229,7 @@ def load_cached_manifest():
                 is_y2linux=bool(e.get("is_y2linux", False)),
                 post_install=e.get("post_install", "") or "",
                 post_install_2=e.get("post_install_2", "") or "",
+                derivative=e.get("derivative", "") or "",
             )
             for e in data
             if e.get("name") and e.get("repo")

@@ -814,6 +814,30 @@ begin
 #endif
 end;
 
+{ An in-app update passes -update. It keeps the user's settings, downloads
+  and app data instead of cleaning the profile out like a first install. }
+function IsUpdateInstall: Boolean;
+var
+  Tail: String;
+begin
+  Tail := ' ' + Lowercase(GetCmdTail);
+  Result := (Pos(' -update', Tail) > 0) or (Pos(' /update', Tail) > 0);
+end;
+
+{ Without -update, a pre-3.0 data folder marked by firmware_downloader.py is
+  the signal that this is an upgrade of an existing user, not a clean install. }
+function HasLegacyUserData: Boolean;
+begin
+  Result :=
+    FileExists(ExpandConstant('{localappdata}\Innioasis Updater\firmware_downloader.py')) or
+    DirExists(ExpandConstant('{localappdata}\Innioasis Updater\downloads'));
+end;
+
+function ShouldPreserveUserData: Boolean;
+begin
+  Result := IsUpdateInstall or HasLegacyUserData;
+end;
+
 function ShouldInstallMainApp: Boolean;
 begin
 #ifdef MyIsMediaTek
@@ -1379,18 +1403,28 @@ begin
     StopProcess('python.exe');
     StopProcess('pythonw.exe');
 
-    BackupSettings;
-
-    ShowStep('StepRemovingOld');
-    RemoveOldInstalls;
+    if ShouldPreserveUserData then
+    begin
+      { Update: overwrite the program, leave the user's data and settings. }
+      ShowStep('StepRemovingOld');
+    end
+    else
+    begin
+      BackupSettings;
+      ShowStep('StepRemovingOld');
+      RemoveOldInstalls;
+    end;
 
     ShowStep('StepShortcuts');
     PurgeRetiredShortcuts;
     RemoveInnioasisCommunityFolder;
 
     ShowStep('StepLegacy');
-    RemoveLegacyLocalAppData;
-    ClearAppCacheAndData;
+    if not ShouldPreserveUserData then
+    begin
+      RemoveLegacyLocalAppData;
+      ClearAppCacheAndData;
+    end;
     if IsUpdaterCeBrand then
       RemoveLegacyProgramFiles;
   end

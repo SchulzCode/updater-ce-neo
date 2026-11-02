@@ -652,6 +652,10 @@ def app_icon_pixmap(size: int = 48) -> QPixmap:
         from .. import paths
 
         icon_path = paths.RESOURCES_DIR / "icon.png"
+        if not icon_path.exists():
+            # Packaged Windows/Linux builds can place the artwork at the
+            # repository root rather than under the resources subtree.
+            icon_path = paths.REPO_ROOT / "assets" / "icon.png"
         if icon_path.exists():
             pm = QPixmap(str(icon_path))
             if not pm.isNull():

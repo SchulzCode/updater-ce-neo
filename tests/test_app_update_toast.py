@@ -1,6 +1,7 @@
 """Tests for AppUpdateToast and its precedence over device update reminders."""
 
 import sys
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QPushButton, QWidget
 
 from src.ui.widgets import AppUpdateToast
@@ -114,4 +115,37 @@ def test_main_window_update_during_install_shows_toast_instead_of_dialog(monkeyp
     # Verify toast was presented in SelectPackagePage instead
     assert w._select_page._app_update_prompt.isVisible()
     w.close()
+
+
+def test_update_view_wraps_to_the_current_window_width():
+    import src.ui.main_window as mw
+    from src.ui.dialogs import UpdateAvailableDialog
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    w = mw.MainWindow()
+    w.show()
+    w.resize(640, 520)
+    app.processEvents()
+    width_before = w.width()
+
+    body = (
+        "Rewritten application with improved firmware install reliability, native "
+        "macOS look with Liquid Glass integration, i18n support for 90 languages "
+        "and guided themes installation for Rockbox-Y1. "
+    ) * 10
+    info = UpdateInfo(tag="v3.2.0", name="3.2.0", body=body, html_url="https://example.com")
+    dlg = UpdateAvailableDialog(w, info=info, current_version="2.5.2")
+    w._present_inline(dlg, "App Updates")
+    app.processEvents()
+    try:
+        # The update view follows the window instead of making it wider.
+        assert w.width() <= width_before
+        assert dlg.width() <= w._notice_host.width()
+        assert dlg._notes.horizontalScrollBarPolicy() == Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        assert dlg._notes.document().size().width() <= dlg._notes.viewport().width() + 1
+        assert dlg._btn_row.geometry().width() <= dlg.width()
+    finally:
+        w._force_quit = True
+        w.close()
+        app.processEvents()
 

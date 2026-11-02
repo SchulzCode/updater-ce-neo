@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 
 NOTICE_URL = "https://innioasis.app/notice.xml"
 _SETTINGS_DISMISSED_KEY = "dismissed_notice_ids"
+_SETTINGS_DISMISSED_FINGERPRINTS_KEY = "dismissed_notice_fingerprints"
 _SETTINGS_CACHED_HASH_KEY = "notice_xml_content_hash"
 
 
@@ -58,8 +59,10 @@ class Notice:
     from_date: Optional[datetime] = None
     until_date: Optional[date] = None
     models: tuple[str, ...] = ()
+    # CSV of platforms this notice targets (``mac,windows``); empty means all.
+    platforms: tuple[str, ...] = ()
 
-    def is_active_for(self, model: str = "") -> bool:
+    def is_active_for(self, model: str = "", platform: str = "") -> bool:
         """Check if notice is within its date window and matches the given model."""
         today = date.today()
         if self.from_date and today < self.from_date.date():
@@ -70,7 +73,38 @@ class Notice:
             target = model.strip().upper()
             if not any(m.strip().upper() == target for m in self.models):
                 return False
+        if self.platforms:
+            wanted = {p.strip().lower() for p in self.platforms if p.strip()}
+            if "none" in wanted:
+                return False
+            if platform and platform.strip().lower() not in wanted:
+                return False
         return True
+
+
+def notice_fingerprint(notice: Notice) -> str:
+    """Stable digest of the words a reader sees in one notice.
+
+    Dismissal is remembered against this digest, not just the id, so editing a
+    notice's title or body makes it visible again while an untouched notice
+    stays dismissed.
+    """
+    text = "\n".join(
+        str(part or "").strip()
+        for part in (notice.title, notice.content, notice.full_content)
+    )
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:24]
+
+
+def current_platform() -> str:
+    """Platform name used by ``platform=`` in notice.xml."""
+    if sys.platform.startswith("win"):
+        return "windows"
+    if sys.platform == "darwin":
+        return "mac"
+    if sys.platform.startswith("linux"):
+        return "linux"
+    return ""
 
 
 def _parse_bool(val: str | None) -> bool:
@@ -177,6 +211,10 @@ def parse_notice_xml(xml_content: str) -> list[Notice]:
 
         models_raw = el.get("models", "")
         models = tuple(m.strip() for m in models_raw.split(",") if m.strip())
+        platforms_raw = el.get("platform", "")
+        platforms = tuple(
+            p.strip().lower() for p in platforms_raw.split(",") if p.strip()
+        )
 
         notice = Notice(
             id=notice_id,
@@ -190,6 +228,7 @@ def parse_notice_xml(xml_content: str) -> list[Notice]:
             from_date=from_d,
             until_date=until_d,
             models=models,
+            platforms=platforms,
         )
         # The app already carries the one-time battery toast on Select
         # Software. A feed notice repeating it is a separate thing and never
@@ -230,6 +269,8 @@ class NoticeService(QObject):
     def active_notices(self) -> list[Notice]:
         """Notices currently shown for this model, with dismissals respected."""
         dismissed_past = self.get_dismissed_ids()
+        dismissed_fingerprints = self.get_dismissed_fingerprints()
+        platform = current_platform()
         visible: list[Notice] = []
         for notice in self._active_notices:
             if is_battery_reminder(notice):
@@ -239,8 +280,12 @@ class NoticeService(QObject):
             if notice.id in self._session_dismissed:
                 continue
             if not notice.persistent and notice.id in dismissed_past:
-                continue
-            if not notice.is_active_for(self._current_model):
+                # A legacy dismissal has no digest: keep it dismissed. Once a
+                # notice has a digest, only the same words stay hidden.
+                stored = dismissed_fingerprints.get(notice.id, "")
+                if not stored or stored == notice_fingerprint(notice):
+                    continue
+            if not notice.is_active_for(self._current_model, platform):
                 continue
             visible.append(notice)
         return visible
@@ -286,6 +331,33 @@ class NoticeService(QObject):
         if callable(sync):
             sync()
 
+    def get_dismissed_fingerprints(self) -> dict[str, str]:
+        """Digest of each dismissed notice's wording, keyed by notice id."""
+        raw = QSettings("Innioasis", "Innioasis Updater").value(
+            _SETTINGS_DISMISSED_FINGERPRINTS_KEY, ""
+        )
+        if not raw:
+            return {}
+        try:
+            data = json.loads(str(raw))
+        except Exception:
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        return {str(k): str(v) for k, v in data.items() if k and v}
+
+    def set_dismissed_fingerprints(self, values: dict[str, str]) -> None:
+        s = QSettings("Innioasis", "Innioasis Updater")
+        if values:
+            s.setValue(_SETTINGS_DISMISSED_FINGERPRINTS_KEY, json.dumps(values, sort_keys=True))
+        elif hasattr(s, "remove"):
+            s.remove(_SETTINGS_DISMISSED_FINGERPRINTS_KEY)
+        else:
+            s.setValue(_SETTINGS_DISMISSED_FINGERPRINTS_KEY, "")
+        sync = getattr(s, "sync", None)
+        if callable(sync):
+            sync()
+
     def dismiss_notice(self, notice: Notice) -> None:
         """Dismiss a notice.
 
@@ -298,6 +370,9 @@ class NoticeService(QObject):
             dismissed = self.get_dismissed_ids()
             dismissed.add(notice.id)
             self.set_dismissed_ids(dismissed)
+            fingerprints = self.get_dismissed_fingerprints()
+            fingerprints[notice.id] = notice_fingerprint(notice)
+            self.set_dismissed_fingerprints(fingerprints)
         self._emit_next_notice()
 
     def set_model(self, model: str) -> None:
@@ -305,10 +380,10 @@ class NoticeService(QObject):
         self._current_model = model or ""
         self._emit_next_notice()
 
-    def fetch_async(self) -> None:
+    def fetch_async(self, force: bool = True) -> None:
         """Fetch remote notice.xml in a background thread."""
         self.refresh_started.emit()
-        thread = threading.Thread(target=self._fetch_worker, daemon=True)
+        thread = threading.Thread(target=self._fetch_worker, args=(force,), daemon=True)
         thread.start()
 
     def start_passive_refresh(self, interval_ms: int = 15 * 60 * 1000) -> None:
@@ -322,17 +397,17 @@ class NoticeService(QObject):
 
         if getattr(self, "_passive_timer", None) is None:
             self._passive_timer = QTimer(self)
-            self._passive_timer.timeout.connect(self.fetch_async)
+            self._passive_timer.timeout.connect(lambda: self.fetch_async(force=True))
         self._passive_timer.start(max(60_000, int(interval_ms)))
 
-    def _fetch_worker(self) -> None:
+    def _fetch_worker(self, force: bool = True) -> None:
         """Run a fetch and always report completion, whatever happened."""
         try:
-            self._fetch_worker_inner()
+            self._fetch_worker_inner(force=force)
         finally:
             self.refresh_finished.emit()
 
-    def _fetch_worker_inner(self) -> None:
+    def _fetch_worker_inner(self, force: bool = True) -> None:
         from .i18n import current_language, is_english_language
 
         lang = current_language()
@@ -355,7 +430,9 @@ class NoticeService(QObject):
         try:
             from . import online_data
 
-            online_data.refresh("notice.xml")
+            # A notice is tiny, and the point of the poll is to discover a
+            # newly committed notice without waiting out the file's TTL.
+            online_data.refresh("notice.xml", force=True)
             remote_content = online_data.cached_text("notice.xml") or ""
         except Exception as e:
             logger.debug("Notice refresh failed: %s", e)
@@ -379,6 +456,30 @@ class NoticeService(QObject):
         if content_changed or not local_content or not is_english_language(lang):
             self._active_notices = self._localised(parse_notice_xml(remote_content), lang)
             self._emit_next_notice()
+
+    def reload_translations(self) -> None:
+        """Re-render the cached notices in the language just selected.
+
+        Runs off the UI thread because a first-time translation may take a
+        moment; the result arrives through ``notices_ready`` like a refresh.
+        """
+        thread = threading.Thread(target=self._reload_translations_worker, daemon=True)
+        thread.start()
+
+    def _reload_translations_worker(self) -> None:
+        from .i18n import current_language
+
+        try:
+            text = self._snapshot_text()
+            if not text.strip():
+                return
+            translated = self._localised(parse_notice_xml(text), current_language())
+            self._active_notices = translated
+            self._emit_next_notice()
+        except Exception:
+            logger.debug("Could not re-render notices for the new language", exc_info=True)
+        finally:
+            self.refresh_finished.emit()
 
     def _localised(self, notices: list[Notice], lang: str, cached_only: bool = False) -> list[Notice]:
         """Return notices with title/content in ``lang`` (Google Translate, disk-cached).

@@ -206,8 +206,8 @@ NOTICE_XML = """\
     <url>https://innioasis.app/notice/hardware-revision.html</url>
   </notice>
   <notice id="n2">
-    <title>Battery</title>
-    <content>Charge before flashing.</content>
+    <title>New release</title>
+    <content>Rockbox 3.2 is available.</content>
   </notice>
 </notices>
 """
@@ -320,6 +320,36 @@ def test_keep_data_checkbox_follows_userdata_detection(qapp):
         page.set_has_userdata(True)
         assert not page._keep_data_cb.isHidden()
         assert not page._keep_data_cb.isChecked()
+    finally:
+        page.deleteLater()
+
+
+def test_keep_data_warning_is_model_appropriate(qapp):
+    from src.i18n import tr
+    from src.keep_data import keep_data_label
+    from src.ui.flash_page import FlashPage
+
+    page = FlashPage()
+    try:
+        page.set_has_userdata(True)
+        page.show_power_off_prompt()
+        page.set_model("Y1")
+        page.set_keep_data_available(True, keep_data_label("Y1"))
+        assert page._keep_data_cb.text() == tr("flash_keep_data_option")
+        assert page._keep_data_warning.text() == tr("flash_keep_data_warning_y1")
+
+        page._keep_data_cb.setChecked(True)
+        assert page._keep_data_warning.isHidden()
+        page._keep_data_cb.setChecked(False)
+
+        page.set_model("Y2")
+        assert page._keep_data_warning.text() == tr("flash_keep_data_warning")
+        page.set_keep_data_available(False, keep_data_label("Y2"))
+        assert page._keep_data_warning.text() == tr("flash_keep_data_unavailable")
+
+        page.set_model("Y1")
+        assert page._keep_data_warning.text() == tr("flash_keep_data_unavailable_y1")
+        assert "partition" not in page._keep_data_warning.text().lower()
     finally:
         page.deleteLater()
 

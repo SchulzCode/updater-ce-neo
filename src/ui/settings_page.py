@@ -73,6 +73,7 @@ class SettingsPage(QWidget):
     linux_prep_completed = Signal()
     advanced_settings_changed = Signal(bool)
     install_rockbox_themes_requested = Signal()
+    refresh_themes_requested = Signal()
     # The in-beta themes auto-install toggle flipped; the window starts or
     # stops the passive sync to match.
     themes_auto_install_changed = Signal(bool)
@@ -680,17 +681,19 @@ class SettingsPage(QWidget):
         self._notifications_unavailable.setVisible(False)
         notif_layout.addWidget(self._notifications_unavailable)
 
-        self._notifications_background_btn = QPushButton(
-            tr("settings_notifications_background_btn")
+        # This switch is linked to "Run in Background": either one turns the
+        # other on, and the background card remains the place that explains
+        # what staying open means.
+        self._cb_notifications_background = self._add_switch(
+            notif_layout, tr("settings_notifications_background")
         )
-        self._notifications_background_btn.setCursor(Qt.PointingHandCursor)
-        self._notifications_background_btn.setFlat(True)
-        self._notifications_background_btn.setStyleSheet(
-            f"QPushButton {{ border: none; background: transparent; color: {T().fg_muted};"
-            " padding: 0; text-align: left; }"
+        self._cb_notifications_background.setStyleSheet("")
+        self._cb_notifications_background.setToolTip(
+            tr("settings_run_in_background_desc")
         )
-        self._notifications_background_btn.clicked.connect(self._focus_background_card)
-        notif_layout.addWidget(self._notifications_background_btn, alignment=Qt.AlignLeft)
+        self._cb_notifications_background.toggled.connect(
+            self._on_notifications_background_toggled
+        )
 
         self._notifications_card.set_layout(notif_layout)
         layout.addWidget(self._notifications_card)
@@ -749,6 +752,11 @@ class SettingsPage(QWidget):
         self._install_themes_btn.setIcon(get_symbol_icon("folder", 14, color=T().fg))
         self._install_themes_btn.clicked.connect(self._on_install_rockbox_themes_clicked)
         themes_btn_row.addWidget(self._install_themes_btn)
+
+        self._refresh_themes_btn = QPushButton(tr("settings_refresh_themes_btn"))
+        self._refresh_themes_btn.setIcon(get_symbol_icon("refresh", 14, color=T().fg))
+        self._refresh_themes_btn.clicked.connect(self.refresh_themes_requested.emit)
+        themes_btn_row.addWidget(self._refresh_themes_btn)
 
         self._install_themes_status_lbl = QLabel("")
         self._install_themes_status_lbl.setWordWrap(True)
@@ -828,6 +836,20 @@ class SettingsPage(QWidget):
         self._advanced_desc.setWordWrap(True)
         self._advanced_desc.setProperty("cssClass", "dimmed")
         adv_layout.addWidget(self._advanced_desc)
+
+        from ..keep_data import allow_keep_data_any, set_allow_keep_data_any
+
+        self._cb_allow_keep_data_any = self._add_switch(
+            adv_layout, tr("settings_allow_keep_data_any")
+        )
+        self._cb_allow_keep_data_any.setStyleSheet("")
+        self._cb_allow_keep_data_any.setToolTip(
+            tr("settings_allow_keep_data_any_desc")
+        )
+        self._cb_allow_keep_data_any.setChecked(allow_keep_data_any())
+        self._cb_allow_keep_data_any.toggled.connect(
+            lambda checked: set_allow_keep_data_any(bool(checked))
+        )
 
         self._advanced_card.set_layout(adv_layout)
 
@@ -1308,8 +1330,10 @@ class SettingsPage(QWidget):
         self._sp_auth_value.setToolTip(path or tr("settings_sp_auth_none"))
 
     def _on_sp_auth_browse(self):
+        from ..downloads import default_picker_dir
+
         current = device_tracking.sp_auth_file()
-        start_dir = str(Path(current).parent) if current else str(Path.home())
+        start_dir = str(Path(current).parent) if current else default_picker_dir()
         chosen, _selected = QFileDialog.getOpenFileName(
             self,
             tr("settings_sp_auth_dialog"),
@@ -1587,6 +1611,38 @@ class SettingsPage(QWidget):
         from ..login_item import set_login_item
         QSettings("innioasis", "updater").setValue(RUN_IN_BACKGROUND_KEY, bool(checked))
         set_login_item(bool(checked))
+        # Keep the notifications card honest: the two switches describe the
+        # same background process, so neither can be on by itself.
+        box = getattr(self, "_cb_notifications_background", None)
+        if box is not None:
+            box.blockSignals(True)
+            box.setChecked(bool(checked))
+            box.blockSignals(False)
+        if checked:
+            from ..notice_alerts import set_notifications_enabled
+
+            set_notifications_enabled(True)
+            self._sync_notification_controls()
+
+    def _on_notifications_background_toggled(self, checked: bool):
+        """Link background notifications to the background-running opt-in."""
+        from ..tray import RUN_IN_BACKGROUND_KEY
+        from ..login_item import set_login_item
+
+        QSettings("innioasis", "updater").setValue(
+            RUN_IN_BACKGROUND_KEY, bool(checked)
+        )
+        set_login_item(bool(checked))
+        if checked:
+            from ..notice_alerts import set_notifications_enabled
+
+            set_notifications_enabled(True)
+        box = getattr(self, "_cb_run_in_background", None)
+        if box is not None:
+            box.blockSignals(True)
+            box.setChecked(bool(checked))
+            box.blockSignals(False)
+        self._sync_notification_controls()
 
     # ------------------------------------------------------------------
     # Notifications
@@ -1595,6 +1651,12 @@ class SettingsPage(QWidget):
         from ..notice_alerts import set_notifications_enabled
 
         set_notifications_enabled(bool(checked))
+        if not checked:
+            # Turning notifications off also ends the background process that
+            # exists to deliver them.
+            box = getattr(self, "_cb_notifications_background", None)
+            if box is not None and box.isChecked():
+                box.setChecked(False)
         self._sync_notification_controls()
 
     def _on_notification_category_toggled(self, category: str, checked: bool):
@@ -1622,6 +1684,14 @@ class SettingsPage(QWidget):
             switch.blockSignals(False)
             switch.setEnabled(master_on)
         self._notifications_unavailable.setVisible(not supported)
+        background = getattr(self, "_cb_notifications_background", None)
+        if background is not None:
+            from ..tray import run_in_background_enabled
+
+            background.blockSignals(True)
+            background.setChecked(bool(run_in_background_enabled()))
+            background.blockSignals(False)
+            background.setEnabled(supported)
 
     def _focus_background_card(self) -> None:
         """Take the reader from Notifications to the card that keeps the app open."""
@@ -1858,6 +1928,7 @@ class SettingsPage(QWidget):
         disabled = not bool(shown)
         device_tracking.set_donation_ui_disabled(disabled)
         device_tracking.set_donation_install_prompt_disabled(disabled)
+        device_tracking.sync_sp_donation_marker(disabled)
         self._sync_donation_opt_out()
         self.donation_visibility_changed.emit(disabled)
 
@@ -1885,8 +1956,17 @@ class SettingsPage(QWidget):
         if not hasattr(self, "_install_themes_btn"):
             return
         self._install_themes_btn.setVisible(not refreshing)
+        if hasattr(self, "_refresh_themes_btn"):
+            self._refresh_themes_btn.setVisible(not refreshing)
         self._install_themes_status_lbl.setText(status_text if refreshing else "")
         self._install_themes_status_lbl.setVisible(refreshing)
+
+    def set_themes_status(self, status_text: str) -> None:
+        """Show a one-line result under the themes buttons."""
+        if not hasattr(self, "_install_themes_status_lbl"):
+            return
+        self._install_themes_status_lbl.setText(status_text or "")
+        self._install_themes_status_lbl.setVisible(bool(status_text))
 
     def _on_install_rockbox_themes_clicked(self):
         self.install_rockbox_themes_requested.emit()
@@ -2164,6 +2244,12 @@ class SettingsPage(QWidget):
             self._set_switch_caption(self._cb_advanced_settings, tr("settings_advanced_toggle"))
             self._cb_advanced_settings.setToolTip(tr("settings_advanced_desc"))
             self._advanced_desc.setText(tr("settings_advanced_desc"))
+            self._set_switch_caption(
+                self._cb_allow_keep_data_any, tr("settings_allow_keep_data_any")
+            )
+            self._cb_allow_keep_data_any.setToolTip(
+                tr("settings_allow_keep_data_any_desc")
+            )
         self._reminders_card.retranslate()
         self._set_switch_caption(self._cb_reminders, tr("settings_reminders_enable"))
         self._update_reminders_copy()
@@ -2212,6 +2298,39 @@ class SettingsPage(QWidget):
         self._set_switch_caption(self._cb_offline_mode, tr("settings_offline_mode"))
         self._cb_offline_mode.setToolTip(tr("settings_offline_mode_desc"))
         self._offline_mode_desc.setText(tr("settings_offline_mode_desc"))
+        self._notifications_card.retranslate()
+        self._set_switch_caption(
+            self._cb_notifications, tr("settings_notifications_group")
+        )
+        self._cb_notifications.setToolTip(tr("settings_notifications_desc"))
+        self._notifications_desc.setText(tr("settings_notifications_desc"))
+        notification_caption_keys = {
+            "general": "settings_notifications_general",
+            "warning": "settings_notifications_warning",
+            "player_update": "settings_notifications_player",
+            "app_update": "settings_notifications_app",
+        }
+        for category, switch in getattr(self, "_notification_switches", {}).items():
+            self._set_switch_caption(switch, tr(notification_caption_keys[category]))
+        if hasattr(self, "_cb_notifications_background"):
+            self._set_switch_caption(
+                self._cb_notifications_background,
+                tr("settings_notifications_background"),
+            )
+            self._cb_notifications_background.setToolTip(
+                tr("settings_run_in_background_desc")
+            )
+        self._notifications_unavailable.setText(
+            tr("settings_notifications_unavailable")
+        )
+        self._background_card.retranslate()
+        self._set_switch_caption(
+            self._cb_run_in_background, tr("settings_run_in_background_group")
+        )
+        self._cb_run_in_background.setToolTip(
+            tr("settings_run_in_background_desc")
+        )
+        self._background_desc.setText(tr("settings_run_in_background_desc"))
         if hasattr(self, "_install_themes_card"):
             self._install_themes_card.retranslate()
         if hasattr(self, "_install_themes_desc"):
@@ -2225,6 +2344,9 @@ class SettingsPage(QWidget):
         if hasattr(self, "_install_themes_btn"):
             self._install_themes_btn.setText(tr("settings_install_rockbox_themes_btn"))
             self._install_themes_btn.setIcon(get_symbol_icon("folder", 14, color=T().fg))
+        if hasattr(self, "_refresh_themes_btn"):
+            self._refresh_themes_btn.setText(tr("settings_refresh_themes_btn"))
+            self._refresh_themes_btn.setIcon(get_symbol_icon("refresh", 14, color=T().fg))
         self._sp_auth_label.setText(tr("settings_sp_auth"))
         self._sp_auth_browse.setText(tr("settings_sp_auth_browse"))
         self._sp_auth_clear.setText(tr("settings_sp_auth_clear"))
@@ -2249,6 +2371,18 @@ class SettingsPage(QWidget):
             if button is not None:
                 button.setIcon(self._community_icon(name))
                 button.setIconSize(QSize(10, 10))
+        for widget in (
+            getattr(self, "_notifications_card", None),
+            getattr(self, "_background_card", None),
+            getattr(self, "_notifications_desc", None),
+            getattr(self, "_notifications_unavailable", None),
+            getattr(self, "_cb_notifications", None),
+            getattr(self, "_cb_notifications_background", None),
+            getattr(self, "_cb_run_in_background", None),
+            getattr(self, "_background_desc", None),
+        ):
+            if widget is not None:
+                widget.update()
         self.update()
 
     def _on_scan_legacy_installations(self):

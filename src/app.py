@@ -515,6 +515,12 @@ def main():
         online_data.refresh_all_async()
     except Exception:
         logging.getLogger(__name__).debug("Online data refresh could not start", exc_info=True)
+    try:
+        from . import player_update_check
+
+        player_update_check.sync_sp_donation_marker()
+    except Exception:
+        logging.getLogger(__name__).debug("Donation marker check failed", exc_info=True)
 
     import sys as _sys
     if _sys.platform != "darwin":
@@ -573,6 +579,21 @@ def main():
         _prepare_linux_sp_flash_tool()
 
     window = MainWindow()
+    # A second launch asks this copy to come forward. The channel starts as
+    # soon as the lock is held, and stays alive for the app's lifetime.
+    try:
+        from .single_instance import start_focus_server
+        from .notifications import bring_window_to_front
+
+        _focus_server = start_focus_server()
+        if _focus_server is not None:
+            _focus_server.focus_requested.connect(
+                lambda: bring_window_to_front(window)
+            )
+    except Exception:
+        logging.getLogger(__name__).debug(
+            "Single-instance focus channel could not start", exc_info=True
+        )
     # Before show(): the window must exist to be prepared for glass. After it:
     # every other piece of host chrome, each one guarded.
     _startup_step("prepare_window_for_glass", prepare_window_for_glass, window)

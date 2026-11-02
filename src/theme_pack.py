@@ -36,6 +36,17 @@ logger = logging.getLogger(__name__)
 #: Upstream Rockbox 360p themes repository zip.
 THEME_PACK_URL = "https://github.com/rockbox-y1/themes/archive/refs/heads/themepack.zip"
 
+#: Sources merged in order. The updater-ce-neo copies are refreshed before the
+#: GitHub Pages mirror and the upstream Rockbox archive, so new themes and fonts
+#: reach the app without waiting for a Pages cache rebuild.
+THEME_PACK_URLS = (
+    "https://raw.githubusercontent.com/y1-community/updater-ce-neo/main/assets/360p/themes-themepack.zip",
+    "https://raw.githubusercontent.com/y1-community/updater-ce-neo/main/assets/360p/fonts-pack-merge-into-themes-pack.zip",
+    "https://raw.githubusercontent.com/ryan-specter/updater-ce-neo/main/assets/360p/themes-themepack.zip",
+    "https://raw.githubusercontent.com/ryan-specter/updater-ce-neo/main/assets/360p/fonts-pack-merge-into-themes-pack.zip",
+    THEME_PACK_URL,
+)
+
 #: Remote/merged themepack archive name (downloads dir or bundled zip).
 THEME_PACK_ZIP_NAME = "rockbox_360p_themepack.zip"
 
@@ -124,7 +135,7 @@ def download_and_merge_theme_pack(
     timeout: float = 30.0,
     progress_cb: Optional[Callable[[int, int], None]] = None,
 ) -> tuple[bool, str, int]:
-    """Download the latest themepack.zip and merge it into our 360p zip.
+    """Download every theme/font source and merge it into our 360p zip.
 
     In offline mode, immediately skips downloading and returns (True, "offline", 0).
     If network download fails, logs a warning and returns (True, "offline_fallback", 0)
@@ -135,37 +146,50 @@ def download_and_merge_theme_pack(
         logger.info("[Rockbox Themes] Offline mode active: skipping download.")
         return True, "offline", 0
 
-    temp_remote = downloads_dir() / "themepack_download.zip"
-    try:
-        import urllib.request
-        temp_remote.parent.mkdir(parents=True, exist_ok=True)
+    import urllib.request
+
+    download_dir = downloads_dir()
+    download_dir.mkdir(parents=True, exist_ok=True)
+    total_count = 0
+    merged_any = False
+    downloaded_all = 0
+    total_all = 0
+    last_error = None
+    for index, url in enumerate(THEME_PACK_URLS):
+        temp_remote = download_dir / f"themepack_download_{index}.zip"
         tmp_part = temp_remote.with_suffix(".part")
-        with urllib.request.urlopen(THEME_PACK_URL, timeout=timeout) as resp, open(tmp_part, "wb") as f:
-            total_size = int(resp.headers.get("Content-Length", 0))
-            downloaded = 0
-            while True:
-                chunk = resp.read(64 * 1024)
-                if not chunk:
-                    break
-                f.write(chunk)
-                downloaded += len(chunk)
-                if progress_cb:
-                    progress_cb(downloaded, total_size)
-        os.replace(tmp_part, temp_remote)
-        count = merge_remote_theme_pack_into_zip(temp_remote, target_zip_path)
         try:
-            temp_remote.unlink(missing_ok=True)
-        except Exception:
-            pass
-        return True, "merged", count
-    except Exception as e:
-        logger.warning("[Rockbox Themes] Remote theme download/merge failed (%s); using stored 360p zip.", e)
-        try:
-            if temp_remote.exists():
+            request = urllib.request.Request(url, headers={"User-Agent": "Innioasis-Updater"})
+            with urllib.request.urlopen(request, timeout=timeout) as resp, open(tmp_part, "wb") as f:
+                source_total = int(resp.headers.get("Content-Length", 0) or 0)
+                if source_total > 0:
+                    total_all += source_total
+                source_done = 0
+                while True:
+                    chunk = resp.read(64 * 1024)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    source_done += len(chunk)
+                    downloaded_all += len(chunk)
+                    if progress_cb:
+                        progress_cb(downloaded_all, total_all if total_all > 0 else 0)
+            os.replace(tmp_part, temp_remote)
+            total_count = merge_remote_theme_pack_into_zip(temp_remote, target_zip_path)
+            merged_any = True
+        except Exception as e:
+            last_error = e
+            logger.warning("[Rockbox Themes] Source %s failed (%s); trying the next copy.", url, e)
+        finally:
+            try:
                 temp_remote.unlink(missing_ok=True)
-        except Exception:
-            pass
-        return True, "offline_fallback", 0
+                tmp_part.unlink(missing_ok=True)
+            except Exception:
+                pass
+    if merged_any:
+        return True, "merged", total_count
+    logger.warning("[Rockbox Themes] All remote theme sources failed (%s); using stored 360p zip.", last_error)
+    return True, "offline_fallback", 0
 
 
 class ThemePackUpdateWorker(QThread):
@@ -444,10 +468,12 @@ class ThemePackGuidanceDialog(QDialog):
 
     def _on_select_folder(self):
         """Prompt user for any directory on the device and initiate install flow."""
+        from .downloads import default_picker_dir
+
         chosen = QFileDialog.getExistingDirectory(
             self,
             tr("themepack_step2_title"),
-            str(Path.home()),
+            default_picker_dir(),
             QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks,
         )
         if not chosen:
@@ -1413,10 +1439,12 @@ class Rockbox360pSetupWizard(QDialog):
 
     # -- USB storage fallback --------------------------------------------
     def _on_usb_pick(self):
+        from .downloads import default_picker_dir
+
         chosen = QFileDialog.getExistingDirectory(
             self,
             tr("rockbox_wizard_usb_title"),
-            str(Path.home()),
+            default_picker_dir(),
             QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks,
         )
         if not chosen:

@@ -1,7 +1,10 @@
 """Tests for application icon in dialogs, manifest icon fallback precedence, and SP Flash Tool preloader bypass."""
 
 from pathlib import Path
+from unittest.mock import patch
 import pytest
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QIcon, QPalette, QPixmap
 from PySide6.QtWidgets import QApplication
 
 from src.catalog import FirmwarePackage
@@ -43,6 +46,53 @@ def test_update_available_dialog_uses_app_icon_not_rocket():
         assert pix is not None and not pix.isNull()
     finally:
         dialog.close()
+
+
+def test_update_dialog_uses_theme_foreground_and_seamless_notes():
+    app = _app()
+    info = UpdateInfo(tag="v3.0.0", name="Update 3.0.0", body="Bug fixes")
+    dialog = UpdateAvailableDialog(parent=None, info=info, current_version="2.5.0")
+    try:
+        assert dialog._title_label.property("cssClass") == "pageTitle"
+        assert dialog._subtitle_label.property("cssClass") == "subtitle"
+        assert dialog._notes_label.property("cssClass") == "sectionTitle"
+        fg = dialog.palette().color(QPalette.ColorRole.WindowText).name()
+        assert fg.lower() in dialog._notes.toHtml().lower()
+        assert dialog._notes.palette().color(QPalette.ColorRole.Base).alpha() == 0
+        assert dialog._notes.viewport().palette().color(QPalette.ColorRole.Base).alpha() == 0
+
+        changed = QPalette(dialog.palette())
+        changed.setColor(QPalette.ColorRole.WindowText, QColor("#123456"))
+        dialog.setPalette(changed)
+        dialog.refresh_theme()
+        assert "#123456" in dialog._notes.toHtml().lower()
+    finally:
+        dialog.close()
+        app.processEvents()
+
+
+def test_update_dialog_icon_falls_back_to_the_window_icon():
+    app = _app()
+    old_icon = app.windowIcon()
+    marker = QPixmap(48, 48)
+    marker.fill(Qt.GlobalColor.red)
+    app.setWindowIcon(QIcon(marker))
+    dialog = None
+    try:
+        with patch("src.ui.icons.app_icon_pixmap", return_value=QPixmap()):
+            dialog = UpdateAvailableDialog(
+                parent=None,
+                info=UpdateInfo(
+                    tag="v3.0.0", name="Update 3.0.0", body="Bug fixes"
+                ),
+                current_version="2.5.0",
+            )
+        assert not dialog._icon_label.pixmap().isNull()
+    finally:
+        if dialog is not None:
+            dialog.close()
+        app.setWindowIcon(old_icon)
+        app.processEvents()
 
 
 def test_manifest_icon_precedence_over_image():

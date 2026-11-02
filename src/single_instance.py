@@ -23,11 +23,68 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QLockFile, QStandardPaths
+from PySide6.QtCore import QLockFile, QObject, QStandardPaths, Signal
+from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
 logger = logging.getLogger(__name__)
 
 LOCK_NAME = "updater-ce.lock"
+FOCUS_SERVER_NAME = "updater-ce-focus"
+_focus_server = None
+
+
+class FocusServer(QObject):
+    """Lets a second launch ask the running copy to show its window."""
+
+    focus_requested = Signal()
+
+    def __init__(self, name: str = FOCUS_SERVER_NAME):
+        super().__init__()
+        self._server = QLocalServer(self)
+        QLocalServer.removeServer(name)
+        self._server.newConnection.connect(self._accept)
+        self._server.listen(name)
+
+    def is_listening(self) -> bool:
+        return bool(self._server.isListening())
+
+    def _accept(self) -> None:
+        while self._server.hasPendingConnections():
+            conn = self._server.nextPendingConnection()
+            if conn is None:
+                continue
+            conn.readyRead.connect(conn.deleteLater)
+            if conn.bytesAvailable() <= 0:
+                conn.waitForReadyRead(250)
+            conn.readAll()
+            self.focus_requested.emit()
+            conn.disconnectFromServer()
+
+
+def start_focus_server() -> Optional[FocusServer]:
+    """Start the primary copy's focus channel (kept alive by the app)."""
+    global _focus_server
+    if _focus_server is not None and _focus_server.is_listening():
+        return _focus_server
+    server = FocusServer()
+    if not server.is_listening():
+        logger.debug("Could not start the single-instance focus server")
+        return None
+    _focus_server = server
+    return server
+
+
+def request_focus(timeout_ms: int = 500) -> bool:
+    """Ask an already-running copy to come to the front."""
+    socket = QLocalSocket()
+    socket.connectToServer(FOCUS_SERVER_NAME)
+    if not socket.waitForConnected(timeout_ms):
+        return False
+    socket.write(b"show")
+    socket.flush()
+    socket.waitForBytesWritten(timeout_ms)
+    socket.disconnectFromServer()
+    return True
 
 
 def lock_path() -> Path:
@@ -192,6 +249,12 @@ def ensure_single_instance(app, lock: Optional[InstanceLock] = None) -> bool:
             app._instance_lock = lock
             app.aboutToQuit.connect(lock.release)
             return True
+
+    # A second launch is a request to see the copy already running, including
+    # one that is hidden in the menu bar / tray. No second window, no dialog.
+    if request_focus():
+        logger.info("Asked the running copy (pid %s) to show its window", pid or "unknown")
+        return False
 
     if pid and _pid_alive(pid) and _ask_force_quit(pid):
         terminate_pid(pid)

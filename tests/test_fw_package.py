@@ -416,7 +416,9 @@ def test_read_package_optional_ini(tmp_path):
     assert pkg is not None
     assert pkg.scatter.name == "MT6572_Android_scatter.txt"
     assert pkg.has_ini is False
-    assert "install software" in pkg.display_name.lower()
+    # A package without a release name has no title; the generic install
+    # heading is generated for the card, never stored as the firmware name.
+    assert pkg.display_name == ""
 
 
 def test_find_bundled_firmware_in_sp_flash_tool(tmp_path, monkeypatch):

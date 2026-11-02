@@ -478,7 +478,10 @@ def read_package(
         eff_name = inferred_name
         eff_version = eff_version or inferred_version
     if not eff_name:
-        eff_name = f"Get your {eff_model} ready to install software" if eff_model else "Get ready to install software"
+        # Leave the name empty. The caller renders a generic *heading* from the
+        # model when it needs one; storing that heading here made completion
+        # copy read "Get your Y2 ready to install software has been installed".
+        eff_name = ""
 
     has_rockbox = has_rockbox_marker(folder_p) or rockbox_package_name(
         eff_name, folder_p.name, scatter.name, *source_names

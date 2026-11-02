@@ -488,6 +488,32 @@ def set_donation_install_prompt_disabled(disabled: bool, settings: Optional[QSet
     s.setValue(f"{_GROUP_PREFS}/{_KEY_DONATION_INSTALL_PROMPT_DISABLED}", bool(disabled))
 
 
+def sync_sp_donation_marker(
+    disabled: Optional[bool] = None, settings: Optional[QSettings] = None
+) -> None:
+    """Write/remove the ``nd.ini`` marker beside SP Flash Tool.
+
+    A future SP Flash Tool fork uses the marker to suppress its own donation
+    panels. It lives next to ``flash_tool`` / ``history.ini``, and is removed
+    as soon as the user turns donations back on.
+    """
+    try:
+        if disabled is None:
+            disabled = is_donation_ui_disabled(settings)
+        from . import paths
+
+        folder = paths.find_sp_flash_tool()
+        if folder is None:
+            return
+        marker = folder / "nd.ini"
+        if disabled:
+            marker.write_text("disabled\n", encoding="utf-8")
+        else:
+            marker.unlink(missing_ok=True)
+    except Exception:
+        logger.debug("Could not update the SP Flash Tool donation marker", exc_info=True)
+
+
 def is_settings_donations_section_dismissed(settings: Optional[QSettings] = None) -> bool:
     """True when the Settings donations card has been removed for good.
 

@@ -80,7 +80,11 @@ def _arch_ok(name: str, platform: str) -> bool:
         return True
     arm_tagged = "arm64" in name or "aarch64" in name
     x86_tagged = "x86_64" in name or "amd64" in name
-    if _host_is_arm64():
+    # An explicit platform argument may be a target other than this host (the
+    # catalogue tests ask what Linux or Windows would receive). Only apply the
+    # host's architecture when the requested platform is this host's platform.
+    host_arm = _host_is_arm64() if platform == sys.platform else False
+    if host_arm:
         return arm_tagged
     if arm_tagged:
         return False
@@ -115,7 +119,7 @@ def pick_platform_asset(assets, platform=None):
             or os.environ.get("APPDIR")
             or (sys.argv and sys.argv[0].lower().endswith(".appimage"))
         )
-        if _host_is_arm64():
+        if platform == sys.platform and _host_is_arm64():
             if is_appimage:
                 targets = (
                     "UpdaterCE-arm64.appimage",
@@ -150,7 +154,7 @@ def pick_platform_asset(assets, platform=None):
                     "mediatek installer.appimage",
                 )
     elif platform == "win32":
-        if _host_is_arm64():
+        if platform == sys.platform and _host_is_arm64():
             targets = ("installer-arm64.exe", "updaterce-setup.exe")
         else:
             targets = ("installer.exe", "updaterce-setup.exe")
@@ -266,19 +270,35 @@ class UpdateChecker:
     def check(self, force=False) -> UpdateInfo:
         """Latest newer release for this app, or ``UpdateInfo`` with tag=\"\"
         when up to date / unreachable (never raises)."""
+        # The CE repository is authoritative. A fork is tried only when that
+        # repository cannot be read at all, never to mix two release streams.
+        for repo in self._candidate_repos():
+            info = self._check_repo(repo, force=force)
+            if info.tag or not info.failed:
+                return info
+        return UpdateInfo(failed=True)
+
+    def _candidate_repos(self):
+        from .config import UPDATE_REPOS
+
+        repos = [self.repo] if self.repo else []
+        repos.extend(r for r in UPDATE_REPOS if r not in repos)
+        return repos
+
+    def _check_repo(self, repo, force=False) -> UpdateInfo:
         releases = []
         try:
             if hasattr(self.client, "get_all_update_releases"):
-                releases = self.client.get_all_update_releases(self.repo, force_refresh=force)
+                releases = self.client.get_all_update_releases(repo, force_refresh=force)
             if not releases:
                 try:
-                    single = self.client.get_latest_release_info(self.repo, force=force)
+                    single = self.client.get_latest_release_info(repo, force=force)
                 except TypeError:
-                    single = self.client.get_latest_release_info(self.repo)
+                    single = self.client.get_latest_release_info(repo)
                 if single and isinstance(single, dict) and single.get("tag_name"):
                     releases = [single]
         except Exception as e:
-            logger.debug("Update check failed for %s: %s", self.repo, e)
+            logger.debug("Update check failed for %s: %s", repo, e)
             return UpdateInfo(failed=True)
 
         if not releases:

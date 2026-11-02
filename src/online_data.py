@@ -35,11 +35,9 @@ from pathlib import Path
 from typing import Callable, Iterable, Optional
 
 from .config import (
-    CATALOG_FALLBACK_URL,
-    CATALOG_MANIFEST_URL,
-    DONORS_CSV_URL,
     RELEASE_CACHE_TTL_SECONDS,
     github_fallback_url,
+    site_source_urls,
 )
 from .paths import REPO_ROOT, RESOURCES_DIR, app_cache_dir
 
@@ -70,7 +68,7 @@ class OnlineFile:
         """Every URL to try, including each one's GitHub-repository fallback."""
         out: list[str] = []
         for url in self.urls:
-            for candidate in (url, github_fallback_url(url)):
+            for candidate in (*site_source_urls(url.rsplit("/", 1)[-1]), github_fallback_url(url)):
                 if candidate and candidate not in out:
                     out.append(candidate)
         return tuple(out)
@@ -82,18 +80,20 @@ class OnlineFile:
 FILES: dict[str, OnlineFile] = {
     "slidia_manifest.xml": OnlineFile(
         name="slidia_manifest.xml",
-        urls=(CATALOG_MANIFEST_URL, CATALOG_FALLBACK_URL),
+        urls=site_source_urls("slidia_manifest.xml"),
         kind="xml",
     ),
     "notice.xml": OnlineFile(
         name="notice.xml",
-        urls=(NOTICE_URL,),
+        urls=site_source_urls("notice.xml"),
         ttl=6 * 60 * 60,  # notices change more often than the catalogue
         kind="xml",
     ),
-    "donors.csv": OnlineFile(name="donors.csv", urls=(DONORS_CSV_URL,), kind="csv"),
+    "donors.csv": OnlineFile(
+        name="donors.csv", urls=site_source_urls("donors.csv"), kind="csv"
+    ),
     "release_blocklist.csv": OnlineFile(
-        name="release_blocklist.csv", urls=(BLOCKLIST_URL,), kind="csv"
+        name="release_blocklist.csv", urls=site_source_urls("release_blocklist.csv"), kind="csv"
     ),
 }
 

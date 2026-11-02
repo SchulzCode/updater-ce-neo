@@ -152,9 +152,9 @@ def last_theme_sync(model: str, settings: Optional[QSettings] = None) -> str:
 
 
 def themes_auto_install_enabled(settings: Optional[QSettings] = None) -> bool:
-    """The Settings toggle: on unless the user has turned it off."""
+    """The Settings toggle: off until the user turns it on."""
     try:
-        return bool(_settings(settings).value(f"{_GROUP_THEME_SYNC}/{_KEY_ENABLED}", True, type=bool))
+        return bool(_settings(settings).value(f"{_GROUP_THEME_SYNC}/{_KEY_ENABLED}", False, type=bool))
     except Exception:
         return False
 

@@ -233,9 +233,12 @@ class _ReleaseNotesBrowser(QTextBrowser):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        from PySide6.QtGui import QTextOption
+
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setMinimumHeight(80)
         self.setMaximumHeight(_RELEASE_NOTES_MAX_PX)
+        self.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
 
     def sizeHint(self) -> QSize:
         doc = self.document()
@@ -1260,7 +1263,7 @@ class SelectPackagePage(QWidget):
         path, _ = QFileDialog.getOpenFileName(
             self,
             tr("settings_sp_auth"),
-            "",
+            downloads.default_picker_dir(),
             "Authentication Files (*.auth);;All Files (*.*)",
         )
         if path:
@@ -1362,7 +1365,7 @@ class SelectPackagePage(QWidget):
 
     def _on_choose_da_file(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self, tr("mtk_da_label"), "", tr("mtk_da_filter")
+            self, tr("mtk_da_label"), downloads.default_picker_dir(), tr("mtk_da_filter")
         )
         if path:
             self._installer_da = path
@@ -1375,7 +1378,7 @@ class SelectPackagePage(QWidget):
     def _on_choose_scatter_file(self) -> None:
         """Point the installer at a scatter file (its images live beside it)."""
         path, _ = QFileDialog.getOpenFileName(
-            self, tr("mtk_scatter_label"), "", tr("mtk_scatter_filter")
+            self, tr("mtk_scatter_label"), downloads.default_picker_dir(), tr("mtk_scatter_filter")
         )
         if not path:
             return
@@ -2918,7 +2921,9 @@ class SelectPackagePage(QWidget):
     def _on_choose_file(self):
         self._fw_package = None
         filter_str = tr("sel_dialog_filter")
-        path, _ = QFileDialog.getOpenFileName(self, tr("sel_dialog_title"), "", filter_str)
+        path, _ = QFileDialog.getOpenFileName(
+            self, tr("sel_dialog_title"), downloads.default_picker_dir(), filter_str
+        )
         if not path:
             return
         p = Path(path)
@@ -2988,7 +2993,7 @@ class SelectPackagePage(QWidget):
         folder = QFileDialog.getExistingDirectory(
             self,
             tr("sel_dialog_folder_title"),
-            "",
+            downloads.default_picker_dir(),
         )
         if not folder:
             return
@@ -3105,7 +3110,14 @@ class SelectPackagePage(QWidget):
             self._current_package_model = det_m or ""
             if det_m:
                 self._select_model_for_manual(det_m)
-            self._current_package_name = release_install_heading(det_m, (display_name,))
+            from ..fw_package import infer_release_name
+
+            inferred_name, inferred_version = infer_release_name(det_m, (display_name,))
+            # A title, not an instruction: "Get your Y2 ready…" belongs on the
+            # card heading, never in the sentence that reports what installed.
+            self._current_package_name = (
+                f"{inferred_name} {inferred_version}".strip() or display_name
+            )
 
             if det_t:
                 self._selected_type = det_t

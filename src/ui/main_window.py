@@ -1069,6 +1069,7 @@ class MainWindow(QMainWindow):
         self._settings_page.install_rockbox_themes_requested.connect(
             self._on_settings_install_rockbox_themes
         )
+        self._settings_page.refresh_themes_requested.connect(self._on_refresh_themes)
         self._settings_page.themes_auto_install_changed.connect(
             self._on_themes_auto_install_changed
         )
@@ -1091,6 +1092,10 @@ class MainWindow(QMainWindow):
             # this signal could be heard: take its current answer now, then
             # refetch once after the first paint so a changed feed is noticed.
             _notices.replay()
+            # Notices must arrive while the window is out of the way too: the
+            # timer lives with the service, not with the notices page, and a
+            # force-refresh checks the tiny XML file rather than waiting hours.
+            _notices.start_passive_refresh(5 * 60 * 1000)
             QTimer.singleShot(700, _notices.fetch_async)
         except Exception:
             logger.debug("Notice notifications could not be connected", exc_info=True)
@@ -1759,6 +1764,16 @@ class MainWindow(QMainWindow):
             if page is not None and hasattr(page, "refresh_theme") and callable(page.refresh_theme):
                 page.refresh_theme()
 
+        # The inline update card paints from the live palette and renders its
+        # release notes to HTML once. Rebuild that document when the OS
+        # appearance changes so its text cannot keep the old theme's colour.
+        notice_host = getattr(self, "_notice_host", None)
+        if notice_host is not None:
+            for child in notice_host.findChildren(QWidget):
+                refresh = getattr(child, "refresh_theme", None)
+                if callable(refresh):
+                    refresh()
+
         # The caption controls are painted from the live palette, and on Linux
         # the symbols themselves come from the desktop's icon theme, so a theme
         # switch has to re-read and repaint them: their hover wash and glyph
@@ -2053,6 +2068,7 @@ class MainWindow(QMainWindow):
             return
         self._sync_install_nav_entry()
         self._nav_to_page(_PAGE_SELECT)
+        QTimer.singleShot(0, self._maybe_offer_deferred_app_update)
 
     def _on_prep_started(self, name, model):
         """Zip or archive extraction belongs on the install card, not the catalogue."""
@@ -2675,24 +2691,95 @@ class MainWindow(QMainWindow):
 
         if not offline:
             self._append_log("[Rockbox Themes] Checking for latest 360p themes from GitHub...")
-            from ..theme_pack import ThemePackUpdateWorker
-            self._theme_update_worker = ThemePackUpdateWorker(parent=self)
-            self._theme_update_worker.finished.connect(self._on_theme_update_finished)
-            self._theme_update_worker.start()
-            if hasattr(self, "_settings_page"):
-                self._settings_page.set_themes_refreshing(True, tr("settings_themes_refreshing"))
+            # The download runs alongside the stage. Connecting the player and
+            # booting into Rockbox takes longer than the pack fetch, so the
+            # install never waits on the network; the status line reports it.
+            self._start_theme_pack_refresh()
         else:
             self._append_log("[Rockbox Themes] Offline mode active: using built-in 360p theme pack.")
-
+        self._theme_install_pending = False
         self.start_rockbox_themes_manually()
+
+    def _on_refresh_themes(self) -> None:
+        """Manual refresh from the Rockbox themes settings card."""
+        if self._install_run_active():
+            self._append_log("Theme refresh ignored: an install is already in progress.")
+            return
+        self._theme_install_pending = False
+        self._start_theme_pack_refresh()
+
+    def _start_theme_pack_refresh(self) -> None:
+        from ..theme_pack import ThemePackUpdateWorker
+
+        active = getattr(self, "_theme_update_worker", None)
+        try:
+            if active is not None and active.isRunning():
+                return
+        except RuntimeError:
+            active = None
+        from time import monotonic
+
+        worker = ThemePackUpdateWorker(parent=self)
+        self._theme_update_worker = worker
+        self._theme_update_started = monotonic()
+        self._theme_update_last_bytes = 0
+        self._theme_update_last_time = self._theme_update_started
+        worker.progress.connect(self._on_theme_update_progress)
+        worker.finished.connect(self._on_theme_update_finished)
+        worker.finished.connect(worker.deleteLater)
+        if hasattr(self, "_settings_page"):
+            self._settings_page.set_themes_refreshing(True, tr("settings_themes_refreshing"))
+        worker.start()
+
+    def _on_theme_update_progress(self, downloaded: int, total: int) -> None:
+        from time import monotonic
+        from ..progress_model import format_size_bytes
+
+        now = monotonic()
+        elapsed = max(0.001, now - getattr(self, "_theme_update_last_time", now))
+        delta = max(0, int(downloaded) - getattr(self, "_theme_update_last_bytes", 0))
+        self._theme_update_last_time = now
+        self._theme_update_last_bytes = int(downloaded)
+        speed = format_size_bytes(delta / elapsed)
+        if total > 0:
+            progress = tr("settings_themes_progress_fmt").format(
+                percent=int(round(100 * downloaded / total)),
+                done=format_size_bytes(downloaded),
+                total=format_size_bytes(total),
+            )
+        else:
+            progress = format_size_bytes(downloaded)
+        status_text = tr("settings_themes_refreshing_progress").format(
+            progress=progress, speed=speed
+        )
+        if hasattr(self, "_settings_page"):
+            self._settings_page.set_themes_refreshing(True, status_text)
+        try:
+            if self.themes.active and hasattr(self, "_flash_page"):
+                self._flash_page.set_theme_download_status(status_text)
+        except Exception:
+            pass
 
     def _on_theme_update_finished(self, ok: bool, status: str, count: int) -> None:
         if hasattr(self, "_settings_page"):
             self._settings_page.set_themes_refreshing(False)
+        try:
+            if hasattr(self, "_flash_page"):
+                self._flash_page.set_theme_download_status("")
+        except Exception:
+            pass
+        pending = bool(getattr(self, "_theme_install_pending", False))
+        self._theme_install_pending = False
         if ok and status == "merged":
             self._append_log(f"[Rockbox Themes] Successfully downloaded and merged {count} latest themes into 360p pack.")
+            if hasattr(self, "_settings_page"):
+                self._settings_page.set_themes_status(tr("settings_themes_refresh_done"))
         elif status == "offline_fallback":
             self._append_log("[Rockbox Themes] Offline or download unreachable; using stored 360p theme pack.")
+            if hasattr(self, "_settings_page"):
+                self._settings_page.set_themes_status(tr("settings_themes_refresh_failed"))
+        if pending:
+            self.start_rockbox_themes_manually()
 
     def start_rockbox_themes_manually(self) -> bool:
         """Begin the Rockbox themes & fonts stage without a flash having just run.
@@ -4376,6 +4463,21 @@ class MainWindow(QMainWindow):
         # and the catalogue already has the image by then.
         self._apply_release_icon(complete=False)
         self._flash_page.show_power_off_prompt(permission=permission)
+        try:
+            from .. import keep_data
+
+            pkg = None
+            page = getattr(self, "_select_page", None)
+            if page is not None:
+                pkg = getattr(page, "_details_package", None) or page.current_package()
+            model = self._package_model or getattr(pkg, "model", "") or ""
+            self._keep_data_pkg = pkg
+            self._flash_page.set_keep_data_available(
+                keep_data.keep_data_available(model, pkg, self.settings),
+                keep_data.keep_data_label(model),
+            )
+        except Exception:
+            logger.debug("Could not evaluate Keep Data compatibility", exc_info=True)
         self._sync_install_nav_entry()
         self._nav_to_page(_PAGE_FLASH)
 
@@ -5661,6 +5763,14 @@ class MainWindow(QMainWindow):
         # the user confirmed the player is off and unplugged, so the run that
         # follows has to obey what the card showed then.
         self._keep_data = self._flash_page.keep_data_checked()
+        if getattr(self, "_keep_data_confirm_pending", False):
+            # The second Next confirms the currently installed firmware; the
+            # run proceeds with Keep Data exactly as ticked.
+            self._keep_data_confirm_pending = False
+            self._flash_page.clear_keep_data_confirmation()
+        elif self._keep_data and self._keep_data_needs_confirmation():
+            self._begin_keep_data_confirmation()
+            return
         if getattr(self, "_linux_permission_pending", False):
             self._on_linux_permission_next()
             return
@@ -5682,6 +5792,39 @@ class MainWindow(QMainWindow):
         self._pre_install_guided = True
         self._flash_page.leave_power_off_prompt()
         self._begin_flash_flow()
+
+    def _keep_data_needs_confirmation(self) -> bool:
+        try:
+            from .. import keep_data
+
+            pkg = getattr(self, "_keep_data_pkg", None)
+            model = self._package_model or getattr(pkg, "model", "") or ""
+            return keep_data.needs_confirmation(model, pkg, self.settings)
+        except Exception:
+            return False
+
+    def _begin_keep_data_confirmation(self) -> None:
+        """Ask which compatible firmware is already on the player, in-card."""
+        from .. import keep_data
+        from ..config import device_label_for_model
+
+        pkg = getattr(self, "_keep_data_pkg", None)
+        model = self._package_model or getattr(pkg, "model", "") or ""
+        model_name = device_label_for_model(model) if model else tr("device_fallback_word")
+        software = str(getattr(pkg, "name", "") or self._package_name or "").strip()
+        names = keep_data.compatible_software_names(pkg, model) if pkg is not None else []
+        if len(names) > 1:
+            question = tr("keep_data_which_firmware_fmt").format(model=model_name)
+        else:
+            question = tr("keep_data_running_fmt").format(
+                model=model_name, software=software or tr("software_original")
+            )
+        self._keep_data_confirm_pending = True
+        self._flash_page.show_keep_data_confirmation(
+            question, tr("keep_data_only_compatible_hint"), names
+        )
+        self._sync_install_nav_entry()
+        self._adjust_window_geometry()
 
     def _on_retry_flash(self):
         self.sm.reset_for_retry()
@@ -5990,6 +6133,7 @@ class MainWindow(QMainWindow):
         self.service.stop_device_monitor()
         self._sync_install_nav_entry()
         self._nav_to_page(_PAGE_SELECT)
+        QTimer.singleShot(0, self._maybe_offer_deferred_app_update)
 
     def _tick_elapsed(self):
         self._flash_page.update_time(self._elapsed_text(), self._eta_text())
@@ -6771,6 +6915,14 @@ class MainWindow(QMainWindow):
         self._align_page_title()
         self._retranslate_all()
         self._sync_notes_language()
+        try:
+            from ..notice_service import NoticeService
+
+            # The feed keeps the published wording in the cache; re-render it
+            # in the new language without restarting the app.
+            NoticeService.instance().reload_translations()
+        except Exception:
+            logger.debug("Could not reload notice translations", exc_info=True)
         # German labels are longer than English ones: refit the window to the
         # copy it now holds.
         QTimer.singleShot(0, self._fit_window_to_page)
@@ -6844,6 +6996,9 @@ class MainWindow(QMainWindow):
         self._retry_page.retranslate()
         if hasattr(self, "_settings_page"):
             self._settings_page.retranslate()
+        notices_page = getattr(self, "_notices_page", None)
+        if notices_page is not None and hasattr(notices_page, "retranslate"):
+            notices_page.retranslate()
         if self._diagnostics_page is not None and hasattr(self._diagnostics_page, "retranslate"):
             self._diagnostics_page.retranslate()
         if self.statusBar() and hasattr(self.statusBar(), "retranslate"):
@@ -6992,10 +7147,15 @@ class MainWindow(QMainWindow):
         """Present the waiting build: a toast while a firmware run owns the window."""
         self._pending_app_update = info
         self._sync_update_button()
-        # If user has started a firmware download/install, do not interrupt with a
-        # full window view! Present a toast in the Select Software view instead.
-        if self._install_run_active():
-            self._select_page.show_app_update(info)
+        # An install, a completion screen and a donation ask all own the
+        # window. The update waits for that run to finish instead of replacing
+        # it; the rail row still names the waiting build in the meantime.
+        if self._install_run_active() or getattr(self, "_install_complete", False):
+            if self._install_run_active():
+                # A toast does not replace the run or the page the user is
+                # looking at; the full update view waits for the run to end.
+                self._select_page.show_app_update(info)
+            self._deferred_app_update = info
             return
         dlg = UpdateAvailableDialog(
             self,
@@ -7004,6 +7164,16 @@ class MainWindow(QMainWindow):
             on_skip=lambda v: self.settings.setValue("update_skipped_version", v),
         )
         self._present_inline(dlg, tr("nav_check_updates"))
+
+    def _maybe_offer_deferred_app_update(self) -> None:
+        info = getattr(self, "_deferred_app_update", None)
+        if info is None:
+            return
+        if self._install_run_active() or getattr(self, "_install_complete", False):
+            return
+        self._deferred_app_update = None
+        if info is getattr(self, "_pending_app_update", None):
+            self._offer_app_update(info)
 
     def _check_device_firmware_updates(self, manual=False):
         old = getattr(self, "_device_update_worker", None)
@@ -7068,9 +7238,17 @@ class MainWindow(QMainWindow):
             return
         if getattr(self, "_notified_app_update_version", "") == version:
             return
+        # Persisted too, so a restart does not announce the same build again.
+        from PySide6.QtCore import QSettings
+
+        settings = QSettings("innioasis", "updater")
+        if settings.value("notified_app_update_version", "", type=str) == version:
+            self._notified_app_update_version = version
+            return
         body = tr("update_available_fmt").format(new=version, current=APP_VERSION)
         body = re.sub(r"<[^>]+>", "", body)
         self._notified_app_update_version = version
+        settings.setValue("notified_app_update_version", version)
         notice_alerts.deliver(
             tr("update_available"),
             body,
@@ -7087,12 +7265,21 @@ class MainWindow(QMainWindow):
 
         if not notice_alerts.player_updates_enabled():
             return
+        from .. import player_update_check
+
         title = tr("reminder_new_release_title")
         for upd in updates or []:
             software = str((upd or {}).get("software_name") or "")
             model = str((upd or {}).get("model") or "")
+            latest_tag = str((upd or {}).get("latest_tag") or "")
             if not software or not model:
                 continue
+            # Each release is announced once: remember the tag so the next
+            # periodic check does not repeat the same system notification.
+            if latest_tag and player_update_check.get_last_notified_tag(model) == latest_tag:
+                continue
+            if latest_tag:
+                player_update_check.set_last_notified_tag(model, latest_tag)
             notice_alerts.deliver(
                 title,
                 tr("sel_update_available").format(software=software, model=model),

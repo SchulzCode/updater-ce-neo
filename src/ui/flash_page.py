@@ -12,6 +12,7 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPalette, QPen, QPixmap
 from PySide6.QtWidgets import (
     QBoxLayout,
     QCheckBox,
+    QComboBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -1676,6 +1677,24 @@ class FlashPage(QWidget):
         apply_explicit_foreground(self._keep_data_cb, " font-size: 12px; border: none;")
         self._keep_data_cb.setVisible(False)
         copy.addWidget(self._keep_data_cb)
+        self._keep_data_choice = QComboBox()
+        self._keep_data_choice.setVisible(False)
+        self._keep_data_choice.setMinimumWidth(240)
+        copy.addWidget(self._keep_data_choice)
+        self._keep_data_hint = QLabel("")
+        self._keep_data_hint.setWordWrap(True)
+        self._keep_data_hint.setProperty("cssClass", "hint")
+        self._keep_data_hint.setVisible(False)
+        copy.addWidget(self._keep_data_hint)
+        self._keep_data_warning = QLabel("")
+        self._keep_data_warning.setWordWrap(True)
+        self._keep_data_warning.setProperty("cssClass", "hint")
+        self._keep_data_warning.setVisible(False)
+        copy.addWidget(self._keep_data_warning)
+        self._keep_data_cb.toggled.connect(self._update_keep_data_warning)
+        self._keep_data_allowed = True
+        self._keep_data_confirm_active = False
+        self._keep_data_force_hidden = False
         self._wait_col = copy
 
         # Retained for attribute compatibility, but kept hidden and not added to layout
@@ -2337,6 +2356,18 @@ class FlashPage(QWidget):
         if hasattr(self, "_step_label"):
             self._step_label.setText(text)
 
+    def set_theme_download_status(self, text: str) -> None:
+        """Show the theme-pack download line on the install card itself."""
+        if hasattr(self, "_action_label"):
+            self._action_label.setText(text or "")
+            self._action_label.setVisible(bool(text))
+        if hasattr(self, "_step_label") and text:
+            self._step_label.setText(text)
+        flow = getattr(self, "_status_flow", None)
+        if flow is not None:
+            flow.refresh()
+        self._notify_geometry_change()
+
     def _connect_device_prompt_text(self) -> str:
         prompt = tr("flash_connect_device_prompt").format(model=self._connect_model_text())
         remaining = getattr(self, "_attempt_remaining", 0)
@@ -2484,6 +2515,8 @@ class FlashPage(QWidget):
         # tick does not belong on it.
         if hasattr(self, "_keep_data_cb"):
             self._keep_data_cb.setVisible(False)
+        if hasattr(self, "_keep_data_warning"):
+            self._keep_data_warning.setVisible(False)
         self.show_flashing()
         self._warning.setVisible(False)
         if hasattr(self, "_appeal"):
@@ -2701,9 +2734,12 @@ class FlashPage(QWidget):
         self._power_off_recovery_kwargs = dict(prompt_kwargs or {})
         self.clear_install_failure()
         self.show_waiting()
+        # This is the USB-recovery screen, not the power-off confirmation: the
+        # Keep Data choice belongs only on that one prompt.
         if hasattr(self, "_keep_data_cb"):
-            has_ud = getattr(self, "_has_userdata", True)
-            self._keep_data_cb.setVisible(has_ud)
+            self._keep_data_cb.setVisible(False)
+        if hasattr(self, "_keep_data_warning"):
+            self._keep_data_warning.setVisible(False)
         msg = self._power_off_prompt_text()
         self._wait_prompt_label.setText(msg)
         if hasattr(self._wait_progress_bar, "set_failed"):
@@ -3403,7 +3439,9 @@ class FlashPage(QWidget):
             # The one-time access step is not a flash prompt: its Next only
             # installs the udev rules, so the tick belongs on the run after it.
             has_ud = getattr(self, "_has_userdata", True)
+            self._keep_data_force_hidden = False
             self._keep_data_cb.setVisible(not permission and has_ud)
+        self._update_keep_data_warning()
         self._set_determinate(self._wait_progress_bar, 0)
         # Nothing has been flashed yet, so stepping back needs no question:
         # the cancel chip stops the run outright.
@@ -3423,6 +3461,92 @@ class FlashPage(QWidget):
             # run may have hidden it (or the GUI handoff prompt did).
             self._keep_data_cb.setChecked(self._has_userdata and bool(preserve_data_default))
             self._keep_data_cb.setVisible(self._has_userdata)
+        self._update_keep_data_warning()
+
+    def set_keep_data_available(self, available: bool, label: str = "") -> None:
+        """Gate the tick by the catalogue's derivative compatibility rule."""
+        self._keep_data_allowed = bool(available)
+        if hasattr(self, "_keep_data_cb"):
+            text = label or tr("flash_keep_data_option")
+            self._keep_data_cb.setText(text)
+            self._keep_data_cb.setAccessibleName(text)
+            self._keep_data_cb.setVisible(
+                bool(available)
+                and bool(getattr(self, "_has_userdata", True))
+                and getattr(self, "_wait_copy", "") == "power_off"
+            )
+        self._update_keep_data_warning()
+
+    def _update_keep_data_warning(self) -> None:
+        """Explain what happens without the tick, in model-appropriate terms."""
+        warning = getattr(self, "_keep_data_warning", None)
+        cb = getattr(self, "_keep_data_cb", None)
+        if warning is None or cb is None:
+            return
+        model = str(getattr(self, "_model", "") or "").upper()
+        y1_like = "Y1" in model or "A5" in model
+        visible = (
+            bool(getattr(self, "_has_userdata", True))
+            and getattr(self, "_wait_copy", "") == "power_off"
+            and not getattr(self, "_keep_data_confirm_active", False)
+            and not getattr(self, "_permission_prompt", False)
+            and not getattr(self, "_keep_data_force_hidden", False)
+        )
+        text = ""
+        if visible:
+            if not getattr(self, "_keep_data_allowed", True):
+                key = (
+                    "flash_keep_data_unavailable_y1"
+                    if y1_like
+                    else "flash_keep_data_unavailable"
+                )
+                text = tr(key)
+            elif not cb.isChecked():
+                key = "flash_keep_data_warning_y1" if y1_like else "flash_keep_data_warning"
+                text = tr(key)
+        if warning.text() != text:
+            warning.setText(text)
+        warning.setVisible(bool(text))
+        self._notify_geometry_change()
+
+    def show_keep_data_confirmation(
+        self, question: str, hint: str, choices=(), selected: str = ""
+    ) -> None:
+        """Ask for the currently installed firmware on the same progress card."""
+        self._keep_data_confirm_active = True
+        self._wait_copy = "keep_data_confirm"
+        self._keep_data_force_hidden = True
+        self._prompt_only = True
+        self._wait_prompt_label.setText(question or "")
+        self._keep_data_cb.setVisible(False)
+        if hasattr(self, "_keep_data_warning"):
+            self._keep_data_warning.setVisible(False)
+        names = [str(c) for c in (choices or ()) if str(c).strip()]
+        self._keep_data_choice.clear()
+        self._keep_data_choice.addItems(names)
+        if selected and selected in names:
+            self._keep_data_choice.setCurrentText(selected)
+        self._keep_data_choice.setVisible(len(names) > 1)
+        self._keep_data_hint.setText(hint or "")
+        self._keep_data_hint.setVisible(bool(hint))
+        self._wait_continue_btn.setVisible(True)
+        self._wait_continue_btn.setEnabled(True)
+        self._wait_cancel_btn.setVisible(True)
+        self._wait_cancel_btn.setEnabled(True)
+        self._set_determinate(self._wait_progress_bar, 0)
+        self._notify_geometry_change()
+
+    def keep_data_confirm_choice(self) -> str:
+        return self._keep_data_choice.currentText() if hasattr(self, "_keep_data_choice") else ""
+
+    def clear_keep_data_confirmation(self) -> None:
+        self._keep_data_confirm_active = False
+        self._keep_data_force_hidden = False
+        if hasattr(self, "_keep_data_choice"):
+            self._keep_data_choice.setVisible(False)
+        if hasattr(self, "_keep_data_hint"):
+            self._keep_data_hint.setVisible(False)
+        self._update_keep_data_warning()
 
     def show_gui_handoff_prompt(self, hint: str) -> None:
         """Power-off line plus a small download-mode hint. Continue does not flash."""
@@ -3431,6 +3555,9 @@ class FlashPage(QWidget):
         # (and therefore the keep-data option) is not ours to set.
         if hasattr(self, "_keep_data_cb"):
             self._keep_data_cb.setVisible(False)
+        self._keep_data_force_hidden = True
+        if hasattr(self, "_keep_data_warning"):
+            self._keep_data_warning.setVisible(False)
         if hasattr(self, "_wait_mode_hint"):
             self._wait_mode_hint.setText(hint or "")
             self._wait_mode_hint.setVisible(False)
@@ -3447,6 +3574,8 @@ class FlashPage(QWidget):
         self._permission_prompt = False
         if hasattr(self, "_keep_data_cb"):
             self._keep_data_cb.setVisible(False)
+        self.clear_keep_data_confirmation()
+        self._update_keep_data_warning()
         if hasattr(self, "_wait_continue_btn"):
             self._wait_continue_btn.setVisible(True)
             self._wait_continue_btn.setEnabled(False)
@@ -3519,6 +3648,7 @@ class FlashPage(QWidget):
         if hasattr(self, "_wait_prompt_label") and getattr(self, "_wait_copy", "") == "power_off":
             self._wait_prompt_label.setText(self._power_off_prompt_text())
         self._update_paperclip_hint()
+        self._update_keep_data_warning()
 
     def set_platform(self, platform):
         self._platform = (platform or "").strip() or ""
@@ -3727,6 +3857,9 @@ class FlashPage(QWidget):
     def set_waiting_device(self):
         self._wait_copy = "connect"
         self._wait_status.set_status("idle")
+        # The connect prompt is not the power-off prompt: no Keep Data tick.
+        if hasattr(self, "_keep_data_cb"):
+            self._keep_data_cb.setVisible(False)
         prompt = self._connect_device_prompt_text()
         if hasattr(self, "_wait_prompt_label"):
             self._wait_prompt_label.setText(prompt)

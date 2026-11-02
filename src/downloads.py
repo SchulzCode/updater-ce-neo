@@ -38,6 +38,23 @@ def downloads_dir():
     return d
 
 
+def default_picker_dir() -> str:
+    """A user-friendly starting folder for a file picker.
+
+    macOS asks for Documents access when an app opens its file dialog in the
+    home folder, because the panel enumerates every child. Downloads is where
+    firmware archives normally arrive, so start there (and fall back to the
+    app's own download folder) instead of touching Documents.
+    """
+    for candidate in (Path.home() / "Downloads", downloads_dir()):
+        try:
+            if candidate.is_dir():
+                return str(candidate)
+        except OSError:
+            continue
+    return str(Path.home())
+
+
 def firmware_cache_size() -> tuple[int, int]:
     """Calculate the number of files and total byte size of cached firmwares.
 
