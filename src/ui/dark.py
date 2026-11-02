@@ -1104,12 +1104,16 @@ def _make_palette(
 
 def theme_foreground() -> QColor:
     """Foreground for the active theme: dark on light, light on dark."""
+    dark = is_dark()
     app = QApplication.instance()
     if app is not None:
         color = app.palette().color(QPalette.ColorRole.WindowText)
         if color.isValid() and color.alpha() > 0:
-            return QColor(color)
-    return QColor(T().fg)
+            is_light_color = color.lightness() >= 128
+            if (dark and is_light_color) or (not dark and not is_light_color):
+                return QColor(color)
+    t = T()
+    return QColor(t.fg if dark else "#111111")
 
 
 def apply_explicit_foreground(widget, extra: str = "") -> None:
@@ -1442,6 +1446,11 @@ QMessageBox {{
 }}
 QMessageBox QLabel {{
     color: {text_color};
+}}
+QCheckBox {{
+    color: {text_color};
+    background: transparent;
+    border: none;
 }}
 
 /* Cards paint their rounded surface in Card.paintEvent. Do not give the

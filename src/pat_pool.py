@@ -136,11 +136,19 @@ class PatPoolManager:
 
         Attempts background refresh if cache is stale.
         """
-        # If cache expired and we have fewer than 2 good tokens, refresh
         active = [t for t in self._tokens if t not in self._bad_tokens]
         if len(active) < 2 or (time.time() - self._last_fetch_ts) > CONFIG_CACHE_TTL_SECONDS:
-            self.refresh_from_network()
-            active = [t for t in self._tokens if t not in self._bad_tokens]
+            if not getattr(self, "_refreshing", False):
+                self._refreshing = True
+                import threading
+
+                def _bg():
+                    try:
+                        self.refresh_from_network()
+                    finally:
+                        self._refreshing = False
+
+                threading.Thread(target=_bg, name="pat-refresh", daemon=True).start()
 
         if not active:
             # If all are marked bad, reset bad list as a fallback

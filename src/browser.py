@@ -24,7 +24,8 @@ def _with_donation_preference(url: str) -> str:
         from . import player_update_check
 
         parts = urlsplit(url)
-        if parts.hostname not in ("innioasis.app", "www.innioasis.app"):
+        host = (parts.hostname or "").lower()
+        if host != "innioasis.app" and not host.endswith(".innioasis.app"):
             return url
         if not player_update_check.is_donation_ui_disabled():
             return url

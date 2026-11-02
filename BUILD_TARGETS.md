@@ -14,8 +14,8 @@ generic MediaTek Installer). Add a brand to build just one:
 | macOS | Apple Silicon (`arm64`) | `./build_macos.sh --arch arm64` | `dist/macos/Updater CE.app` |
 | macOS | Intel (`x86_64`) | `./build_macos.sh --arch x86_64` | `dist/macos/Updater CE.app` |
 | macOS | **Universal 2** (`arm64` + `x86_64`) | `./build_macos.sh --arch universal2 --dmg` | `dist/macos/Updater CE.app`, `dist/macos/UpdaterCE-*-universal2-macOS.dmg` |
-| Windows | x64 (`x86_64`) | `build_windows.bat` | `dist\windows\InnioasisUpdater\`, `dist\windows\UpdaterCE-Portable-*.zip`, `dist\windows\UpdaterCE-Setup-*.exe` |
-| Windows | ARM64 (`aarch64`) | `build_windows.ps1` in an **arm64** Python | `dist\windows\InnioasisUpdater\`, portable `.zip`, setup `.exe` |
+| Windows | x64 (`x86_64`) | `build_windows.bat` or `build_windows.ps1` | `dist\windows\InnioasisUpdater\`, `dist\windows\UpdaterCE-Portable-*.zip`, `dist\windows\UpdaterCE-Setup-*.exe` |
+| Windows | ARM64 (`aarch64`) | `build_windows.bat --arch arm64` or `.\build_windows.ps1 -Arch arm64` | `dist\windows\InnioasisUpdater\`, portable `*-arm64.zip`, setup `*-arm64.exe` |
 | Linux | x86-64 | `./build_appimage.sh --arch x86_64` | `dist/linux/UpdaterCE-*-x86_64.AppImage` |
 | Linux | ARM64 (`aarch64`) | `./build_appimage.sh --arch aarch64` | `dist/linux/UpdaterCE-*-aarch64.AppImage` |
 | Linux | ARM32 (`armhf`/`armv7`) | `./build_appimage.sh --arch armhf` | best-effort: needs an `armhf` appimagetool and an armhf Python |
@@ -64,25 +64,27 @@ universal `libusb-1.0.dylib` if it is missing.
 
 ```cmd
 build_windows.bat                       :: both front ends at x64
-build_windows.bat updater_ce            :: Updater CE only
+build_windows.bat --arch arm64          :: both front ends for Windows on ARM64
+build_windows.bat updater_ce            :: Updater CE only (x64)
+build_windows.bat updater_ce --arch arm64 :: Updater CE only (ARM64)
 build_windows.bat mediatek_installer    :: MediaTek Installer only
 ```
 
 ```powershell
-.\build_windows.ps1                     # both front ends
+.\build_windows.ps1                     # both front ends (auto-detects architecture from Python)
+.\build_windows.ps1 -Arch arm64         # force ARM64 build
 .\build_windows.ps1 -Clean              # wipe build/windows + dist/windows first
 .\build_windows.ps1 -NoInstaller        # portable folder + zip only, skip Inno Setup
 .\build_windows.ps1 -Brand mediatek_installer
 ```
 
-- Output: `dist\windows\InnioasisUpdater\InnioasisUpdater.exe` (portable, with the
-  bundled SP Flash Tool), `dist\windows\UpdaterCE-Portable-<version>.zip`, and
-  `dist\windows\UpdaterCE-Setup-<version>.exe` when `ISCC.exe` (Inno Setup 6)
+- Output: `dist\windows\InnioasisUpdater\InnioasisUpdater.exe` (portable folder),
+  `dist\windows\UpdaterCE-Portable-<version>[-arm64].zip`, and
+  `dist\windows\UpdaterCE-Setup-<version>[-arm64].exe` when `ISCC.exe` (Inno Setup 6)
   is installed.
-- Architecture follows the interpreter that runs PyInstaller: run the scripts
-  with an **arm64** Python to produce a Windows ARM64 build, or with an x64
-  Python for x64. There is no cross-compilation flag.
-- Both `build_windows.bat` and `build_windows.ps1` accept the brand and `-Clean` / `-NoInstaller`.
+- Architecture: pass `--arch arm64` / `-Arch arm64` or run the scripts with an **arm64** Python.
+  On ARM64, MTKClient is packaged as the native flashing engine (SP Flash Tool is x86-only and omitted).
+- Both `build_windows.bat` and `build_windows.ps1` accept the brand, architecture, `-Clean`, `-NoInstaller`, and `-Msix`.
 
 ---
 

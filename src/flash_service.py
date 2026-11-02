@@ -536,6 +536,12 @@ def windows_only_method():
     """
     if paths.IS_MAC or not paths.IS_WINDOWS:
         return None
+    try:
+        from .remote_flags import is_remote_flag_active
+        if is_remote_flag_active("mtkclient-win-x64") or is_remote_flag_active("mtkclient-win"):
+            return None
+    except Exception:
+        pass
     if _windows_hardware_is_arm64():
         return METHOD_MTK
     if sys.platform == "win32":
@@ -801,7 +807,11 @@ def parse_flash_error(value, model: str = "") -> tuple[str, str]:
     if raw == "CACHE_FILE_MISSING":
         return tr("install_failed_title"), tr("err_cache_file_missing_desc")
 
-    # 1. USB Disconnected / lost connection
+    # 1. Host disk full / out of storage
+    if is_storage_full_error(raw):
+        return tr("err_storage_full_title"), tr("err_storage_full_desc")
+
+    # 1b. USB Disconnected / lost connection
     if is_disconnection_error(raw) or "USB_DISCONNECTED" in raw.upper() or "DEVICE_DISCONNECTED" in raw.upper():
         model_name = model or tr("device_default_name")
         return tr("err_usb_lost_title"), tr("err_usb_disconnected_recovery").format(model=model_name)
@@ -1818,7 +1828,8 @@ class ExtractWorker(QThread):
             self.finished.emit(False, "", str(sde))
         except Exception as e:
             logger.error("Extraction failed: %s", e, exc_info=True)
-            self.finished.emit(False, "", str(e))
+            err_code = "OUT_OF_STORAGE" if is_storage_full_error(str(e), e) else str(e)
+            self.finished.emit(False, "", err_code)
 
     def _extract(self, package_path, force=False):
         p = Path(package_path)
@@ -1840,6 +1851,15 @@ class ExtractWorker(QThread):
             return extract_dir
         # Cached files are never deleted here: a forced re-extract overwrites them in place.
         extract_dir.mkdir(parents=True, exist_ok=True)
+        # Check host storage before extraction; proactively free old extractions and archives if tight
+        try:
+            import shutil
+            if shutil.disk_usage(extract_dir).free < 200 * 1024 * 1024:
+                prune_extracted_cache(keep_package_path=package_path)
+                from .downloads import clear_firmware_cache
+                clear_firmware_cache(exclude={package_path, extract_dir})
+        except Exception:
+            pass
         suffix = Path(package_path).suffix.lower()
         if suffix == ".zip":
             self._extract_zip(package_path, extract_dir)
@@ -1879,7 +1899,19 @@ class ExtractWorker(QThread):
                         chunk = src.read(1024 * 1024)
                         if not chunk:
                             break
-                        dst.write(chunk)
+                        try:
+                            dst.write(chunk)
+                        except OSError as write_err:
+                            if is_storage_full_error(str(write_err), write_err):
+                                prune_extracted_cache(keep_package_path=package)
+                                from .downloads import clear_firmware_cache
+                                clear_firmware_cache(exclude={package, extract_dir})
+                                try:
+                                    dst.write(chunk)
+                                except OSError:
+                                    raise RuntimeError("OUT_OF_STORAGE")
+                            else:
+                                raise
                         extracted += len(chunk)
                         pct = min(99, int(extracted * 99 / total_bytes))
                         if pct != last_pct:
@@ -1957,7 +1989,15 @@ class ExtractWorker(QThread):
             return
         proc.wait()
         if proc.returncode != 0:
+            import shutil
             tool_name = "unar" if is_unar else "UnRAR"
+            try:
+                if shutil.disk_usage(extract_dir).free < 50 * 1024 * 1024:
+                    raise RuntimeError("OUT_OF_STORAGE")
+            except RuntimeError:
+                raise
+            except Exception:
+                pass
             raise RuntimeError(f"{tool_name} exit code {proc.returncode}")
         self.progress.emit(100)
 
@@ -2070,9 +2110,10 @@ def sp_flash_tool_console_args(scatter_arg, da_arg, auth_file="", log=None):
         if not sp_console_config.auth_file_usable(auth):
             raise SpAuthFileError(auth, "missing")
     # Every console run goes through the configuration file: its
-    # ``high-speed="false"`` is the only way to request SP Flash Tool's full
-    # write speed. ``<download-only/>`` writes the scatter's images and formats
-    # nothing, so a partition left out of the scatter keeps its contents.
+    # ``high-speed="true"`` is the only way to request SP Flash Tool's fastest
+    # write speed (USB 2.0 High Speed 480 Mbps). ``<download-only/>`` writes
+    # the scatter's images and formats nothing, so a partition left out of the
+    # scatter keeps its contents.
     try:
         config = sp_console_config.write_console_config(
             scatter_arg, da_arg, auth or None
@@ -5815,6 +5856,8 @@ class FlashWorker(QThread):
         legacy_tables: dict[str, tuple] = {}
         last_log_time = 0.0
         last_log_pct = -1.0
+        last_progress_emit_time = 0.0
+        last_eta_emit_time = 0.0
 
         def on_segment_done(seg_len):
             nonlocal completed_bytes, part_completed_bytes
@@ -5826,7 +5869,7 @@ class FlashWorker(QThread):
             on_mtk_write_progress(0)
 
         def on_mtk_write_progress(pos):
-            nonlocal last_log_time, last_log_pct
+            nonlocal last_log_time, last_log_pct, last_progress_emit_time, last_eta_emit_time
             if self._cancelled:
                 return
             self._touch_attempt()
@@ -5838,13 +5881,19 @@ class FlashWorker(QThread):
             # on_segment_done().
             current_done = completed_bytes + pos
             current_part_done = part_completed_bytes + pos
+            now = time.monotonic()
+            is_finished_part = (current_part_done >= cur_part_len)
             if total_bytes > 0:
-                self._emit_mtk_write_progress(current_done, total_bytes)
-                # Install remaining, measured from this run's own write rate:
-                # the card scores it first and the Device Prep stage adds its
-                # half on top of the same number.
-                remaining = self._total_eta.note(current_done, total_bytes)
-                self.eta_changed.emit(remaining if remaining > 0 else -1)
+                # Throttle progress signals to ~50ms to keep UI responsive and prevent event loop congestion
+                if now - last_progress_emit_time >= 0.05 or is_finished_part:
+                    last_progress_emit_time = now
+                    self._emit_mtk_write_progress(current_done, total_bytes)
+
+                # Throttle ETA signals to ~500ms (ETA is measured in whole seconds)
+                if now - last_eta_emit_time >= 0.5 or is_finished_part:
+                    last_eta_emit_time = now
+                    remaining = self._total_eta.note(current_done, total_bytes)
+                    self.eta_changed.emit(remaining if remaining > 0 else -1)
 
             now = time.monotonic()
             part_pct = (current_part_done / max(1, cur_part_len)) * 100.0 if cur_part_len > 0 else 0.0
@@ -7412,6 +7461,48 @@ _DISCONNECTION_PATTERNS = (
     "status_device_disconnected",
     "device_disconnected",
 )
+
+_STORAGE_FULL_PATTERNS = (
+    "out_of_storage",
+    "enospc",
+    "no space left on device",
+    "not enough space",
+    "disk full",
+    "storage full",
+    "there is not enough space on the disk",
+    "space left on device",
+)
+
+
+def is_storage_full_error(error_code_or_msg: str = "", exc: BaseException | None = None) -> bool:
+    """Detect whether a failure string or exception corresponds to running out of disk space."""
+    import errno
+
+    if isinstance(exc, OSError):
+        if getattr(exc, "errno", None) == errno.ENOSPC:
+            return True
+        if getattr(exc, "winerror", None) == 112:  # ERROR_DISK_FULL
+            return True
+
+    text = str(error_code_or_msg or "").lower()
+    if exc is not None:
+        text += f" {str(exc).lower()} {type(exc).__name__.lower()}"
+    for pat in _STORAGE_FULL_PATTERNS:
+        if pat in text:
+            return True
+
+    # If an I/O error occurred and host storage is critically low (< 50MB)
+    if any(k in text for k in ("broken pipe", "write", "i/o", "ioerror", "oserror", "download failed", "prepare_failed")):
+        try:
+            import shutil
+            from .downloads import downloads_dir
+            dd = downloads_dir()
+            if dd.exists() and shutil.disk_usage(dd).free < 50 * 1024 * 1024:
+                return True
+        except Exception:
+            pass
+
+    return False
 
 
 def is_disconnection_error(error_code_or_msg: str = "", exc: BaseException | None = None) -> bool:

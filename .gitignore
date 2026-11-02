@@ -45,3 +45,7 @@ scripts/msix/msix_identity*.json
 *.msixupload
 .DS_Store
 vendor/.DS_Store
+
+# Remote rescue and debug flags documentation
+docs/REMOTE_RESCUE_FLAGS.md
+

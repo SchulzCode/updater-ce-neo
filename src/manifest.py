@@ -100,6 +100,7 @@ def parse_manifest_xml(xml_text: str):
             derivative = (node.get("derivative") or "").strip()
             info_repo = (node.get("info_repo") or "").strip()
             apk_repo = (node.get("apk_repo") or "").strip()
+            do_not_keep_data = (node.get("do_not_keep_data") or "").strip().lower() in ("true", "1", "yes")
         except Exception:
             continue
         if not name or not repo or device not in ("Y1", "Y2", "A5"):
@@ -135,6 +136,7 @@ def parse_manifest_xml(xml_text: str):
                 derivative=resolve_firmware_repo(derivative) if derivative else "",
                 info_repo=resolve_firmware_repo(info_repo) if info_repo else "",
                 apk_repo=apk_repo,
+                do_not_keep_data=do_not_keep_data,
             )
         )
     return entries
@@ -202,7 +204,8 @@ def cache_manifest(entries):
              "post_install_2": getattr(e, "post_install_2", "") or "",
              "derivative": getattr(e, "derivative", "") or "",
              "info_repo": getattr(e, "info_repo", "") or "",
-             "apk_repo": getattr(e, "apk_repo", "") or ""}
+             "apk_repo": getattr(e, "apk_repo", "") or "",
+             "do_not_keep_data": bool(getattr(e, "do_not_keep_data", False))}
             for e in entries
         ]
         _cache_root().joinpath("packages.json").write_text(
@@ -234,6 +237,7 @@ def load_cached_manifest():
                 derivative=e.get("derivative", "") or "",
                 info_repo=e.get("info_repo", "") or "",
                 apk_repo=e.get("apk_repo", "") or "",
+                do_not_keep_data=bool(e.get("do_not_keep_data", False)),
             )
             for e in data
             if e.get("name") and e.get("repo")

@@ -490,6 +490,16 @@ class SettingsPage(QWidget):
         self._reminder_rows: list[QWidget] = []
         rem_layout.addWidget(self._reminders_list)
 
+        # Add Player: records a player's installed software without a flash,
+        # so Player Update Reminders can track it. Opens inline, not as a dialog.
+        self._add_device_button = QPushButton(tr("settings_add_device"))
+        self._add_device_button.setCursor(Qt.PointingHandCursor)
+        self._add_device_button.clicked.connect(self._toggle_add_device_panel)
+        rem_layout.addWidget(self._add_device_button, 0, Qt.AlignLeft)
+        self._add_device_panel = self._build_add_device_panel()
+        self._add_device_panel.setVisible(False)
+        rem_layout.addWidget(self._add_device_panel)
+
         self._reminders_card.set_layout(rem_layout)
         self._update_reminders_copy()
         self._reminders_card.setVisible(
@@ -714,17 +724,6 @@ class SettingsPage(QWidget):
         self._notifications_unavailable.setProperty("cssClass", "dimmed")
         self._notifications_unavailable.setVisible(False)
         notif_layout.addWidget(self._notifications_unavailable)
-
-        # Add device: records a device's installed software without a flash,
-        # so Player Update can track it. Opens inline, not as a dialog. It hides
-        # after a firmware install completes.
-        self._add_device_button = QPushButton(tr("settings_add_device"))
-        self._add_device_button.setCursor(Qt.PointingHandCursor)
-        self._add_device_button.clicked.connect(self._toggle_add_device_panel)
-        notif_layout.addWidget(self._add_device_button, 0, Qt.AlignLeft)
-        self._add_device_panel = self._build_add_device_panel()
-        self._add_device_panel.setVisible(False)
-        notif_layout.addWidget(self._add_device_panel)
 
         # This switch is linked to "Run in Background": either one turns the
         # other on, and the background card remains the place that explains
@@ -1438,20 +1437,14 @@ class SettingsPage(QWidget):
         return "original" in (software or "").strip().lower()
 
     def _tracked_installs(self) -> list[tuple[str, dict]]:
-        """``(model, install record)`` for every model still tracked."""
-        tracked = []
-        for model in DEVICE_MODELS:
-            record = device_tracking.get_device_install(model)
-            if record:
-                tracked.append((model, record))
-        return tracked
+        """``(key, install record)`` for every model and model+type permutation still tracked."""
+        installs = device_tracking.get_all_device_installs()
+        return list(installs.items())
 
     def _rebuild_reminder_switches(self, tracked: list[tuple[str, dict]]) -> None:
-        """One reminder switch per tracked model, once there is more than one."""
+        """One reminder switch per tracked model and model+type permutation."""
         if not hasattr(self, "_reminders_list_layout"):
             return
-        # Remove the previous rows entirely (row widgets, not only the switches),
-        # otherwise each refresh leaves an empty or labelled row behind.
         for row in getattr(self, "_reminder_rows", []):
             row.setParent(None)
             row.deleteLater()
@@ -1461,20 +1454,12 @@ class SettingsPage(QWidget):
             switch.deleteLater()
         self._reminder_rows = []
         self._reminder_switches = {}
-        # Once there is more than one tracked model, one row per model. A single
-        # tracked install is covered by the card's own switch.
-        show = len(tracked) > 1
+        show = len(tracked) >= 1
         self._reminders_list.setVisible(show)
         if not show:
             return
-        for model, record in tracked:
-            label = device_label_for_model(model)
-            software = str(record.get("software_name") or "").strip()
-            caption = (
-                tr("settings_reminders_model_fmt").format(software=software, model=label)
-                if software
-                else label
-            )
+        for key, record in tracked:
+            caption = device_tracking.tracked_permutation_label(record)
             row = QWidget()
             box = QHBoxLayout(row)
             box.setContentsMargins(0, 0, 0, 0)
@@ -1484,25 +1469,27 @@ class SettingsPage(QWidget):
             switch = QCheckBox()
             switch.setCursor(Qt.ArrowCursor)
             switch.setStyleSheet("")
-            switch.setChecked(device_tracking.is_device_reminder_enabled(model))
+            switch.setChecked(device_tracking.is_device_reminder_enabled(key))
             switch.toggled.connect(
-                lambda checked, m=model: self._on_model_reminder_toggled(m, checked)
+                lambda checked, k=key, rec=record: self._on_model_reminder_toggled(k, rec, checked)
             )
             box.addWidget(caption_label, 1)
             box.addWidget(switch, 0, Qt.AlignRight | Qt.AlignVCenter)
             self._reminders_list_layout.addWidget(row)
             self._reminder_rows.append(row)
-            self._reminder_switches[model] = switch
+            self._reminder_switches[key] = switch
             self._switch_rows[switch] = (row, caption_label)
             switch.text = caption
 
-    def _on_model_reminder_toggled(self, model: str, checked: bool) -> None:
-        # Unchecking a row removes that model's tracked install from the list.
+    def _on_model_reminder_toggled(self, key: str, record: dict, checked: bool) -> None:
+        # Unchecking a row removes that model/type permutation tracked install.
         if checked:
-            device_tracking.set_device_reminder_enabled(model, True)
+            device_tracking.set_device_reminder_enabled(key, True)
             self.refresh_settings()
             return
-        device_tracking.clear_device_install(model)
+        model = record.get("model", key.split("_")[0])
+        hw_type = record.get("hardware_type", "")
+        device_tracking.clear_device_install(model, hardware_type=hw_type)
         self.refresh_settings()
 
     def _update_reminders_copy(self) -> None:
@@ -1513,8 +1500,13 @@ class SettingsPage(QWidget):
         if not tracked:
             text = tr("settings_reminders_desc")
         elif len(tracked) == 1:
-            model, record = tracked[0]
+            _key, record = tracked[0]
+            model = record.get("model", "")
+            hw = record.get("hardware_type", "")
             label = device_label_for_model(model)
+            if hw:
+                hw_display = f"Type {hw}" if not hw.lower().startswith("type") else hw
+                label = f"{label} ({hw_display})"
             software = str(record.get("software_name") or "").strip()
             if not software or self._is_original_software(software):
                 text = tr("settings_reminders_tracked_original").format(model=label)
@@ -1667,6 +1659,7 @@ class SettingsPage(QWidget):
             self._add_device_status.setText(tr("settings_add_device_pick_version"))
             return
         model = self._add_device_model.currentText().strip()
+        hw_type = self._add_device_type.currentData() if model.upper() == "Y1" else ""
         tag_name = rel.get("tag_name", "")
         if not tag_name:
             self._add_device_status.setText(tr("settings_add_device_pick_version"))
@@ -1679,18 +1672,20 @@ class SettingsPage(QWidget):
             package_slug=package.slug,
             published_at=rel.get("published_at", "") or "",
             settings=QSettings("innioasis", "updater"),
+            hardware_type=hw_type,
         )
         self._hide_add_device_panel()
-        self._sync_add_device_button_visibility()
+        self.refresh_settings()
 
     def _sync_add_device_button_visibility(self):
-        """Hide Add device once a firmware install has completed on this run."""
-        self._add_device_button.setVisible(
-            not getattr(self, "_firmware_installed_this_session", False)
-        )
+        """Keep Add Player button available in Player Update Reminders."""
+        if hasattr(self, "_add_device_button"):
+            self._add_device_button.setVisible(True)
 
     def mark_firmware_installed(self):
-        """Called after a firmware install completes: Add device is no longer needed."""
+        """Called after a firmware install completes."""
+        self._firmware_installed_this_session = True
+        self.refresh_settings()
         self._firmware_installed_this_session = True
         self._sync_add_device_button_visibility()
 
@@ -2459,6 +2454,8 @@ class SettingsPage(QWidget):
             )
         self._reminders_card.retranslate()
         self._set_switch_caption(self._cb_reminders, tr("settings_reminders_enable"))
+        if hasattr(self, "_add_device_button"):
+            self._add_device_button.setText(tr("settings_add_device"))
         self._update_reminders_copy()
         self._rockbox_card.retranslate()
         self._rockbox_desc.setText(tr("settings_rockbox_desc"))

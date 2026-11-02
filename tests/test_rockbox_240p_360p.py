@@ -240,3 +240,45 @@ def test_wizard_instantiates_with_four_pages():
     wiz._stop_watch()
     wiz.close()
     app.processEvents()
+
+
+def test_type_b_asset_selection_preferred_over_type_a():
+    """Verify that when Type B is selected, Type B assets are picked and never fall back to Type A."""
+    assets = [
+        {"name": "rom.zip", "browser_download_url": "https://x/rom.zip"},
+        {"name": "rom_type_b.zip", "browser_download_url": "https://x/rom_type_b.zip"},
+    ]
+    rel = {
+        "tag_name": "type-b-v1.0",
+        "name": "type-b-v1.0",
+        "body": "",
+        "published_at": "2026-01-01T00:00:00Z",
+        "assets": assets,
+        "rom_variants": catalog._release_rom_variants(assets, "type-b-v1.0", "rockbox-y1/rockbox"),
+        "prerelease": False,
+        "source_repo": "rockbox-y1/rockbox",
+    }
+    c = _client([rel])
+    rows_b = c.releases_for_package(PKG, "Y1", selected_type="B")
+    assert len(rows_b) == 1
+    assert rows_b[0]["asset_name"] == "rom_type_b.zip"
+    assert rows_b[0]["download_url"] == "https://x/rom_type_b.zip"
+
+    rows_a = c.releases_for_package(PKG, "Y1", selected_type="A")
+    assert len(rows_a) == 1
+    assert rows_a[0]["asset_name"] == "rom.zip"
+    assert rows_a[0]["download_url"] == "https://x/rom.zip"
+
+
+def test_type_b_extract_dir_and_dest_isolation():
+    """Verify that Type A and Type B downloads have distinct archive paths and extract directories."""
+    from src.flash_service import compute_extract_dir
+    dest_a = Path("/downloads/rockbox-y1_stable-v0.5_rom.zip")
+    dest_b = Path("/downloads/rockbox-y1_stable-v0.5_rom_type_b.zip")
+    extract_a = compute_extract_dir(dest_a)
+    extract_b = compute_extract_dir(dest_b)
+    assert dest_a != dest_b
+    assert extract_a != extract_b
+    assert "type_b" in str(extract_b)
+    assert "type_b" not in str(extract_a)
+

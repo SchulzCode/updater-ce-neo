@@ -499,7 +499,7 @@ def test_post_install_completion_uses_a_globe_and_view_guide(qapp, monkeypatch):
         assert not page._view_guide_btn.isHidden()
         page._open_view_guide()
         page._open_coffee_page()
-        assert opened == ["https://example.test/guide", "https://example.test/guide"]
+        assert opened == ["https://example.test/steps", "https://example.test/guide"]
 
         # Without a second URL View Guide falls back to post_install and the
         # coffee button is the usual ko-fi page.
@@ -628,3 +628,102 @@ def test_adb_apk_install_worker_and_themes_journey_apk_stage(tmp_path, monkeypat
     assert results == [(True, "Success")]
     journey.mark_completion_shown()
     assert not journey.is_apk_stage
+
+
+def test_guided_power_off_and_keep_data_flow(qapp):
+    from src.ui.main_window import MainWindow
+    from src import manifest, catalog
+
+    win = MainWindow()
+    try:
+        win.show()
+        pkgs = manifest.load_snapshot_manifest()
+        catalog.LIVE_CATALOG = pkgs
+        rondo_pkg = next(p for p in pkgs if "rondo" in p.name.lower())
+        win._package_name = "Rondo 1.0.0 for Y1"
+        win._package_model = "Y1"
+        win._package_path = "/tmp/fake_rondo.zip"
+        win._select_page._details_package = rondo_pkg
+        win._select_page._current_selected_rel = {"tag_name": "v1.0.0", "html_url": "https://github.com/fake"}
+
+        # Stage 1: Disconnect & Power Off
+        win._show_device_prep()
+        fp = win._flash_page
+        assert fp._wait_continue_btn._symbol == "next"
+        assert fp._wait_cancel_btn._symbol == "cancel"
+        assert not fp._keep_data_cb.isHidden()
+        assert not fp._keep_data_cb.isChecked()
+        assert not fp._keep_data_microsd_note.isHidden()
+        assert fp._keep_data_choice.isHidden()
+
+        # Next without Keep Data: directly proceeds
+        win._on_power_off_continue()
+        assert win._pre_install_guided is True
+        assert win._keep_data is False
+
+        # Reset & Next with Keep Data (Single firmware: Rondo)
+        win._show_device_prep()
+        fp._keep_data_cb.setChecked(True)
+        win._on_power_off_continue()
+        assert win._keep_data_confirm_pending is True
+        assert fp._wait_continue_btn._symbol == "check"
+        assert fp._wait_cancel_btn._symbol == "cancel"
+        assert fp._keep_data_choice.isHidden()
+        assert "Rondo" in fp._wait_prompt_label.text()
+
+        # Cancel confirmation -> goes to erase confirmation
+        win._on_cancel_wait()
+        assert win._keep_data_erase_confirm_pending is True
+        assert "try-anyway" in fp._keep_data_hint.text()
+
+        # Try Anyway link subverts restriction
+        win._on_keep_data_try_anyway()
+        assert win._keep_data is True
+        assert win._pre_install_guided is True
+
+        # Multiple firmware options (Stock / Koensayr)
+        stock_pkg = next(p for p in pkgs if p.name == "Original Software" and p.model == "Y1")
+        win._package_name = "Original Software 3.1.2 for Y1"
+        win._package_model = "Y1"
+        win._select_page._details_package = stock_pkg
+        win._show_device_prep()
+        fp._keep_data_cb.setChecked(True)
+        win._on_power_off_continue()
+        assert win._keep_data_confirm_pending is True
+        assert fp._wait_continue_btn._symbol == "next"
+        assert fp._wait_cancel_btn._symbol == "cancel"
+        assert not fp._keep_data_choice.isHidden()
+        assert fp._keep_data_choice.count() > 1
+    finally:
+        win.close()
+
+
+def test_select_page_release_notes_layout_no_overlap(qapp):
+    from src.ui.main_window import MainWindow
+    from src.i18n import translator
+
+    win = MainWindow()
+    try:
+        win.show()
+        translator().set_language("az")
+        win._retranslate_all()
+        page = win._select_page
+        if page._release_list.count() > 0:
+            page._release_list.setCurrentRow(0)
+            page._is_translated = True
+            page._update_translate_link()
+        qapp.processEvents()
+        win._fit_window_to_select_content()
+        qapp.processEvents()
+        page.layout().activate()
+        page._notes_group.layout().activate()
+        qapp.processEvents()
+
+        notes_geom = page._notes.geometry()
+        trans_geom = page._translate_label.geometry()
+        see_more_geom = page._see_more_label.geometry()
+
+        assert notes_geom.bottom() < trans_geom.top()
+        assert trans_geom.bottom() < see_more_geom.top()
+    finally:
+        win.close()

@@ -742,7 +742,7 @@ class _RoundNextButton(QPushButton):
         # moves the install forward wears the accent colour.
         self._accent = bool(accent)
         self.setObjectName("roundNextButton" if accent else "roundGlyphButton")
-        self.setCursor(Qt.ArrowCursor)
+        self.setCursor(Qt.PointingHandCursor)
         # The widget keeps a few pixels of room around the disc for its shadow.
         self.setFixedSize(ROUND_NEXT_BUTTON_PX, ROUND_NEXT_BUTTON_PX)
         self.setFlat(True)
@@ -1733,28 +1733,25 @@ class FlashPage(QWidget):
             text.setWordWrap(True)
             self._guide_texts.append((key, text))
 
-        # Paperclip hint with diagram image and model-specific wording
+        # Paperclip hint with diagram image and model-specific wording in the main card
         self._paperclip_hint = _status_label("")
         hint_font = self._paperclip_hint.font()
         hint_font.setPixelSize(12)
         self._paperclip_hint.setFont(hint_font)
-        self._paperclip_hint.set_column_width(196)
         self._paperclip_hint.setWordWrap(True)
         self._paperclip_hint.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
 
         self._paperclip_img = _SvgVectorWidget()
         self._paperclip_img.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
-        self._paperclip_hint_host = QFrame()
-        self._paperclip_hint_host.setProperty("cssClass", "card")
-        self._paperclip_hint_host.setStyleSheet(
-            "QFrame { background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; }"
-        )
-        hint_layout = QHBoxLayout(self._paperclip_hint_host)
-        hint_layout.setContentsMargins(10, 8, 10, 8)
-        hint_layout.setSpacing(12)
-        hint_layout.addWidget(self._paperclip_img, 0, Qt.AlignmentFlag.AlignVCenter)
-        hint_layout.addWidget(self._paperclip_hint, 1, Qt.AlignmentFlag.AlignVCenter)
+        self._paperclip_hint_host = QWidget()
+        self._paperclip_hint_host.setObjectName("paperclipHintHost")
+        self._paperclip_hint_host.setStyleSheet("background: transparent; border: none; margin-top: 6px;")
+        hint_layout = QVBoxLayout(self._paperclip_hint_host)
+        hint_layout.setContentsMargins(0, 4, 0, 4)
+        hint_layout.setSpacing(8)
+        hint_layout.addWidget(self._paperclip_hint)
+        hint_layout.addWidget(self._paperclip_img, 0, Qt.AlignmentFlag.AlignLeft)
         self._paperclip_hint_host.setVisible(False)
         copy.addWidget(self._paperclip_hint_host)
         self._update_paperclip_hint()
@@ -1961,6 +1958,16 @@ class FlashPage(QWidget):
         self._intro = SupportIntro()
         self._appeal_label = self._intro.headline
         appeal_layout.addWidget(self._intro)
+
+        self._completion_guide_hint = QLabel()
+        self._completion_guide_hint.setWordWrap(True)
+        self._completion_guide_hint.setProperty("cssClass", "dimmed")
+        self._completion_guide_hint.setAutoFillBackground(False)
+        self._completion_guide_hint.setStyleSheet("")
+        _apply_card_text(self._completion_guide_hint)
+        self._completion_guide_hint.setVisible(False)
+        appeal_layout.addWidget(self._completion_guide_hint)
+
         # One plain sentence under the headline: what the app is, and what a
         # coffee actually pays for. The appeal's own words, not the Support
         # page's project pitch.
@@ -1971,19 +1978,20 @@ class FlashPage(QWidget):
         self._appeal_body.setStyleSheet("")
         _apply_card_text(self._appeal_body)
         appeal_layout.addWidget(self._appeal_body)
+
         actions = QHBoxLayout()
         actions.setSpacing(8)
         self._view_guide_btn = QPushButton(tr("post_install_view_guide_btn"))
-        self._view_guide_btn.setCursor(Qt.ArrowCursor)
+        self._view_guide_btn.setCursor(Qt.PointingHandCursor)
         self._view_guide_btn.setStyleSheet("")
         self._view_guide_btn.clicked.connect(self._open_view_guide)
         self._view_guide_btn.setVisible(False)
         self._coffee_btn = QPushButton(tr("donate_completion_coffee"))
-        self._coffee_btn.setCursor(Qt.ArrowCursor)
+        self._coffee_btn.setCursor(Qt.PointingHandCursor)
         self._coffee_btn.setStyleSheet("")
         self._coffee_btn.clicked.connect(self._open_coffee_page)
         self._not_now_btn = QPushButton(tr("donate_not_now"))
-        self._not_now_btn.setCursor(Qt.ArrowCursor)
+        self._not_now_btn.setCursor(Qt.PointingHandCursor)
         self._not_now_btn.setStyleSheet("")
         self._not_now_btn.clicked.connect(self._on_not_now)
         actions.addWidget(self._view_guide_btn)
@@ -1991,6 +1999,16 @@ class FlashPage(QWidget):
         actions.addWidget(self._not_now_btn)
         actions.addStretch(1)
         appeal_layout.addLayout(actions)
+
+        self._appeal_body_below = QLabel()
+        self._appeal_body_below.setWordWrap(True)
+        self._appeal_body_below.setProperty("cssClass", "dimmed")
+        self._appeal_body_below.setAutoFillBackground(False)
+        self._appeal_body_below.setStyleSheet("")
+        _apply_card_text(self._appeal_body_below)
+        self._appeal_body_below.setVisible(False)
+        appeal_layout.addWidget(self._appeal_body_below)
+
         self._appeal_dont = QLabel(self._dont_ask_html())
         self._appeal_dont.setTextFormat(Qt.TextFormat.RichText)
         self._appeal_dont.setTextInteractionFlags(
@@ -2036,7 +2054,7 @@ class FlashPage(QWidget):
         self._download_progress = InstallProgress()
         _configure_progress(self._download_progress)
 
-        self._download_cancel_btn = _RoundNextButton(symbol="back", accent=False)
+        self._download_cancel_btn = _RoundNextButton(symbol="cancel", accent=False)
         self._download_cancel_btn.setObjectName("softwareUpdateCancelBtn")
         self._download_cancel_btn.setToolTip(tr("flash_btn_cancel"))
         self._download_cancel_btn.clicked.connect(self._on_cancel_download)
@@ -2044,8 +2062,8 @@ class FlashPage(QWidget):
         self._download_next_btn = _RoundNextButton(symbol="next", accent=True)
         self._download_next_btn.setObjectName("downloadNextPlaceholderBtn")
         self._download_next_btn.setEnabled(False)
-        self._download_next_btn.setVisible(True)
-        chips = [self._download_cancel_btn, self._download_next_btn]
+        self._download_next_btn.setVisible(False)
+        chips = [self._download_cancel_btn]
 
         self._download_card, self._download_head, copy = self._new_progress_card(
             self._download_icon,
@@ -2192,7 +2210,8 @@ class FlashPage(QWidget):
                 ok = img_label.load_svg(img_path, txt)
                 img_label.setVisible(ok)
                 if ok and host is not None:
-                    host.setMinimumHeight(int(img_label.height()) + 18)
+                    hint_h = label.sizeHint().height() if label.isVisible() else 0
+                    host.setMinimumHeight(int(img_label.height()) + hint_h + 12)
             else:
                 if not source.isNull():
                     img_label.setPixmap(source)
@@ -2200,7 +2219,8 @@ class FlashPage(QWidget):
                     img_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
                     img_label.setVisible(True)
                     if host is not None:
-                        host.setMinimumHeight(int(source.deviceIndependentSize().height()) + 18)
+                        hint_h = label.sizeHint().height() if label.isVisible() else 0
+                        host.setMinimumHeight(int(source.deviceIndependentSize().height()) + hint_h + 12)
                 else:
                     img_label.setVisible(False)
                     img_label.setFixedSize(0, 0)
@@ -2241,6 +2261,10 @@ class FlashPage(QWidget):
     def begin_run(self) -> None:
         """A new flash starts with the progress card up; donations apply at its end."""
         self._donations_shown = False
+        self._complete = False
+        self._failed = False
+        if hasattr(self, "_post_install_hint"):
+            self._post_install_hint.setVisible(False)
         # Set per install by set_post_install_urls; the empty default keeps a
         # completion screen reached without one from failing.
         self._post_install_url = ""
@@ -2475,6 +2499,8 @@ class FlashPage(QWidget):
         self._switch_view(self._flashing_view)
         failed = self._failed
         done = bool(getattr(self, "_complete", False)) and not failed
+        if not done and hasattr(self, "_post_install_hint"):
+            self._post_install_hint.setVisible(False)
         self._warning.setVisible(self._flash_warning_wanted())
         if hasattr(self, "_flash_retry_btn"):
             self._flash_retry_btn.setVisible(not done)
@@ -3492,6 +3518,7 @@ class FlashPage(QWidget):
         button runs the password prompt, and the connect guidance follows it.
         """
         self._failed = False
+        self._complete = False
         self._prompt_only = True
         self._wait_copy = "power_off"
         self._power_off_recovery = False
@@ -3539,6 +3566,8 @@ class FlashPage(QWidget):
             return
         visible = self._keep_data_visible()
         cb.setVisible(visible)
+        if hasattr(self, "_keep_data_microsd_note"):
+            self._keep_data_microsd_note.setVisible(visible)
         if not visible:
             self._keep_data_warning.setVisible(False)
         self._update_keep_data_warning()
@@ -3591,12 +3620,12 @@ class FlashPage(QWidget):
             warning.setText(text)
         warning.setVisible(bool(text))
         if microsd_note is not None:
-            microsd_visible = visible and (cb.isChecked() or not getattr(self, "_keep_data_allowed", True))
+            microsd_visible = visible
             microsd_note.setVisible(microsd_visible)
         self._notify_geometry_change()
 
     def show_keep_data_confirmation(
-        self, question: str, hint: str, choices=(), selected: str = ""
+        self, question: str, hint: str = "", choices=(), selected: str = ""
     ) -> None:
         """Ask for the currently installed firmware on the same progress card."""
         self._keep_data_confirm_active = True
@@ -3618,14 +3647,16 @@ class FlashPage(QWidget):
         self._keep_data_hint.setVisible(bool(hint))
         if hasattr(self, "_keep_data_microsd_note"):
             self._keep_data_microsd_note.setVisible(True)
-        # A yes/no question: the pair reads as a tick (or a circle where that
-        # culture means yes) and an X, never as back and forward arrows.
-        self._set_yes_no_glyphs(True)
+        # If there are dropdown choices, use Cancel (X) and Next (Arrow);
+        # if a single Yes/No question, use No (X) and Yes (Checkmark ✓).
+        self._set_yes_no_glyphs(len(names) <= 1)
         self._wait_continue_btn.setVisible(True)
         self._wait_continue_btn.setEnabled(True)
         self._wait_cancel_btn.setVisible(True)
         self._wait_cancel_btn.setEnabled(True)
         self._set_determinate(self._wait_progress_bar, 0)
+        if hasattr(self, "_paperclip_hint_host"):
+            self._paperclip_hint_host.setVisible(False)
         self._notify_geometry_change()
 
     def show_keep_data_erase_confirmation(self, question: str, explainer: str = "") -> None:
@@ -3651,6 +3682,8 @@ class FlashPage(QWidget):
         self._wait_cancel_btn.setVisible(True)
         self._wait_cancel_btn.setEnabled(True)
         self._set_determinate(self._wait_progress_bar, 0)
+        if hasattr(self, "_paperclip_hint_host"):
+            self._paperclip_hint_host.setVisible(False)
         self._notify_geometry_change()
 
     def on_try_anyway(self, cb) -> None:
@@ -3663,26 +3696,25 @@ class FlashPage(QWidget):
                 cb()
 
     def _set_yes_no_glyphs(self, yes_no: bool) -> None:
-        """Swap the wait card's chips between Next/Back and Yes/No glyphs."""
+        """Swap the wait card's chips between Next/Cancel and Yes/No glyphs."""
         if yes_no:
-            from i18n import current_language
+            from ..i18n import current_language
 
             # Where a circle means yes (Japan), the yes chip is a ring and the
             # no chip is an X; elsewhere the yes chip is a tick.
             yes_symbol = "circle" if str(current_language()).startswith("ja") else "check"
-            self._wait_continue_btn._symbol = yes_symbol
-            self._wait_cancel_btn._symbol = "cancel"
+            self._wait_continue_btn.set_symbol(yes_symbol)
+            self._wait_cancel_btn.set_symbol("cancel")
             labels = (tr("btn_yes"), tr("btn_no"))
         else:
-            self._wait_continue_btn._symbol = "next"
-            self._wait_cancel_btn._symbol = "back"
-            labels = (tr("btn_next"), tr("btn_back"))
+            self._wait_continue_btn.set_symbol("next")
+            self._wait_cancel_btn.set_symbol("cancel")
+            labels = (tr("btn_next"), tr("btn_cancel"))
         # Tooltips and accessible names follow the glyphs, so the hover text
         # reads Yes/No on a question rather than the stale Next/Back labels.
         for btn, label in zip((self._wait_continue_btn, self._wait_cancel_btn), labels):
             btn.setToolTip(label)
             btn.setAccessibleName(label)
-            btn.rebuild_arrow()
 
     def keep_data_confirm_choice(self) -> str:
         return self._keep_data_choice.currentText() if hasattr(self, "_keep_data_choice") else ""
@@ -3699,6 +3731,7 @@ class FlashPage(QWidget):
         if hasattr(self, "_keep_data_microsd_note"):
             self._keep_data_microsd_note.setVisible(False)
         self._sync_keep_data_visibility()
+        self._update_paperclip_hint()
 
     def show_gui_handoff_prompt(self, hint: str) -> None:
         """Power-off line plus a small download-mode hint. Continue does not flash."""
@@ -3835,14 +3868,19 @@ class FlashPage(QWidget):
         donations_shown = bool(getattr(self, "_donations_shown", False))
         post_install = getattr(self, "_post_install_url", "")
         post_install_2 = getattr(self, "_post_install_url_2", "")
+        is_complete = getattr(self, "_complete", False)
         if hasattr(self, "_done_mark"):
             globe = bool(post_install) and not donations_shown
             self._done_mark.set_symbol("www" if globe else "complete")
             self._done_mark.setToolTip(tr("post_install_globe_tooltip") if globe else "")
         if hasattr(self, "_post_install_hint"):
-            self._post_install_hint.setVisible(bool(post_install) and not donations_shown)
+            self._post_install_hint.setVisible(bool(post_install) and not donations_shown and is_complete)
         if hasattr(self, "_view_guide_btn"):
-            self._view_guide_btn.setVisible(bool(post_install or post_install_2) and donations_shown)
+            if post_install and (not post_install_2 or post_install != post_install_2):
+                self._view_guide_btn.setText(tr("post_install_view_guide_btn"))
+                self._view_guide_btn.setVisible(donations_shown)
+            else:
+                self._view_guide_btn.setVisible(False)
         if hasattr(self, "_coffee_btn"):
             if post_install_2:
                 self._coffee_btn.setText(tr("donate_completion_coffee_guide"))
@@ -3852,24 +3890,43 @@ class FlashPage(QWidget):
     def _open_post_install_guide(self) -> None:
         """Globe and inline hint: the firmware's setup page (``post_install``)."""
         from ..browser import open_browser
-
-        url = getattr(self, "_post_install_url", "")
+        from ..player_update_check import is_donation_ui_disabled
+        donations_enabled = not is_donation_ui_disabled()
+        url = getattr(self, "_post_install_url", "") or getattr(self, "_post_install_url_2", "")
         if url:
+            if not donations_enabled:
+                sep = "&" if "?" in url else "?"
+                if "donations=" not in url:
+                    url = f"{url}{sep}donations=false"
             open_browser(url)
 
     def _open_view_guide(self) -> None:
-        """View Guide (donations shown): ``post_install2``, falling back to ``post_install``."""
+        """View Guide (donations shown): opens post_install link."""
         from ..browser import open_browser
-
-        url = getattr(self, "_post_install_url_2", "") or getattr(self, "_post_install_url", "")
+        from ..player_update_check import is_donation_ui_disabled
+        donations_enabled = not is_donation_ui_disabled()
+        url = getattr(self, "_post_install_url", "") or getattr(self, "_post_install_url_2", "") or getattr(self, "_post_install_url_2", "")
         if url:
+            if not donations_enabled:
+                sep = "&" if "?" in url else "?"
+                if "donations=" not in url:
+                    url = f"{url}{sep}donations=false"
             open_browser(url)
 
     def _open_coffee_page(self) -> None:
         from ..browser import open_browser
         from ..config import DONATION_LINKS
+        from ..player_update_check import is_donation_ui_disabled
 
-        open_browser(getattr(self, "_post_install_url_2", "") or DONATION_LINKS["kofi"])
+        post_install_2 = getattr(self, "_post_install_url_2", "")
+        if post_install_2:
+            if is_donation_ui_disabled():
+                sep = "&" if "?" in post_install_2 else "?"
+                if "donations=" not in post_install_2:
+                    post_install_2 = f"{post_install_2}{sep}donations=false"
+            open_browser(post_install_2)
+        else:
+            open_browser(DONATION_LINKS["kofi"])
 
     def _render_appeal_copy(self) -> None:
         """(Re)write the appeal's words for this language, install and model.
@@ -3894,14 +3951,32 @@ class FlashPage(QWidget):
                 self._intro.subtitle.setText(f"{self._intro.subtitle.text()}\n{steps}")
             _apply_card_text(self._intro.headline)
             _apply_card_text(self._intro.subtitle)
+        has_guide = bool(getattr(self, "_post_install_url_2", "") or getattr(self, "_post_install_url", ""))
+        if hasattr(self, "_completion_guide_hint"):
+            self._completion_guide_hint.setText(tr("post_install_explain_completion"))
+            self._completion_guide_hint.setVisible(has_guide)
+            _apply_card_text(self._completion_guide_hint)
+        appeal_variants = (
+            "donate_completion_body",
+            "donate_completion_body_reciprocity",
+            "donate_completion_body_community",
+            "donate_completion_body_effort",
+            "donate_completion_body_momentum",
+            "donate_completion_body_transparency",
+        )
+        if not getattr(self, "_active_appeal_key", None):
+            import random
+            self._active_appeal_key = random.choice(appeal_variants)
+        appeal_text = tr(self._active_appeal_key)
         if hasattr(self, "_appeal_body"):
-            self._appeal_body.setText(tr("donate_completion_body"))
+            self._appeal_body.setText(appeal_text)
+            self._appeal_body.setVisible(not has_guide)
             _apply_card_text(self._appeal_body)
-        if hasattr(self, "_coffee_btn"):
-            if getattr(self, "_post_install_url_2", ""):
-                self._coffee_btn.setText(tr("donate_completion_coffee_guide"))
-            else:
-                self._coffee_btn.setText(tr("donate_completion_coffee"))
+        if hasattr(self, "_appeal_body_below"):
+            self._appeal_body_below.setText(appeal_text)
+            self._appeal_body_below.setVisible(has_guide)
+            _apply_card_text(self._appeal_body_below)
+        self._apply_post_install_state()
         if hasattr(self, "_not_now_btn"):
             self._not_now_btn.setText(tr("donate_not_now"))
         if hasattr(self, "_appeal_dont"):
@@ -3962,6 +4037,16 @@ class FlashPage(QWidget):
             return
         if hasattr(self, "_intro"):
             self._intro.set_keys(THEMES_COMPLETION_KEYS if themes_installed else COMPLETION_KEYS)
+        import random
+        appeal_variants = (
+            "donate_completion_body",
+            "donate_completion_body_reciprocity",
+            "donate_completion_body_community",
+            "donate_completion_body_effort",
+            "donate_completion_body_momentum",
+            "donate_completion_body_transparency",
+        )
+        self._active_appeal_key = random.choice(appeal_variants)
         self._render_appeal_copy()
         self._appeal.setVisible(bool(visible))
         self._notify_geometry_change()
@@ -4257,7 +4342,6 @@ class FlashPage(QWidget):
         flow = getattr(self, "_status_flow", None)
         if flow is not None:
             flow.refresh()
-        self._notify_geometry_change()
 
     def set_prep_eta_seconds(self, seconds: int) -> None:
         """The Device Prep stage's own remaining time, in whole seconds.
@@ -4279,7 +4363,6 @@ class FlashPage(QWidget):
         flow = getattr(self, "_status_flow", None)
         if flow is not None:
             flow.refresh()
-        self._notify_geometry_change()
 
     def _format_eta_with_prep(self, eta_str: str) -> str:
         install_eta = self._parse_eta_seconds(eta_str)
@@ -4442,9 +4525,10 @@ class FlashPage(QWidget):
         """Repaint status lines from the live theme. No opaque backdrop."""
         names = (
             "_prep_pkg_label", "_prep_step", "_wait_pkg_label", "_wait_prompt_label",
-            "_flash_pkg_label", "_step_label", "_eta_label", "_warning",
-            "_download_pkg_label", "_download_status_label", "_download_heading",
-            "_appeal_label", "_appeal_body", "_paperclip_hint",
+            "_flash_pkg_label", "_step_label", "_eta_label", "_partition_progress_label",
+            "_warning", "_download_pkg_label", "_download_status_label", "_download_heading",
+            "_appeal_label", "_appeal_body", "_appeal_body_below", "_completion_guide_hint",
+            "_paperclip_hint", "_keep_data_cb", "_keep_data_microsd_note",
         )
         for name in names:
             label = getattr(self, name, None)
@@ -4613,14 +4697,16 @@ class FlashPage(QWidget):
 
         h = 0
         if cur_view is self._flashing_view:
-            card_h = self._progress_card.sizeHint().height()
+            card_h = (
+                self._progress_card.sizeHint().height()
+                if hasattr(self, "_progress_card") and self._progress_card.isVisible()
+                else 0
+            )
             warn_h = 0
             if hasattr(self, "_warning") and self._warning.isVisible():
                 warn_h = max(self._warning.sizeHint().height(), self._warning.heightForWidth(self.text_column_width())) + 8
             appeal_h = 0
             if hasattr(self, "_appeal") and self._appeal.isVisible():
-                # sizeHint() ignores word-wrap; the wrapped copy needs the
-                # height of the column it will actually be drawn in.
                 appeal_layout = self._appeal.layout()
                 wrapped_h = (
                     appeal_layout.totalHeightForWidth(max(1, int(self.text_column_width())))
@@ -4628,7 +4714,10 @@ class FlashPage(QWidget):
                     else 0
                 )
                 appeal_h = max(self._appeal.sizeHint().height(), wrapped_h) + 8
-            h = card_h + warn_h + appeal_h
+            complete_note_h = 0
+            if hasattr(self, "_complete_note") and self._complete_note.isVisible():
+                complete_note_h = max(self._complete_note.sizeHint().height(), self._complete_note.heightForWidth(self.text_column_width())) + 8
+            h = card_h + warn_h + appeal_h + complete_note_h
         elif cur_view is self._waiting_view:
             card_h = self._wait_card.sizeHint().height()
             hint_h = 0
@@ -4640,8 +4729,19 @@ class FlashPage(QWidget):
                     hint_h = self._paperclip_hint_host.sizeHint().height() + 6
                 else:
                     head_h = self._wait_head.sizeHint().height() if hasattr(self, "_wait_head") else 48
-                    prompt_h = self._wait_prompt_label.sizeHint().height() if hasattr(self, "_wait_prompt_label") else 40
-                    min_needed = head_h + prompt_h + self._paperclip_hint_host.minimumHeight() + 48
+                    wait_col = getattr(self, "_wait_col", None)
+                    if wait_col is not None:
+                        copy_h = sum(
+                            wait_col.itemAt(i).widget().sizeHint().height() + wait_col.spacing()
+                            for i in range(wait_col.count())
+                            if wait_col.itemAt(i) is not None
+                            and wait_col.itemAt(i).widget() is not None
+                            and wait_col.itemAt(i).widget().isVisible()
+                        )
+                    else:
+                        prompt_h = self._wait_prompt_label.sizeHint().height() if hasattr(self, "_wait_prompt_label") else 40
+                        copy_h = prompt_h + self._paperclip_hint_host.minimumHeight()
+                    min_needed = head_h + copy_h + 36
                     card_h = max(card_h, min_needed)
             h = card_h + hint_h
         elif cur_view is self._preparing_view:

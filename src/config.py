@@ -310,7 +310,14 @@ def detect_model_and_type_from_name(name_or_url: str) -> tuple[str, str | None]:
         return "Y2", None
 
     # 3. Type B (Y1 variant)
-    if "type_b" in base or "type-b" in base or "rom_type_b" in base or "rom-type-b" in base:
+    if (
+        "type_b" in base
+        or "type-b" in base
+        or "typeb" in base
+        or "rom_type_b" in base
+        or "rom-type-b" in base
+        or base.endswith(("_b.zip", "-b.zip"))
+    ):
         return "Y1", "B"
 
     # 4. Type A (Y1 variant)

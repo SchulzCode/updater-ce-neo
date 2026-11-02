@@ -44,13 +44,21 @@ def get_macos_version() -> tuple[int, int, int]:
 MACOS_VERSION = get_macos_version()
 
 # Compatibility checks:
-# macOS 13.0 = Ventura (baseline target)
+# macOS 11.0 = Big Sur (baseline target)
+# macOS 12.0 = Monterey
+# macOS 13.0 = Ventura
 # macOS 14.0 = Sonoma
 # macOS 15.0 = Sequoia
 # macOS 26.0+ = Tahoe, 27.0+ = Golden Gate (Liquid Glass introduction)
+BIG_SUR_VERSION = (11, 0, 0)
+MONTEREY_VERSION = (12, 0, 0)
 VENTURA_VERSION = (13, 0, 0)
 TAHOE_VERSION = (26, 0, 0)
 GOLDEN_GATE_VERSION = (27, 0, 0)
+
+
+def is_big_sur_or_newer() -> bool:
+    return IS_MACOS and MACOS_VERSION >= BIG_SUR_VERSION
 
 
 def is_ventura_or_newer() -> bool:
@@ -82,10 +90,10 @@ def is_windows_acrylic_supported() -> bool:
 
 
 def is_glass_supported() -> bool:
-    """Return True if running on supported macOS (Ventura through Golden Gate+)."""
+    """Return True if running on supported macOS (macOS 11 Big Sur through Golden Gate+)."""
     if not IS_MACOS:
         return False
-    if not is_ventura_or_newer():
+    if not is_big_sur_or_newer():
         return False
     try:
         from PySide6.QtGui import QGuiApplication
@@ -1563,6 +1571,16 @@ def apply_dialog_theme(dialog: QDialog) -> None:
         try:
             prepare_window_for_glass(dialog)
             apply_glass(dialog, corner_radius=16.0, dark=dark)
+            try:
+                view = _get_nsview(dialog)
+                if view:
+                    ns_win = view.window()
+                    if ns_win:
+                        from AppKit import NSWindowTitleVisible
+                        ns_win.setTitleVisibility_(NSWindowTitleVisible)
+                        ns_win.setMovableByWindowBackground_(True)
+            except Exception:
+                pass
             try:
                 dialog.installEventFilter(_DialogThemeWatcher.instance())
             except Exception:

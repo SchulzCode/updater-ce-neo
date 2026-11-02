@@ -74,19 +74,21 @@
   #endif
 #endif
 
-; The SP Flash Tool and MediaTek Download Agents are the device flashing payload.
-; Refuse to compile an installer that would ship without them.
-#if !FileExists(AddBackslash(MyDistDir) + "SP_Flash_Tool\flash_tool.exe")
-  #error "SP Flash Tool (flash_tool.exe) is missing from the payload. Run build_windows.ps1 again."
-#endif
-#if !FileExists(AddBackslash(MyDistDir) + "SP_Flash_Tool\MTK_AllInOne_DA.bin")
-  #error "MediaTek Download Agent MTK_AllInOne_DA.bin is missing from the payload."
-#endif
-#if !FileExists(AddBackslash(MyDistDir) + "SP_Flash_Tool\DA_PL.bin")
-  #error "MediaTek Download Agent DA_PL.bin is missing from the payload."
-#endif
-#if !FileExists(AddBackslash(MyDistDir) + "SP_Flash_Tool\DA_SWSEC.bin")
-  #error "MediaTek Download Agent DA_SWSEC.bin is missing from the payload."
+; The SP Flash Tool and MediaTek Download Agents are the device flashing payload on x64.
+; Refuse to compile an x64 installer that would ship without them.
+#ifndef MyIsArm64
+  #if !FileExists(AddBackslash(MyDistDir) + "SP_Flash_Tool\flash_tool.exe")
+    #error "SP Flash Tool (flash_tool.exe) is missing from the payload. Run build_windows.ps1 again."
+  #endif
+  #if !FileExists(AddBackslash(MyDistDir) + "SP_Flash_Tool\MTK_AllInOne_DA.bin")
+    #error "MediaTek Download Agent MTK_AllInOne_DA.bin is missing from the payload."
+  #endif
+  #if !FileExists(AddBackslash(MyDistDir) + "SP_Flash_Tool\DA_PL.bin")
+    #error "MediaTek Download Agent DA_PL.bin is missing from the payload."
+  #endif
+  #if !FileExists(AddBackslash(MyDistDir) + "SP_Flash_Tool\DA_SWSEC.bin")
+    #error "MediaTek Download Agent DA_SWSEC.bin is missing from the payload."
+  #endif
 #endif
 
 [Setup]
@@ -124,12 +126,18 @@ MinVersion=6.3
 ; The application is 64-bit only (PySide6 ships no 32-bit Windows wheels).
 ; Installs are allowed on x64 and arm64 Windows only, and go to the native
 ; 64-bit Program Files. 32-bit Windows is refused with a clear message.
+#ifdef MyIsArm64
+ArchitecturesAllowed=arm64
+ArchitecturesInstallIn64BitMode=arm64
+UninstallDisplayIcon={app}\{#MyAppExeName}
+#else
 ArchitecturesAllowed=x64compatible arm64
 ArchitecturesInstallIn64BitMode=x64compatible arm64
 #ifdef MyIsMediaTek
 UninstallDisplayIcon={app}\SP_Flash_Tool\flash_tool.exe
 #else
 UninstallDisplayIcon={app}\{#MyAppExeName}
+#endif
 #endif
 VersionInfoVersion={#MyAppVersion}
 VersionInfoCompany={#MyAppPublisher}
@@ -250,8 +258,10 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 ; The tool writes history.ini and logs beside flash_tool.exe. A standard
 ; account cannot modify Program Files, so the install grants Users modify
 ; on this folder only.
+#ifndef MyIsArm64
 Name: "{app}\SP_Flash_Tool"; Permissions: users-modify
 Name: "{commonappdata}\SP_FT_Logs"; Permissions: users-modify
+#endif
 
 [Messages]
 FinishedRestartLabel=Setup has finished installing MediaTek SP Driver on your computer. You will need to restart your computer before you can install software on your device.%n%nWould you like to restart now?
@@ -724,7 +734,7 @@ Source: "{#MyRepoRoot}tools\DriverInstall.exe"; DestDir: "{tmp}"; Flags: ignorev
 
 [Icons]
 Name: "{userprograms}\Innioasis Updater"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: startmenuicon; Check: ShouldInstallMainApp
-Name: "{userprograms}\SP Flash Tool"; Filename: "{app}\SP_Flash_Tool\flash_tool.exe"; WorkingDir: "{app}\SP_Flash_Tool"; IconFilename: "{app}\SP_Flash_Tool\flash_tool.exe"; Tasks: startmenuicon
+Name: "{userprograms}\SP Flash Tool"; Filename: "{app}\SP_Flash_Tool\flash_tool.exe"; WorkingDir: "{app}\SP_Flash_Tool"; IconFilename: "{app}\SP_Flash_Tool\flash_tool.exe"; Tasks: startmenuicon; Check: HasSpFlashTool
 Name: "{userprograms}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"; Tasks: startmenuicon
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; Check: ShouldInstallMainApp
 
@@ -866,9 +876,14 @@ begin
     Log('MediaTek SP Driver already detected (unins000.exe); skipping driver installation.');
 end;
 
+function HasSpFlashTool: Boolean;
+begin
+  Result := (not IsArm64) and FileExists(ExpandConstant('{app}\SP_Flash_Tool\flash_tool.exe'));
+end;
+
 function ShouldInstallDriver: Boolean;
 begin
-  Result := not IsMediaTekDriverAlreadyInstalled;
+  Result := (not IsArm64) and (not IsMediaTekDriverAlreadyInstalled);
 end;
 
 function ShouldLaunchMainAppAfterInstall: Boolean;

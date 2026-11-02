@@ -115,8 +115,8 @@ def build_console_config_xml(
 
     The command is always ``<download-only/>``: partitions are written, none
     are formatted. User data is kept only by leaving it out of ``scatter``.
-    ``high-speed="false"`` runs the BROM download at the tool's full write
-    speed (the tool reads any value other than ``"true"`` as full speed).
+    ``high-speed="true"`` runs the BROM download at the tool's fastest write
+    speed (USB 2.0 High Speed 480 Mbps).
 
     Raises :class:`SpConfigError` when the scatter does not tell us the chip
     or storage type, since a wrong guess there is worse than no flash.
@@ -142,7 +142,7 @@ def build_console_config_xml(
             f"        <download-agent>{escape(str(da_file))}</download-agent>",
             f"        <scatter>{escape(str(scatter))}</scatter>",
             *([f"        <authentication>{escape(str(auth_file))}</authentication>"] if auth_file else []),
-            '        <connection type="BromUSB" high-speed="false"'
+            '        <connection type="BromUSB" high-speed="true"'
             ' without-battery="true"'
             f' timeout-count="{int(connection_timeout_ms)}" com-port="" />',
             "    </general>",

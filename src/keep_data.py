@@ -103,9 +103,9 @@ def compatible_software_names(pkg, model: str = "") -> list:
     return names
 
 
-def tracked_package(model: str, pkg, settings: Optional[QSettings] = None):
+def tracked_package(model: str, pkg, settings: Optional[QSettings] = None, hardware_type: str = ""):
     """The tracked install's catalogue package, or ``None`` when unknown."""
-    record = get_device_install(model, settings=settings)
+    record = get_device_install(model, hardware_type=hardware_type, settings=settings)
     if not record:
         return None
     name = str(record.get("software_name") or "").strip()
@@ -120,9 +120,9 @@ def tracked_package(model: str, pkg, settings: Optional[QSettings] = None):
     return None
 
 
-def tracked_is_compatible(model: str, pkg, settings: Optional[QSettings] = None) -> Optional[bool]:
+def tracked_is_compatible(model: str, pkg, settings: Optional[QSettings] = None, hardware_type: str = "") -> Optional[bool]:
     """True/False for a tracked install, ``None`` when nothing is tracked."""
-    tracked = tracked_package(model, pkg, settings=settings)
+    tracked = tracked_package(model, pkg, settings=settings, hardware_type=hardware_type)
     if tracked is None:
         return None
     if _norm(getattr(tracked, "repo", "")) == _norm(getattr(pkg, "repo", "")):
@@ -130,21 +130,23 @@ def tracked_is_compatible(model: str, pkg, settings: Optional[QSettings] = None)
     return bool(family_repos(pkg).intersection(family_repos(tracked)))
 
 
-def keep_data_available(model: str, pkg, settings: Optional[QSettings] = None) -> bool:
+def keep_data_available(model: str, pkg, settings: Optional[QSettings] = None, hardware_type: str = "") -> bool:
     """Whether the Keep Data choice may be offered for this install."""
+    if pkg is not None and getattr(pkg, "do_not_keep_data", False):
+        return False
     if pkg is None:
         return True
     if allow_keep_data_any(settings):
         return True
-    tracked = tracked_is_compatible(model, pkg, settings=settings)
+    tracked = tracked_is_compatible(model, pkg, settings=settings, hardware_type=hardware_type)
     return tracked is not False
 
 
-def needs_confirmation(model: str, pkg, settings: Optional[QSettings] = None) -> bool:
+def needs_confirmation(model: str, pkg, settings: Optional[QSettings] = None, hardware_type: str = "") -> bool:
     """True when the user must confirm the currently installed firmware."""
-    if pkg is None or allow_keep_data_any(settings):
+    if pkg is None or getattr(pkg, "do_not_keep_data", False) or allow_keep_data_any(settings):
         return False
-    return tracked_is_compatible(model, pkg, settings=settings) is None
+    return tracked_is_compatible(model, pkg, settings=settings, hardware_type=hardware_type) is None
 
 
 def keep_data_label(model: str) -> str:

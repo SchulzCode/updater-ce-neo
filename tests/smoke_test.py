@@ -5565,7 +5565,7 @@ def test_macos_universal_app_bundle():
     import plistlib
     with open(info_plist_path, "rb") as f:
         info = plistlib.load(f)
-    assert info.get("LSMinimumSystemVersion") in ("12.0", "13.0")
+    assert info.get("LSMinimumSystemVersion") in ("11.0", "12.0", "13.0")
     assert info.get("CFBundleExecutable") in ("Innioasis Updater", "Updater CE", "Innioasis Updater CE")
 
 
@@ -6494,7 +6494,7 @@ def test_sp_flash_auth_file():
         # Without an auth file the config is still written (full speed, no auth).
         no_auth_xml = sp_console_config.build_console_config_xml(scatter, da, "")
         assert "<authentication>" not in no_auth_xml
-        assert 'high-speed="false"' in no_auth_xml
+        assert 'high-speed="true"' in no_auth_xml
 
         # --- the generated console configuration -----------------------------
         config_path = sp_console_config.write_console_config(
@@ -6544,7 +6544,7 @@ def test_sp_flash_auth_file():
         # --- console arguments (guided flow and terminal install agree) -------
         plain = sp_flash_tool_console_args(str(scatter), str(da))
         assert plain[:2] == ["-r", "-i"], plain
-        assert 'high-speed="false"' in Path(plain[2]).read_text(encoding="utf-8")
+        assert 'high-speed="true"' in Path(plain[2]).read_text(encoding="utf-8")
 
         logged = []
         with_auth = sp_flash_tool_console_args(str(scatter), str(da), str(auth), logged.append)

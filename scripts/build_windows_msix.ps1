@@ -17,7 +17,8 @@ param(
     [string]$OutDir = "",
     [string]$IdentityFile = (Join-Path $PSScriptRoot "msix\msix_identity.json"),
     [string]$SignCert = "",
-    [string]$SignPassword = ""
+    [string]$SignPassword = "",
+    [string]$Arch = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -48,6 +49,9 @@ if (-not $OutDir) {
 }
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 
+$isArm64 = ($Arch -eq "arm64") -or ($env:TARGET_ARCH -eq "arm64") -or ($AppDir -match "arm64")
+$effectiveArch = if ($isArm64) { "arm64" } else { "x64" }
+
 function Find-MakeAppx {
     $cmd = Get-Command makeappx.exe -ErrorAction SilentlyContinue
     if ($cmd) { return $cmd.Source }
@@ -55,11 +59,19 @@ function Find-MakeAppx {
         "${env:ProgramFiles(x86)}\Windows Kits\10\bin",
         "$env:ProgramFiles\Windows Kits\10\bin"
     )
+    $filterArch = if ($isArm64) { '\\arm64\\' } else { '\\x64\\' }
     foreach ($root in $roots) {
         if (-not (Test-Path $root)) { continue }
         $candidate = Get-ChildItem -Path $root -Filter makeappx.exe -Recurse -ErrorAction SilentlyContinue |
-            Where-Object { $_.FullName -match '\\x64\\' } |
+            Where-Object { $_.FullName -match $filterArch } |
             Sort-Object FullName -Descending |
+            Select-Object -First 1
+        if ($candidate) { return $candidate.FullName }
+    }
+    # Fallback to any makeappx.exe under Windows Kits
+    foreach ($root in $roots) {
+        if (-not (Test-Path $root)) { continue }
+        $candidate = Get-ChildItem -Path $root -Filter makeappx.exe -Recurse -ErrorAction SilentlyContinue |
             Select-Object -First 1
         if ($candidate) { return $candidate.FullName }
     }
@@ -97,7 +109,7 @@ $tokens = @{
     "@@DESCRIPTION@@"           = Get-IdentityValue $identity "description" "Innioasis firmware updater."
     "@@APPLICATION_ID@@"        = Get-IdentityValue $identity "applicationId" "UpdaterCE"
     "@@EXECUTABLE@@"            = Get-IdentityValue $identity "executable" "InnioasisUpdater.exe"
-    "@@ARCH@@"                  = Get-IdentityValue $identity "architecture" "x64"
+    "@@ARCH@@"                  = Get-IdentityValue $identity "architecture" $effectiveArch
     "@@VERSION@@"               = $MsixVersion
 }
 
@@ -168,7 +180,8 @@ try {
     # Name the package after the app it contains, so building both front ends
     # leaves two uploadable files rather than one overwritten name.
     $packageBase = [System.IO.Path]::GetFileNameWithoutExtension($tokens["@@EXECUTABLE@@"])
-    $packageName = "$packageBase-$MsixVersion.msix"
+    $archSuffix = if ($isArm64) { "-arm64" } else { "" }
+    $packageName = "$packageBase-$MsixVersion$archSuffix.msix"
     $packagePath = Join-Path $OutDir $packageName
     if (Test-Path $packagePath) { Remove-Item -Force $packagePath }
 

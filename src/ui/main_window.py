@@ -289,12 +289,13 @@ class DraggableHeaderBar(QWidget):
             if caption_button_hit(local.x(), local.y(), bounds) is not None:
                 super().mousePressEvent(event)
                 return
-            if begin_unified_caption_drag(win):
-                event.accept()
-                return
             if win is not None:
                 self._dragging = True
                 self._drag_offset = event.globalPosition().toPoint() - win.pos()
+            if begin_unified_caption_drag(win):
+                event.accept()
+                return
+            if getattr(self, "_dragging", False):
                 event.accept()
                 return
         super().mousePressEvent(event)
@@ -358,8 +359,8 @@ def begin_unified_caption_drag(window) -> bool:
     """Move the window the way its native title bar does.
 
     Windows sends WM_NCLBUTTONDOWN / HTCAPTION, so double-click maximize stays
-    the system's gesture. macOS uses the AppKit window drag. Other desktops
-    use Qt startSystemMove.
+    the system's gesture. macOS uses Qt startSystemMove or AppKit window drag.
+    Other desktops use Qt startSystemMove.
     """
     if window is None:
         return False
@@ -374,6 +375,15 @@ def begin_unified_caption_drag(window) -> bool:
             return True
         except Exception:
             return False
+
+    handle = window.windowHandle() if hasattr(window, "windowHandle") else None
+    if handle is not None:
+        try:
+            if handle.startSystemMove():
+                return True
+        except Exception:
+            pass
+
     if sys.platform == "darwin":
         try:
             import AppKit
@@ -382,7 +392,8 @@ def begin_unified_caption_drag(window) -> bool:
 
             ns_app = AppKit.NSApplication.sharedApplication()
             curr_evt = ns_app.currentEvent()
-            if curr_evt:
+            # In AppKit, performWindowDragWithEvent: strictly requires a mouse-down event (type 1)
+            if curr_evt and int(curr_evt.type()) == 1:
                 view = _get_nsview(window)
                 ns_win = view.window() if view else None
                 if ns_win is not None:
@@ -390,12 +401,6 @@ def begin_unified_caption_drag(window) -> bool:
                     return True
         except Exception:
             pass
-    handle = window.windowHandle() if hasattr(window, "windowHandle") else None
-    if handle is not None:
-        try:
-            return bool(handle.startSystemMove())
-        except Exception:
-            return False
     return False
 
 
@@ -779,6 +784,7 @@ class MainWindow(QMainWindow):
         is_headless = os.environ.get("QT_QPA_PLATFORM") == "offscreen" or bool(os.environ.get("INNIOASIS_HEADLESS"))
         if not is_headless:
             QTimer.singleShot(250, self._start_manifest_worker)
+            QTimer.singleShot(3000, self._check_remote_flags_startup)
             QTimer.singleShot(UPDATE_CHECK_STARTUP_DELAY_MS, self._start_auto_update_check)
             QTimer.singleShot(
                 UPDATE_CHECK_STARTUP_DELAY_MS + 1000,
@@ -946,6 +952,25 @@ class MainWindow(QMainWindow):
         if worker is getattr(self, "_manifest_worker", None):
             self._on_manifest_loaded(entries)
 
+    def _check_remote_flags_startup(self):
+        try:
+            from ..remote_flags import RemoteFlagsWorker, is_remote_flag_active
+            if is_remote_flag_active("reset_all"):
+                self.reset_all_configuration_and_caches()
+                return
+            worker = RemoteFlagsWorker(self)
+            worker.flags_updated.connect(self._on_remote_flags_updated)
+            self._active_workers.add(worker)
+            worker.start()
+        except Exception:
+            pass
+
+    def _on_remote_flags_updated(self, flags: dict):
+        if flags.get("reset_all"):
+            self.reset_all_configuration_and_caches()
+        if hasattr(self, "_settings_page"):
+            self._settings_page.refresh_settings()
+
 
     def _build_ui(self):
         central = QWidget(self)
@@ -967,9 +992,7 @@ class MainWindow(QMainWindow):
                 self._title_bar.setParent(self)
                 self._title_bar.setGeometry(0, 0, self.width(), int(HEADER_CONTENT_HEIGHT))
                 self._title_bar.raise_()
-                # On macOS, centralWidget is inset by 32px by Cocoa QPA.
-                # Setting 12px top margin ensures body begins cleanly at y = 44.
-                central_layout.setContentsMargins(0, 12, 0, 0)
+                self._sync_mac_header_margins()
             else:
                 central_layout.addWidget(self._title_bar)
         else:
@@ -2107,6 +2130,10 @@ class MainWindow(QMainWindow):
             self._download_active = False
             self._prep_active = False
             self._sync_install_nav_entry()
+            from ..flash_service import is_storage_full_error
+            if is_storage_full_error(result):
+                self._show_install_failure("OUT_OF_STORAGE")
+                return
             self._nav_to_page(_PAGE_SELECT)
             self._show_status(f"{tr('sel_download_failed')} \u2014 {result}", 15000)
         else:
@@ -2142,6 +2169,7 @@ class MainWindow(QMainWindow):
                 _ensure_seamless_titlebar(self)
                 apply_glass(self)
                 configure_traffic_lights(self, x_offset=18)
+                self._sync_mac_header_margins()
             elif sys.platform == "win32":
                 from .glass import apply_windows_acrylic, apply_windows_dark_titlebar
 
@@ -2149,6 +2177,22 @@ class MainWindow(QMainWindow):
                 apply_windows_acrylic(self, dark=is_dark())
         finally:
             self._reasserting_chrome = False
+
+    def _sync_mac_header_margins(self) -> None:
+        """Align body layout cleanly under the 44px title bar across macOS appearance states."""
+        if sys.platform != "darwin" or not can_inline_title_with_window_controls():
+            return
+        central = self.centralWidget()
+        if central is None:
+            return
+        layout = central.layout()
+        if layout is None:
+            return
+        cw_y = central.geometry().y()
+        needed_top = max(0, int(HEADER_CONTENT_HEIGHT) - cw_y)
+        m = layout.contentsMargins()
+        if m.top() != needed_top:
+            layout.setContentsMargins(m.left(), needed_top, m.right(), m.bottom())
 
     def _verify_native_chrome(self, *_args):
         """Re-apply the window chrome only when the platform actually lost it.
@@ -2193,11 +2237,11 @@ class MainWindow(QMainWindow):
             if in_bar and not caption_drag_blocked(bar.childAt(local)) and caption_button_hit(
                 local.x(), local.y(), getattr(self, "_caption_button_bounds", None),
             ) is None:
+                self._mw_dragging = True
+                self._mw_drag_offset = event.globalPosition().toPoint() - self.pos()
                 if begin_unified_caption_drag(self):
                     event.accept()
                     return
-                self._mw_dragging = True
-                self._mw_drag_offset = event.globalPosition().toPoint() - self.pos()
                 event.accept()
                 return
         super().mousePressEvent(event)
@@ -2289,6 +2333,7 @@ class MainWindow(QMainWindow):
         if sys.platform == "darwin" and bar is not None:
             bar.setGeometry(0, 0, self.width(), int(HEADER_CONTENT_HEIGHT))
             bar.raise_()
+            self._sync_mac_header_margins()
         if getattr(self, "_size_animating", False):
             return
         self._verify_native_chrome()
@@ -2320,6 +2365,7 @@ class MainWindow(QMainWindow):
                 bar.setGeometry(0, 0, self.width(), int(HEADER_CONTENT_HEIGHT))
                 bar.show()
                 bar.raise_()
+                self._sync_mac_header_margins()
             self._apply_nav_surface()
             nav = getattr(self, "_nav_panel", None)
             if nav is not None:
@@ -3184,9 +3230,9 @@ class MainWindow(QMainWindow):
             and getattr(self, "_settings_page", None) is not None
             and self._settings_page.focused_card() is not None
         )
-        is_hugging = (
+        is_hugging = bool(
             getattr(self, "_hugging_install", False)
-            or (stack is not None and stack.currentIndex() == _PAGE_FLASH)
+            or (stack is not None and stack.currentIndex() in (_PAGE_FLASH, _PAGE_SUPPORT))
             or solo_settings_card
         )
         min_floor = (
@@ -3199,7 +3245,7 @@ class MainWindow(QMainWindow):
             # The rail's community row must stay on screen during an install too.
             nav = getattr(self, "_nav_panel", None)
             if nav is not None:
-                max_h = max(max_h, nav.sizeHint().height() + chrome_h)
+                max_h = max(max_h, nav.minimumSizeHint().height() + chrome_h)
         screen = self.screen()
         if screen is not None:
             available = screen.availableGeometry()
@@ -3275,12 +3321,13 @@ class MainWindow(QMainWindow):
             and getattr(self, "_settings_page", None) is not None
             and self._settings_page.focused_card() is not None
         )
+        is_support = bool(stack.currentIndex() == _PAGE_SUPPORT)
         floor_h = (
             COMPACT_INSTALL_MIN_HEIGHT_NO_DONATIONS
-            if solo_settings_card
+            if (solo_settings_card or is_support)
             else self._content_floor_height()
         )
-        if solo_settings_card:
+        if solo_settings_card or is_support:
             nav = getattr(self, "_nav_panel", None)
             if nav is not None:
                 floor_h = max(floor_h, nav.minimumSizeHint().height() + chrome_h)
@@ -3311,6 +3358,27 @@ class MainWindow(QMainWindow):
             # An animation re-takes the hold in _finish_size_anim; taking it
             # now would freeze the window at the size it is about to leave.
             self._hold_select_window_size()
+
+    def _visible_rail_height(self) -> int:
+        nav = getattr(self, "_nav_panel", None)
+        if nav is None:
+            return 0
+        layout = nav.layout()
+        if layout is None:
+            return nav.minimumSizeHint().height()
+        margins = layout.contentsMargins()
+        total = margins.top() + margins.bottom()
+        spacing = layout.spacing()
+        visible_count = 0
+        for i in range(layout.count()):
+            item = layout.itemAt(i)
+            w = item.widget()
+            if w is not None and w.isVisible():
+                total += max(w.sizeHint().height(), w.minimumSizeHint().height(), 24)
+                visible_count += 1
+        if visible_count > 1:
+            total += spacing * (visible_count - 1)
+        return max(total, 120)
 
     def _adjust_window_geometry(self):
         """Adjust window size to fit the content of the active page without wasted space."""
@@ -3408,11 +3476,11 @@ class MainWindow(QMainWindow):
                 actual_chrome = (
                     status_h + (int(HEADER_CONTENT_HEIGHT) if getattr(self, "_title_bar", None) is not None else 0)
                 )
-                in_wait_connection = False
-                try:
-                    in_wait_connection = hasattr(self, "sm") and getattr(self.sm, "state") == FlashState.S2_WAIT_CONNECTION
-                except Exception:
-                    in_wait_connection = False
+                rail_min = (
+                    self._visible_rail_height() + actual_chrome
+                    if nav is not None
+                    else 0
+                )
                 target_h = max(
                     compact_install_height(
                         page_h=page_h,
@@ -3422,16 +3490,8 @@ class MainWindow(QMainWindow):
                         donations_disabled=donations_disabled,
                     ),
                     page_h + prompt_h + actual_chrome + 8,
+                    rail_min,
                 )
-                # The rail counts during an install too: its community row
-                # (Discord, Reddit, GitHub) sits at the bottom and was clipped
-                # when only the progress card was measured.
-                if nav is not None and not in_wait_connection:
-                    target_h = max(target_h, nav.sizeHint().height() + actual_chrome)
-                elif nav is not None and in_wait_connection:
-                    # During connection waiting, keep the window compact without
-                    # forcing extra height for the full nav/community row.
-                    target_h = min(target_h, page_h + prompt_h + actual_chrome + 24)
             else:
                 # The catalogue is still showing. The short install size is
                 # applied once the progress card is the page on screen. The
@@ -3922,8 +3982,8 @@ class MainWindow(QMainWindow):
             checked = self._log_btn
         elif page_idx == _PAGE_SUPPORT:
             checked = getattr(self, "_support_btn", None)
-        elif install_active and page_idx == _PAGE_FLASH:
-            checked = self._nav_buttons["nav_select_package"][0]
+        elif page_idx == _PAGE_FLASH:
+            checked = self._nav_buttons.get("nav_select_package", (None,))[0]
         else:
             checked = None
             for _key, (btn, idx) in self._nav_buttons.items():
@@ -4509,19 +4569,33 @@ class MainWindow(QMainWindow):
         # stand-in: it is the first thing the user sees when the install starts,
         # and the catalogue already has the image by then.
         self._apply_release_icon(complete=False)
+        self._keep_data_confirm_pending = False
+        self._keep_data_erase_confirm_pending = False
+        self._flash_page.clear_keep_data_confirmation()
         self._flash_page.show_power_off_prompt(permission=permission)
         try:
-            from .. import keep_data
+            from .. import keep_data, catalog
 
             pkg = None
             page = getattr(self, "_select_page", None)
             if page is not None:
                 pkg = getattr(page, "_details_package", None) or page.current_package()
             model = self._package_model or getattr(pkg, "model", "") or ""
+            if pkg is None and model:
+                for candidate in catalog.packages_for_model(model):
+                    if candidate.name and candidate.name.casefold() in (self._package_name or "").casefold():
+                        pkg = candidate
+                        break
             self._keep_data_pkg = pkg
+            names = keep_data.compatible_software_names(pkg, model) if pkg is not None else []
+            base_label = keep_data.keep_data_label(model)
+            if len(names) == 1:
+                label = f"{base_label} ({names[0]})"
+            else:
+                label = base_label
             self._flash_page.set_keep_data_available(
                 keep_data.keep_data_available(model, pkg, self.settings),
-                keep_data.keep_data_label(model),
+                label,
             )
         except Exception:
             logger.debug("Could not evaluate Keep Data compatibility", exc_info=True)
@@ -4710,6 +4784,12 @@ class MainWindow(QMainWindow):
             f"Starting flash for {self._package_name} "
             f"(method: {_method_label(self._flash_method)})"
         )
+        try:
+            from ..manifest import refresh_catalog
+            refresh_catalog(force_refresh=True)
+            self._apply_post_install_urls()
+        except Exception as e:
+            logger.debug("Live manifest check during install flow: %s", e)
         try:
             from ..flash_service import compute_extract_dir, _find_scatter, _parse_scatter_platform
             from ..fw_package import scatter_has_userdata, scatter_has_preserve_data_variant
@@ -5223,6 +5303,7 @@ class MainWindow(QMainWindow):
                 published_at=rel_info.get("published_at") or "",
                 settings=self.settings,
                 catalogue_latest=latest_tag,
+                hardware_type=rel_info.get("hardware_type") or rel_info.get("type_variant") or (self._select_page.current_hardware_type() if hasattr(self, "_select_page") else ""),
             )
         if hasattr(self, "_settings_page"):
             self._settings_page.mark_firmware_installed()
@@ -5611,7 +5692,34 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         self._download_active = False
-        from ..flash_service import is_connect_failure, is_disconnection_error, is_mtk_device_connected
+        from ..flash_service import is_connect_failure, is_disconnection_error, is_mtk_device_connected, is_storage_full_error
+        if is_storage_full_error(error_code):
+            try:
+                from ..downloads import clear_firmware_cache, downloads_dir
+                import shutil
+                dd = downloads_dir()
+                if dd.is_dir() and shutil.disk_usage(dd).free < 50 * 1024 * 1024:
+                    clear_firmware_cache()
+            except Exception:
+                pass
+            self._append_log(f"Flash failed due to insufficient host storage space ({error_code}).")
+            self._show_install_failure("OUT_OF_STORAGE")
+            return
+
+        try:
+            from ..downloads import clear_firmware_cache, downloads_dir
+            import shutil
+            dd = downloads_dir()
+            free_bytes = shutil.disk_usage(dd).free if dd.is_dir() else 100 * 1024 * 1024
+            if free_bytes < 50 * 1024 * 1024:
+                _cnt, _freed = clear_firmware_cache()
+                free_bytes = shutil.disk_usage(dd).free if dd.is_dir() else 100 * 1024 * 1024
+                if free_bytes < 50 * 1024 * 1024:
+                    self._append_log(f"Flash failed due to critically low host storage ({free_bytes} bytes free; original error: {error_code}).")
+                    self._show_install_failure("OUT_OF_STORAGE")
+                    return
+        except Exception:
+            pass
         cache_failure = bool(getattr(self, "_cache_recovery_needed", False)) or any(
             marker in str(error_code or "").lower() for marker in _CACHE_MISSING_MARKERS
         ) or str(error_code or "") == "CACHE_FILE_MISSING"
@@ -5824,7 +5932,11 @@ class MainWindow(QMainWindow):
         # follows has to obey what the card showed then.
         self._keep_data = self._flash_page.keep_data_checked()
         if getattr(self, "_keep_data_confirm_pending", False):
-            # The user confirmed their currently installed firmware with Yes (checkmark)
+            choice = self._flash_page.keep_data_confirm_choice()
+            if choice and choice == tr("keep_data_choice_other"):
+                self._keep_data_confirm_pending = False
+                self._begin_keep_data_erase_confirmation()
+                return
             self._keep_data_confirm_pending = False
             self._keep_data = True
             self._flash_page.clear_keep_data_confirmation()
@@ -5864,7 +5976,8 @@ class MainWindow(QMainWindow):
 
             pkg = getattr(self, "_keep_data_pkg", None)
             model = self._package_model or getattr(pkg, "model", "") or ""
-            return keep_data.needs_confirmation(model, pkg, self.settings)
+            hw = self._select_page.current_hardware_type() if hasattr(self, "_select_page") else ""
+            return keep_data.needs_confirmation(model, pkg, self.settings, hardware_type=hw)
         except Exception:
             return False
 
@@ -5879,17 +5992,18 @@ class MainWindow(QMainWindow):
         software = str(getattr(pkg, "name", "") or self._package_name or "").strip()
         names = keep_data.compatible_software_names(pkg, model) if pkg is not None else []
         if len(names) > 1:
-            name_bullets = "\n".join(f"• {n}" for n in names)
-            question = f"{tr('keep_data_which_firmware_fmt').format(model=model_name)}\n{name_bullets}"
+            question = tr("keep_data_which_firmware_fmt").format(model=model_name)
+            choices = tuple(names) + (tr("keep_data_choice_other"),)
         else:
             software_label = names[0] if names else (software or tr("software_original"))
             question = tr("keep_data_running_fmt").format(
                 model=model_name, software=software_label
             )
+            choices = ()
         self._keep_data_confirm_pending = True
         hint = tr("keep_data_only_compatible_hint")
         self._flash_page.show_keep_data_confirmation(
-            question, hint, ()
+            question, hint, choices
         )
         self._sync_install_nav_entry()
         self._adjust_window_geometry()
@@ -5907,6 +6021,10 @@ class MainWindow(QMainWindow):
         else:
             question = tr("keep_data_erase_prompt_other").format(model=model_name)
             explainer = tr("keep_data_erase_explainer_other")
+        pkg = getattr(self, "_keep_data_pkg", None)
+        if getattr(pkg, "do_not_keep_data", False):
+            import re
+            explainer = re.sub(r'<a\s+href=["\']try-anyway["\'].*?</a>', '', explainer, flags=re.IGNORECASE).strip()
         self._keep_data_erase_confirm_pending = True
         self._flash_page.show_keep_data_erase_confirmation(question, explainer)
         self._sync_install_nav_entry()
@@ -5953,7 +6071,7 @@ class MainWindow(QMainWindow):
         if getattr(self, "_keep_data_erase_confirm_pending", False):
             self._keep_data_erase_confirm_pending = False
             self._flash_page.clear_keep_data_confirmation()
-            self._flash_page.show_power_off_prompt()
+            self._show_device_prep()
             return
         self._return_to_select_software()
 
@@ -6143,12 +6261,15 @@ class MainWindow(QMainWindow):
         device_tracking.set_donation_ui_disabled(True, self.settings)
         device_tracking.set_donation_install_prompt_disabled(True, self.settings)
         self._flash_page.show_completion_appeal(False)
+        self._compact_install_screen = True
+        self._flash_page.show_completion_note(
+            True, software=self._package_name, model=self._package_model
+        )
+        self._apply_release_icon(complete=True)
         if hasattr(self, "_settings_page"):
             self._settings_page.refresh_settings()
         self._apply_donation_visibility(True)
-        # Leave the completed run the same way "Not now" does, so the user lands
-        # on Select Software instead of an empty completion card.
-        self._on_install_done()
+        self._adjust_window_geometry()
 
     def _apply_release_icon(self, complete: bool = False) -> None:
         """Squircle until a release icon is cached, then that image. The check overlays either."""

@@ -55,7 +55,25 @@ def requests_module():
     bodies too), and on Python 3.15 a module-level ``__lazy_modules__`` marker
     hands the same decision to the interpreter.
     """
+    import os
     import requests
+
+    # Guard against invalid or stale SSL_CERT_FILE / REQUESTS_CA_BUNDLE paths in the environment
+    # (e.g. from a bundled launcher whose install directory moved or rebuilt)
+    for env_key in ("SSL_CERT_FILE", "REQUESTS_CA_BUNDLE"):
+        val = os.environ.get(env_key)
+        if val and not os.path.exists(val):
+            logger.debug("Removing invalid %s from environment: %s", env_key, val)
+            os.environ.pop(env_key, None)
+
+    if not os.environ.get("SSL_CERT_FILE"):
+        try:
+            import certifi
+            ca_path = certifi.where()
+            if ca_path and os.path.exists(ca_path):
+                os.environ["SSL_CERT_FILE"] = ca_path
+        except Exception:
+            pass
 
     return requests
 

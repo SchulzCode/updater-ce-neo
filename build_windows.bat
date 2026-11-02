@@ -9,6 +9,7 @@ rem   build_windows.bat updater_ce -Msix     :: also pack the Microsoft Store (M
 setlocal enabledelayedexpansion
 
 set "BRAND=updater_ce"
+set "ARCH="
 set "CLEAN=0"
 set "NOINSTALLER=0"
 set "INSTALLER=0"
@@ -38,6 +39,28 @@ if /i "%~1"=="updater_ce" (
 )
 if /i "%~1"=="mediatek_installer" (
     set "BRAND=mediatek_installer"
+    shift
+    goto :parse_args
+)
+if /i "%~1"=="arm64" (
+    set "ARCH=arm64"
+    shift
+    goto :parse_args
+)
+if /i "%~1"=="x64" (
+    set "ARCH=x64"
+    shift
+    goto :parse_args
+)
+if /i "%~1"=="--arch" (
+    set "ARCH=%~2"
+    shift
+    shift
+    goto :parse_args
+)
+if /i "%~1"=="-Arch" (
+    set "ARCH=%~2"
+    shift
     shift
     goto :parse_args
 )
@@ -151,6 +174,7 @@ goto :help
 cd /d "%~dp0"
 
 set "PS_ARGS=-Brand %BRAND%"
+if not "%ARCH%"=="" set "PS_ARGS=%PS_ARGS% -Arch %ARCH%"
 if "%CLEAN%"=="1" set "PS_ARGS=%PS_ARGS% -Clean"
 if "%NOINSTALLER%"=="1" set "PS_ARGS=%PS_ARGS% -NoInstaller"
 if "%INSTALLER%"=="1" set "PS_ARGS=%PS_ARGS% -Installer"
@@ -162,6 +186,7 @@ echo ===========================================================================
 echo   Innioasis Updater CE / MediaTek Installer - Windows Build
 echo ================================================================================
 echo   Brand:           %BRAND%
+if not "%ARCH%"=="" (echo   Architecture:    %ARCH%) else (echo   Architecture:    auto-detect)
 echo   Clean previous:  %CLEAN%
 echo   Inno Setup:      %INSTALLER% (Skip: %NOINSTALLER%)
 echo   Store (MSIX):    %MSIX% (MSIX only: %MSIXONLY%)
@@ -176,12 +201,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0build_windows.ps1" %PS
 exit /b %ERRORLEVEL%
 
 :help
-echo Usage: build_windows.bat [updater_ce^|mediatek_installer] [-Clean] [-NoInstaller] [-Installer] [-Msix] [-MsixOnly] [-SkipPyInstaller]
+echo Usage: build_windows.bat [updater_ce^|mediatek_installer] [--arch arm64^|x64] [-Clean] [-NoInstaller] [-Installer] [-Msix] [-MsixOnly] [-SkipPyInstaller]
 echo.
 echo Builds Updater CE and/or MediaTek Installer on Windows into dist\windows\.
 echo Options:
 echo   updater_ce         Build Updater CE only.
 echo   mediatek_installer Build MediaTek Installer only.
+echo   --arch arm64^|x64   Target CPU architecture (defaults to Python's machine architecture).
 echo   -Clean             Remove previous Windows build artifacts before compiling.
 echo   -NoInstaller       Skip Inno Setup and build the portable folders and .zip archives only.
 echo   -Installer         Ensure Inno Setup installer is compiled.

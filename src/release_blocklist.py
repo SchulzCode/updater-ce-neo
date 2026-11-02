@@ -197,18 +197,13 @@ def fetch_blocklist_text() -> Optional[str]:
 
 
 def load_blocklist() -> list:
-    """Fetch the live blocklist, falling back to the last good copy, then to none."""
-    text = fetch_blocklist_text()
-    if text is not None:
-        try:
-            _cache_path().write_text(text, encoding="utf-8")
-        except Exception:
-            logger.debug("Could not cache release_blocklist.csv", exc_info=True)
-        return parse_blocklist_csv(text)
+    """Read cached or bundled release blocklist instantly without blocking startup on the network."""
     try:
         cached = _cache_path()
         if cached.exists():
-            return parse_blocklist_csv(cached.read_text(encoding="utf-8"))
+            text = cached.read_text(encoding="utf-8")
+            if text.strip():
+                return parse_blocklist_csv(text)
     except Exception:
         logger.debug("Could not read cached release_blocklist.csv", exc_info=True)
     # The snapshot baked into the app still blocks known-bad releases offline.
@@ -221,6 +216,26 @@ def load_blocklist() -> list:
     except Exception:
         logger.debug("Could not read the bundled release_blocklist.csv", exc_info=True)
     return []
+
+
+def refresh_blocklist_async() -> None:
+    """Refresh the blocklist in background thread and update _RULES."""
+    import threading
+
+    def _bg():
+        global _RULES
+        try:
+            text = fetch_blocklist_text()
+            if text:
+                try:
+                    _cache_path().write_text(text, encoding="utf-8")
+                except Exception:
+                    pass
+                _RULES = parse_blocklist_csv(text)
+        except Exception:
+            pass
+
+    threading.Thread(target=_bg, name="refresh-blocklist", daemon=True).start()
 
 
 _RULES: Optional[list] = None

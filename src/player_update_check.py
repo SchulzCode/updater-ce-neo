@@ -40,7 +40,7 @@ def _get_settings(settings: Optional[QSettings] = None) -> QSettings:
 # Device Installation Records
 # ---------------------------------------------------------------------------
 
-def _write_install_fields(settings, group, software_name, tag_name, release_label, package_slug, published_at, installed_at, notify_ceiling=""):
+def _write_install_fields(settings, group, software_name, tag_name, release_label, package_slug, published_at, installed_at, notify_ceiling="", hardware_type=""):
     settings.beginGroup(group)
     try:
         settings.setValue("software_name", software_name or "")
@@ -50,6 +50,7 @@ def _write_install_fields(settings, group, software_name, tag_name, release_labe
         settings.setValue("published_at", published_at or "")
         settings.setValue("installed_at", installed_at)
         settings.setValue("notify_ceiling", notify_ceiling or "")
+        settings.setValue("hardware_type", hardware_type or "")
     finally:
         settings.endGroup()
 
@@ -69,6 +70,7 @@ def _read_install_fields(settings, group, model):
             "published_at": settings.value("published_at", "", type=str),
             "installed_at": settings.value("installed_at", "", type=str),
             "notify_ceiling": settings.value("notify_ceiling", "", type=str) or "",
+            "hardware_type": settings.value("hardware_type", "", type=str) or "",
         }
     finally:
         settings.endGroup()
@@ -102,6 +104,10 @@ def update_notification_due(installed_tag: str, latest_tag: str, ceiling: str = 
     return True
 
 
+def _normalize_hw_type(hw: str) -> str:
+    return str(hw or "").strip().replace("Type", "").strip().upper()
+
+
 def record_device_install(
     model: str,
     software_name: str,
@@ -111,18 +117,20 @@ def record_device_install(
     published_at: str = "",
     settings: Optional[QSettings] = None,
     catalogue_latest: str = "",
+    hardware_type: str = "",
 ) -> None:
-    """Record the one online software type last installed on ``model``.
+    """Record the one online software type last installed on ``model`` (and optional ``hardware_type``).
 
-    Models are independent: installing on Y1 does not change Y2. A model
-    keeps only one software type. Installing a different title on that model
-    replaces the previous one. Offline installs are not recorded (no tag, or
-    the ``local`` tag used for a file chosen on disk).
+    Models are independent: installing on Y1 does not change Y2. When a model
+    has variants (e.g. Y1 Type A and Type B), each model + type permutation can
+    be tracked independently.
     """
     if not model or not tag_name or str(tag_name).strip().casefold() == "local":
         return
+    hw = _normalize_hw_type(hardware_type)
+    group_name = f"{model}_{hw}" if hw else model
     s = _get_settings(settings)
-    previous = get_device_install(model, settings=s)
+    previous = get_device_install(model, hardware_type=hw, settings=s)
     ceiling = ""
     if previous and _same_software(previous.get("software_name") or "", software_name or ""):
         previous_tag = previous.get("tag_name") or ""
@@ -133,12 +141,10 @@ def record_device_install(
         else:
             ceiling = previous.get("notify_ceiling") or ""
     now_iso = datetime.now().isoformat()
-    # Drop any older per-software records under this model so only one remains.
-    # A lower tag replaces a higher one: the circle follows the last online install.
-    s.remove(f"{_GROUP_INSTALLS}/{model}")
+    s.remove(f"{_GROUP_INSTALLS}/{group_name}")
     _write_install_fields(
         s,
-        f"{_GROUP_INSTALLS}/{model}",
+        f"{_GROUP_INSTALLS}/{group_name}",
         software_name,
         tag_name,
         release_label,
@@ -146,29 +152,43 @@ def record_device_install(
         published_at,
         now_iso,
         notify_ceiling=ceiling,
+        hardware_type=hw,
     )
     # Reset last_notified_tag so future releases of this software will be notified
-    set_last_notified_tag(model, "", settings=s)
-    logger.info("Recorded install for %s: %s (%s)", model, software_name, tag_name)
+    set_last_notified_tag(group_name, "", settings=s)
+    logger.info("Recorded install for %s: %s (%s)", group_name, software_name, tag_name)
 
 
-def get_device_install(model: str, settings: Optional[QSettings] = None) -> Optional[dict]:
-    """Return the last recorded install for ``model``, or None if none recorded."""
+def get_device_install(model: str, hardware_type: str = "", settings: Optional[QSettings] = None) -> Optional[dict]:
+    """Return the last recorded install for ``model`` / ``hardware_type``, or None if none recorded."""
     if not model:
         return None
-    return _read_install_fields(_get_settings(settings), f"{_GROUP_INSTALLS}/{model}", model)
+    s = _get_settings(settings)
+    hw = _normalize_hw_type(hardware_type)
+    if hw:
+        res = _read_install_fields(s, f"{_GROUP_INSTALLS}/{model}_{hw}", model)
+        if res:
+            return res
+    res = _read_install_fields(s, f"{_GROUP_INSTALLS}/{model}", model)
+    if res:
+        return res
+    if not hw:
+        s.beginGroup(_GROUP_INSTALLS)
+        subgroups = list(s.childGroups())
+        s.endGroup()
+        for sg in subgroups:
+            if sg.startswith(f"{model}_"):
+                cand = _read_install_fields(s, f"{_GROUP_INSTALLS}/{sg}", model)
+                if cand:
+                    return cand
+    return None
 
 
-def get_software_install(model: str, software_name: str, settings: Optional[QSettings] = None) -> Optional[dict]:
-    """Return this model's tracked install when it is ``software_name``.
-
-    Each model tracks one software type. A different title on the same model
-    is not remembered, so the catalogue only marks the software currently
-    selected for that model.
-    """
+def get_software_install(model: str, software_name: str, hardware_type: str = "", settings: Optional[QSettings] = None) -> Optional[dict]:
+    """Return this model's tracked install when it is ``software_name``."""
     if not model or not software_name:
         return None
-    rec = get_device_install(model, settings=settings)
+    rec = get_device_install(model, hardware_type=hardware_type, settings=settings)
     if not rec:
         return None
     stored = (rec.get("software_name") or "").casefold()
@@ -178,27 +198,56 @@ def get_software_install(model: str, software_name: str, settings: Optional[QSet
     return None
 
 
-def clear_device_install(model: str, settings: Optional[QSettings] = None) -> None:
-    """Clear recorded install history for ``model``."""
+def clear_device_install(model: str, hardware_type: str = "", settings: Optional[QSettings] = None) -> None:
+    """Clear recorded install history for ``model`` (and optional ``hardware_type``)."""
     if not model:
         return
     s = _get_settings(settings)
-    s.beginGroup(f"{_GROUP_INSTALLS}/{model}")
-    try:
-        s.remove("")
-    finally:
-        s.endGroup()
-    logger.info("Cleared install history for %s", model)
+    hw = _normalize_hw_type(hardware_type)
+    if hw:
+        s.beginGroup(f"{_GROUP_INSTALLS}/{model}_{hw}")
+        try:
+            s.remove("")
+        finally:
+            s.endGroup()
+    else:
+        s.beginGroup(f"{_GROUP_INSTALLS}/{model}")
+        try:
+            s.remove("")
+        finally:
+            s.endGroup()
+    logger.info("Cleared install history for %s (type=%s)", model, hw or "none")
 
 
 def get_all_device_installs(settings: Optional[QSettings] = None) -> dict:
-    """Return dictionary of {model: install_record} for all tracked models."""
+    """Return dictionary of {key: install_record} for all tracked models and model+type permutations."""
+    s = _get_settings(settings)
     out = {}
-    for m in DEVICE_MODELS:
-        rec = get_device_install(m, settings=settings)
+    s.beginGroup(_GROUP_INSTALLS)
+    subgroups = list(s.childGroups())
+    s.endGroup()
+    keys = subgroups if subgroups else list(DEVICE_MODELS)
+    for k in keys:
+        base_model = k.split("_")[0]
+        rec = _read_install_fields(s, f"{_GROUP_INSTALLS}/{k}", base_model)
         if rec:
-            out[m] = rec
+            out[k] = rec
     return out
+
+
+def tracked_permutation_label(record: dict) -> str:
+    """User-facing label for a tracked model + type permutation with software name."""
+    from .i18n import tr
+    model = record.get("model", "")
+    hw = record.get("hardware_type", "")
+    label = device_label_for_model(model)
+    if hw:
+        hw_display = f"Type {hw}" if not hw.lower().startswith("type") else hw
+        label = f"{label} ({hw_display})"
+    software = record.get("software_name", "")
+    if software:
+        return tr("settings_reminders_model_fmt").format(software=software, model=label)
+    return label
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +256,12 @@ def get_all_device_installs(settings: Optional[QSettings] = None) -> dict:
 
 def is_device_reminder_enabled(model: str, settings: Optional[QSettings] = None) -> bool:
     """True if release reminders are enabled for ``model`` (default True)."""
+    try:
+        from .remote_flags import is_remote_flag_active
+        if is_remote_flag_active("disable_device_reminders"):
+            return False
+    except Exception:
+        pass
     s = _get_settings(settings)
     return s.value(f"{_GROUP_PREFS}/{_KEY_REMINDER_PREFIX}{model}", True, type=bool)
 
@@ -392,6 +447,12 @@ def terminal_install_enabled(settings: Optional[QSettings] = None) -> bool:
     Software screen and the console command is run elsewhere, so SP Flash Tool
     and MTKClient can be watched and diagnosed directly.
     """
+    try:
+        from .remote_flags import is_remote_flag_active
+        if is_remote_flag_active("no-term-install"):
+            return False
+    except Exception:
+        pass
     s = _get_settings(settings)
     val = s.value(_KEY_TERMINAL_INSTALL, None)
     if val is not None:
@@ -452,6 +513,12 @@ def _raw_is_donation_install_prompt_disabled(s: QSettings) -> bool:
 
 def is_donation_ui_disabled(settings: Optional[QSettings] = None) -> bool:
     """True if donor names, Thank You screens, and donation prompts are hidden."""
+    try:
+        from .remote_flags import is_remote_flag_active
+        if is_remote_flag_active("no_donations") or is_remote_flag_active("donations_off"):
+            return True
+    except Exception:
+        pass
     s = _get_settings(settings)
     val = s.value(_KEY_DONATION_UI_DISABLED, None)
     if val is not None:

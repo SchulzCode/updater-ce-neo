@@ -1,6 +1,8 @@
 param(
     [ValidateSet("", "both", "all", "updater_ce", "mediatek_installer")]
     [string]$Brand = "updater_ce",
+    [ValidateSet("", "x64", "x86_64", "amd64", "arm64", "aarch64")]
+    [string]$Arch = "",
     [switch]$Clean,
     [switch]$NoInstaller,
     [switch]$Installer,
@@ -45,15 +47,35 @@ if (Test-Path $ConfigFile) {
 
 # Locate Python / PyInstaller
 $PythonExe = $null
-$candidates = @(
-    (Join-Path $ProjectRoot ".venv-build\Scripts\python.exe"),
-    (Join-Path $ProjectRoot ".venv\Scripts\python.exe"),
-    "C:\Program Files\Python311\python.exe"
-)
-foreach ($c in $candidates) {
-    if (Test-Path $c) {
-        $PythonExe = $c
-        break
+$isExplicitArm64 = ($Arch -match "arm64|aarch64")
+if ($isExplicitArm64) {
+    # Search for an ARM64-specific Python interpreter first
+    $arm64Candidates = @(
+        (Join-Path $ProjectRoot ".venv-arm64\Scripts\python.exe"),
+        "C:\Program Files\Python313-arm64\python.exe",
+        "C:\Program Files\Python312-arm64\python.exe",
+        "C:\Program Files\Python311-arm64\python.exe",
+        "C:\Program Files\Python310-arm64\python.exe"
+    )
+    foreach ($c in $arm64Candidates) {
+        if (Test-Path $c) {
+            $PythonExe = $c
+            break
+        }
+    }
+}
+if (-not $PythonExe) {
+    $candidates = @(
+        (Join-Path $ProjectRoot ".venv-build\Scripts\python.exe"),
+        (Join-Path $ProjectRoot ".venv\Scripts\python.exe"),
+        "C:\Program Files\Python312\python.exe",
+        "C:\Program Files\Python311\python.exe"
+    )
+    foreach ($c in $candidates) {
+        if (Test-Path $c) {
+            $PythonExe = $c
+            break
+        }
     }
 }
 if (-not $PythonExe) {
@@ -64,6 +86,17 @@ if (-not $PythonExe) {
     Write-Error "Python 3.10+ could not be found."
     exit 1
 }
+
+# Determine target architecture from -Arch or from the Python interpreter itself
+$pyArch = (& $PythonExe -c "import platform; print(platform.machine().lower())").Trim()
+$targetArch = if ($Arch) {
+    if ($Arch -match "arm64|aarch64") { "arm64" } else { "x64" }
+} else {
+    if ($pyArch -match "arm64|aarch64") { "arm64" } else { "x64" }
+}
+$isArm64 = ($targetArch -eq "arm64")
+$env:TARGET_ARCH = $targetArch
+$env:BUILD_ARCH = $targetArch
 
 # PySide6 6.12.0 on Python < 3.12 leaks a None reference per paint call and the
 # frozen app aborts ("none_dealloc: deallocating None") within a minute.
@@ -145,6 +178,7 @@ function Set-BuildBrand([string]$b) {
 Write-Host "================================================================================" -ForegroundColor Cyan
 Write-Host "  Innioasis Updater Windows Package Builder (v$Version)" -ForegroundColor Yellow
 Write-Host "  Target brand(s): $($BrandsToBuild -join ', ')"
+Write-Host "  Architecture:    $targetArch"
 Write-Host "  Destination:     $DistDir"
 Write-Host "================================================================================" -ForegroundColor Cyan
 
@@ -161,8 +195,9 @@ try {
         $isMtk = ($b -eq "mediatek_installer")
         $appSlug = if ($isMtk) { "MediaTekInstaller" } else { "InnioasisUpdater" }
         $brandDisplay = if ($isMtk) { "MediaTek Installer" } else { "Innioasis Updater CE" }
-        $portableZipName = if ($isMtk) { "MediaTekInstaller-Portable-$Version.zip" } else { "UpdaterCE-Portable-$Version.zip" }
-        $setupBaseName = if ($isMtk) { "MediaTekInstaller-Setup-$Version" } else { "UpdaterCE-Setup-$Version" }
+        $archSuffix = if ($isArm64) { "-arm64" } else { "" }
+        $portableZipName = if ($isMtk) { "MediaTekInstaller-Portable-$Version$archSuffix.zip" } else { "UpdaterCE-Portable-$Version$archSuffix.zip" }
+        $setupBaseName = if ($isMtk) { "MediaTekInstaller-Setup-$Version$archSuffix" } else { "UpdaterCE-Setup-$Version$archSuffix" }
 
         Write-Host ""
         Write-Host "********************************************************************************" -ForegroundColor Yellow
@@ -205,22 +240,27 @@ try {
                 throw "Expected executable not found: $stagedExe"
             }
 
-            Write-StepBanner 2 $totalSteps "Validating Bundled Payload" "Ensuring $appSlug.exe and SP_Flash_Tool binaries are present and runnable..."
-            # The SP Flash Tool and MediaTek Download Agents are required payload for
-            # flashing devices. Fail the build rather than shipping an installer without them.
-            $requiredPayload = @(
-                "SP_Flash_Tool\flash_tool.exe",
-                "SP_Flash_Tool\MTK_AllInOne_DA.bin",
-                "SP_Flash_Tool\DA_PL.bin",
-                "SP_Flash_Tool\DA_SWSEC.bin"
-            )
-            foreach ($rel in $requiredPayload) {
-                $payloadPath = Join-Path $stagedAppDir $rel
-                if (-not (Test-Path $payloadPath)) {
-                    throw "Required payload missing from build output: $payloadPath"
+            Write-StepBanner 2 $totalSteps "Validating Bundled Payload" "Ensuring $appSlug.exe and runtime payload are present..."
+            if ($isArm64) {
+                Write-Host "  -> Target architecture is ARM64 ($targetArch)." -ForegroundColor Cyan
+                Write-Host "  -> On ARM64 Windows, MTKClient is the primary flashing engine (SP Flash Tool is x86-only and omitted)." -ForegroundColor Green
+            } else {
+                # The SP Flash Tool and MediaTek Download Agents are required payload for
+                # flashing devices on x64. Fail the build rather than shipping an installer without them.
+                $requiredPayload = @(
+                    "SP_Flash_Tool\flash_tool.exe",
+                    "SP_Flash_Tool\MTK_AllInOne_DA.bin",
+                    "SP_Flash_Tool\DA_PL.bin",
+                    "SP_Flash_Tool\DA_SWSEC.bin"
+                )
+                foreach ($rel in $requiredPayload) {
+                    $payloadPath = Join-Path $stagedAppDir $rel
+                    if (-not (Test-Path $payloadPath)) {
+                        throw "Required payload missing from build output: $payloadPath"
+                    }
                 }
+                Write-Host "  -> SP Flash Tool and MediaTek Download Agents bundled beside application." -ForegroundColor Green
             }
-            Write-Host "  -> SP Flash Tool and MediaTek Download Agents bundled beside application." -ForegroundColor Green
 
             # Stage DriverInstall.exe and friendly numbered entrypoints for portable distribution
             $driverSource = Join-Path $ProjectRoot "tools\DriverInstall.exe"
@@ -270,7 +310,7 @@ try {
         if (-not $NoInstaller -and $IsccExe) {
             Write-StepBanner 5 $totalSteps "Building Windows Setup Wizard" "Compiling Inno Setup wizard ($setupBaseName.exe)..."
             $installerScript = Join-Path $ProjectRoot "scripts\build_windows_installer.ps1"
-            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installerScript -AppDir $stagedAppDir -Version $Version -OutDir $DistDir -Brand $b
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installerScript -AppDir $stagedAppDir -Version $Version -OutDir $DistDir -Brand $b -Arch $targetArch
             if ($LASTEXITCODE -ne 0) {
                 throw "Inno Setup failed for $b (exit code $LASTEXITCODE)"
             }
@@ -295,7 +335,8 @@ try {
                 "-File", (Join-Path $ProjectRoot "scripts\build_windows_msix.ps1"),
                 "-AppDir", $stagedAppDir,
                 "-Version", $Version,
-                "-OutDir", $DistDir
+                "-OutDir", $DistDir,
+                "-Arch", $targetArch
             )
             if ($identityFile) { $msixArgs += @("-IdentityFile", $identityFile) }
             if ($MsixSignCert) {
@@ -323,6 +364,8 @@ try {
 } finally {
     Set-BuildBrand "updater_ce"
     $env:BUILD_BRAND = ""
+    $env:TARGET_ARCH = ""
+    $env:BUILD_ARCH = ""
 }
 
 Write-Host ""

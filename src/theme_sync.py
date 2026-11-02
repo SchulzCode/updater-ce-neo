@@ -152,11 +152,21 @@ def last_theme_sync(model: str, settings: Optional[QSettings] = None) -> str:
 
 
 def themes_auto_install_enabled(settings: Optional[QSettings] = None) -> bool:
-    """The Settings toggle: off until the user turns it on."""
+    """The Settings toggle: enabled by default for Rockbox installs unless manually changed or blocked by null_rbtf.txt."""
     try:
-        return bool(_settings(settings).value(f"{_GROUP_THEME_SYNC}/{_KEY_ENABLED}", False, type=bool))
+        from .remote_flags import is_remote_flag_active
+        if is_remote_flag_active("null_rbtf") or is_remote_flag_active("null-rbtf") or is_remote_flag_active("rockbox_themes_off"):
+            s = _settings(settings)
+            if s.contains(f"{_GROUP_THEME_SYNC}/{_KEY_ENABLED}") and s.value(f"{_GROUP_THEME_SYNC}/{_KEY_ENABLED}", type=bool):
+                set_themes_auto_install_enabled(False, settings)
+            return False
+
+        s = _settings(settings)
+        if s.contains(f"{_GROUP_THEME_SYNC}/{_KEY_ENABLED}"):
+            return bool(s.value(f"{_GROUP_THEME_SYNC}/{_KEY_ENABLED}", True, type=bool))
+        return True
     except Exception:
-        return False
+        return True
 
 
 def set_themes_auto_install_enabled(enabled: bool, settings: Optional[QSettings] = None) -> None:

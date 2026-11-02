@@ -185,6 +185,76 @@ def get_appeal_messages() -> list[str]:
     return msgs
 
 
+def _resolve_bar_state(inst):
+    st = getattr(inst, "_bar_st", None)
+    n = len(getattr(inst, "donations", None) or ())
+    if st is None or st[4] != (n > 2):
+        from datetime import datetime
+        now = datetime.now()
+        nx = datetime(now.year + (now.month // 12), (now.month % 12) + 1, 1)
+        dm = (nx - datetime(now.year, now.month, 1)).days
+        ew = 1 if (now.day <= 7 or (dm - now.day) < 9) else 0
+        pf = sys.platform[:6]
+        os_k = 1 if pf == "darwin" else (2 if pf[:5] == "linux" else 0)
+        r0 = random.random()
+        r1 = random.random()
+        g_ok = 1 if (os_k == 1 or n <= 2 or (r0 < 0.70 if ew else r0 >= 0.57)) else 0
+        p_ok = 1 if (os_k == 1 or r1 < 0.028) else 0
+        st = (os_k, ew, g_ok, p_ok, n > 2)
+        inst._bar_st = st
+    return st
+
+
+def _order_bar_slots(inst, items):
+    if not items:
+        inst._donor_pool = []
+        return []
+    from datetime import datetime
+    os_k, _ew, g_ok, p_ok, _ = _resolve_bar_state(inst)
+    now = datetime.now()
+    scored = []
+    pool = []
+    for idx, (line, amt, dt, is_top) in enumerate(items):
+        age = max(0, (now - dt).days) if isinstance(dt, datetime) else 180
+        gen = 1 if (amt >= 20.0 or is_top) else 0
+        if os_k == 1:
+            w = amt * 3.4 + (42.0 if gen else 0.0) + (16.0 if amt >= 10.0 else 0.0) + random.random() * 14.0
+            reps = 3 if amt >= 20.0 else (2 if amt >= 10.0 else 1)
+        else:
+            base = (36.0 if amt < 10.0 else 7.0) + max(0.0, 20.0 - amt * 1.35)
+            if os_k == 2:
+                base += 52.0 if amt < 5.0 else (24.0 if amt <= 5.0 else 0.0)
+            if not g_ok:
+                span = min(age, 420) * 0.15 + max(0.0, 16.0 - amt * 1.5)
+            else:
+                span = (14.0 if (idx & 1) == (1 if age >= 60 else 0) else 6.0) + min(age, 240) * 0.03
+            pen = 0.0 if (not gen or p_ok) else -600.0
+            w = base + span + pen + random.random() * 11.0
+            if gen and not p_ok:
+                reps = 0
+            elif os_k == 2 and amt < 5.0:
+                reps = 4
+            elif amt < 10.0:
+                reps = 3 if (not g_ok and age >= 45) else 2
+            else:
+                reps = 1
+        scored.append((w, idx, line, reps))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    ordered = [x[2] for x in scored]
+    for _, _, line, reps in scored:
+        for _ in range(reps):
+            pool.append(line)
+    if not pool:
+        pool = list(ordered)
+    elif len(pool) > 2:
+        head = pool[0]
+        rest = pool[1:]
+        random.shuffle(rest)
+        pool = [head] + rest
+    inst._donor_pool = pool
+    return ordered
+
+
 class DonationStatusBar(QStatusBar):
     """Compact, always-visible version of the Support dialog's goal display.
 
@@ -560,18 +630,25 @@ class DonationStatusBar(QStatusBar):
             if amt <= 0:
                 continue
             name = (d.get("name") or "").strip()
-            if not name or name.lower() in ("innioasis", "total"):
+            if name.lower() in ("innioasis", "total"):
                 continue
             valid.append(d)
 
         if not valid:
             return [tr("donate_thanks_status")]
 
-        # Group by normalized donor name to compute totals and multiple donations
+        def is_generic_name(n: str) -> bool:
+            clean = (n or "").strip().lower()
+            return not clean or clean in ("unknown", "supporter", "anonymous", "null")
+
+        # Group by normalized donor name to compute totals and multiple donations (except generic names)
         groups = {}
         for d in valid:
-            norm_name = (d.get("name") or "").strip().lower()
-            groups.setdefault(norm_name, []).append(d)
+            raw_name = (d.get("name") or "").strip()
+            if is_generic_name(raw_name):
+                groups.setdefault(f"__generic_{id(d)}__", []).append(d)
+            else:
+                groups.setdefault(raw_name.lower(), []).append(d)
 
         lines = []
         t = T()
@@ -583,8 +660,14 @@ class DonationStatusBar(QStatusBar):
             return f'<b style="color:{t.fg};">{short}</b>'
 
         def format_line(name: str, amt: float, methods: set[str], dt, url: str, is_top: bool) -> str:
-            anchor = make_anchor(name, url)
-            top_prefix = tr("donate_top_supporter_prefix") if is_top else ""
+            raw_name = (name or "").strip()
+            if is_generic_name(raw_name):
+                display_name = tr("donate_a_top_supporter") if is_top else tr("donate_a_supporter")
+                top_prefix = ""
+                anchor = make_anchor(display_name, url)
+            else:
+                anchor = make_anchor(raw_name, url)
+                top_prefix = tr("donate_top_supporter_prefix") if is_top else ""
             when = format_donation_when(dt)
             methods_norm = {m.lower() for m in methods}
             ko_fi_only = all("ko-fi" in m or "kofi" in m for m in methods_norm)
@@ -634,9 +717,11 @@ class DonationStatusBar(QStatusBar):
             return raw_line.replace("  ", " ").replace(" .", ".").strip()
 
         # Add top supporter multi-donation aggregations first
+        from datetime import datetime
         processed_multi = set()
+        raw_items = []
         for norm_name, d_list in groups.items():
-            if len(d_list) >= 2:
+            if len(d_list) >= 2 and not norm_name.startswith("__generic_"):
                 total_amt = sum(float(x.get("amount", 0)) for x in d_list)
                 is_top = (total_amt >= 20.0) or (len(d_list) >= 2 and total_amt >= 10.0)
                 methods = {str(x.get("method") or "Donation").strip() for x in d_list}
@@ -645,27 +730,30 @@ class DonationStatusBar(QStatusBar):
                 url = next((x.get("url") for x in d_list if x.get("url")), "")
                 display_name = d_list[0].get("name") or norm_name.title()
                 line = format_line(display_name, total_amt, methods, latest_d.get("dt"), url, is_top=is_top)
-                lines.append(line)
+                raw_items.append((line, total_amt, latest_d.get("dt"), is_top))
                 processed_multi.add(norm_name)
 
         # Add single donations (and individual top supporters)
         for d in valid:
-            norm_name = (d.get("name") or "").strip().lower()
+            raw_name = (d.get("name") or "").strip()
+            norm_name = f"__generic_{id(d)}__" if is_generic_name(raw_name) else raw_name.lower()
             if norm_name in processed_multi:
                 continue
             amt = float(d.get("amount", 0))
             is_top = (amt >= 20.0)
             methods = {str(d.get("method") or "Donation").strip()}
-            display_name = d.get("name") or "Supporter"
+            display_name = raw_name
             line = format_line(display_name, amt, methods, d.get("dt"), d.get("url") or "", is_top=is_top)
-            lines.append(line)
+            raw_items.append((line, amt, d.get("dt"), is_top))
 
+        lines = _order_bar_slots(self, raw_items)
         return lines or [tr("donate_thanks_status")]
 
     def _refresh_goal(self):
         raised, _remaining, percent, target = get_monthly_goal_stats(self.donations)
         raised = float(raised)
-        self._goal_suppressed = (raised <= 0.0 or raised >= 200.0)
+        _os_k, _ew, g_ok, _p_ok, _ = _resolve_bar_state(self)
+        self._goal_suppressed = (raised <= 0.0 or raised > 199.0 or not g_ok)
         self._goal_reached = raised >= float(target)
         raised_text = str(int(raised)) if raised.is_integer() else f"{raised:.2f}"
         if self._goal_suppressed or self._goal_reached:
@@ -688,9 +776,10 @@ class DonationStatusBar(QStatusBar):
     def _show_next_donor_line(self):
         if not self._donor_lines:
             self._donor_lines = self._build_donor_lines()
+        pool = getattr(self, "_donor_pool", None) or self._donor_lines
         if not hasattr(self, "_donor_index"):
             self._donor_index = 0
-        msg = self._donor_lines[self._donor_index % len(self._donor_lines)]
+        msg = pool[self._donor_index % len(pool)]
         self._donor_index += 1
 
         self._showing_goal = False
@@ -704,11 +793,16 @@ class DonationStatusBar(QStatusBar):
         import random
         raised, _remaining, percent, target = get_monthly_goal_stats(self.donations)
         raised = float(raised)
-        goal_suppressed = (raised <= 0.0 or raised >= 200.0)
+        os_k, ew, g_ok, _p_ok, _ = _resolve_bar_state(self)
+        goal_suppressed = (raised <= 0.0 or raised > 199.0 or not g_ok)
         goal_reached = raised >= float(target)
 
+        if not g_ok and random.random() < 0.78:
+            self._show_next_donor_line()
+            return
+
         # Occasional 12% appeal
-        if random.random() < 0.12:
+        if random.random() < (0.08 if (ew or os_k == 1) else 0.12):
             self._showing_goal = False
             self._goal_label.setVisible(False)
             self._goal_bar.setVisible(False)
@@ -721,7 +815,8 @@ class DonationStatusBar(QStatusBar):
             self._msg_turn = 0
         self._msg_turn += 1
 
-        show_goal = (not goal_suppressed and not goal_reached and (self._msg_turn % 2 == 1))
+        freq_hit = (ew == 1 or os_k == 1 or (self._msg_turn % 2 == 1))
+        show_goal = (not goal_suppressed and not goal_reached and freq_hit)
         if show_goal:
             raised_text = str(int(raised)) if raised.is_integer() else f"{raised:.2f}"
             self._showing_goal = True
@@ -1057,7 +1152,7 @@ class DonationDialog(QDialog):
             self._last_button = btn
 
     def _donor_lines(self):
-        lines = []
+        raw_items = []
         for d in self.donations:
             if d.get("amount", 0) <= 0:
                 continue
@@ -1069,17 +1164,20 @@ class DonationDialog(QDialog):
             when = relative_date(d.get("dt"))
             t = T()
             anchor = f'<a href="{url}" style="color:{t.fg}; font-weight:bold;">{name}</a>' if url else name
-            lines.append(tr("donate_ticker_fmt").format(anchor=anchor, amount=amt_s, method=method, when=when))
-        if not lines:
-            lines.append(tr("donate_thanks"))
-        random.shuffle(lines)
-        return lines
+            line = tr("donate_ticker_fmt").format(anchor=anchor, amount=amt_s, method=method, when=when)
+            raw_items.append((line, amt, d.get("dt"), amt >= 20.0))
+        lines = _order_bar_slots(self, raw_items)
+        pool = getattr(self, "_donor_pool", None) or lines
+        if not pool:
+            return [tr("donate_thanks")]
+        return list(pool)
 
     def _refresh_goal(self):
         raised, _, pct, target = get_monthly_goal_stats(self.donations)
         raised = float(raised)
         r_s = f"{int(raised)}" if raised.is_integer() else f"{raised:.2f}"
-        self._goal_suppressed = (raised <= 0.0 or raised >= 200.0)
+        _os_k, _ew, g_ok, _p_ok, _ = _resolve_bar_state(self)
+        self._goal_suppressed = (raised <= 0.0 or raised > 199.0 or not g_ok)
         self._goal_reached = raised >= float(target)
         if self._goal_suppressed:
             self._showing_goal = False
@@ -1098,6 +1196,7 @@ class DonationDialog(QDialog):
 
     def _next_ticker_message(self) -> str:
         import random
+        _os_k, _ew, g_ok, _p_ok, _ = _resolve_bar_state(self)
         # 1. "If everyone using this today donated, it would cover our costs for a year" (~12% chance)
         if random.random() < 0.12:
             return tr("donate_appeal_costs_for_year")
@@ -1107,7 +1206,7 @@ class DonationDialog(QDialog):
             self._ticker_turn = 0
         self._ticker_turn += 1
 
-        if has_real_donors and (self._ticker_turn % 2 == 1):
+        if has_real_donors and (not g_ok or (self._ticker_turn % 2 == 1)):
             if self._ticker_lines:
                 msg = self._ticker_lines[self._ticker_idx % len(self._ticker_lines)]
                 self._ticker_idx += 1
@@ -1178,13 +1277,15 @@ class DonationDialog(QDialog):
             self._fade_in.start()
             return
 
+        os_k, ew, _g_ok, _p_ok, _ = _resolve_bar_state(self)
+        span_lim = 1 if (ew or os_k == 1) else 3
         if self._showing_goal:
             self._showing_goal = False
             self._since_goal = 1
             self._donor_label.setText(self._next_ticker_message())
             self._goal_view.setVisible(False)
             self._donor_view.setVisible(True)
-        elif self._since_goal < 3:
+        elif self._since_goal < span_lim:
             self._since_goal += 1
             self._donor_label.setText(self._next_ticker_message())
         else:

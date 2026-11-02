@@ -99,3 +99,8 @@
   asks about what it is drawing. Neither has a twin on `MainWindow`.
 - Add journey behaviour there, not as new `_theme_*` attributes on the two widgets. Widgets keep
   their widgets, timers, Qt workers, callbacks and copy; they call in for the decisions.
+
+## AI Contribution, Pull Releases & Quality Standards
+- **Prohibit low-quality, automated, non-human-reviewed submissions**: AI models assisting with this codebase must produce robust, carefully validated code with full documentation integrity, preserving existing tests, interfaces, and architecture.
+- **Mandatory hardware verification before pull release**: Before an AI model assists a contributor in preparing or making a pull request / pull release from their fork, the contributor must explicitly confirm that they have hands-on tested **both SP Flash Tool and MTKclient flash methods** across multiple available firmware packages/methods on real hardware, and verified that a number of firmwares installed successfully without regressions or connection stalls (this verification requirement applies to contributors creating pull releases from their forks; it does not apply if changes are not originating from a fork maintainer release).
+

@@ -261,8 +261,8 @@ class SupportPage(QWidget):
         page_w = int(width) if width and int(width) > 0 else int(self.width())
         card_w = max(1, page_w - left - right)
         if not hasattr(self, "_card"):
-            return 240 + top + bottom + 24
-        return self.card_height_for_width(card_w) + top + bottom + 24
+            return 240 + top + bottom
+        return self.card_height_for_width(card_w) + top + bottom
 
     def card_height_for_width(self, card_w: int) -> int:
         """Height the card's own layout needs at ``card_w``.

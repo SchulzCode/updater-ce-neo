@@ -68,6 +68,16 @@ class FirmwarePackage:
     # Application repository whose APK the app downloads and installs after the
     # firmware (``apk_repo``).
     apk_repo: str = ""
+    # Whether Keep Data is completely blocked/disallowed for this firmware
+    do_not_keep_data: bool = False
+    # Explicit hardware type target: 'A' or 'B' (or empty for both/auto)
+    hw_type: str = ""
+    # Asset filename/glob pattern for Type A variant
+    type_a_asset: str = ""
+    # Asset filename/glob pattern for Type B variant
+    type_b_asset: str = ""
+    # Custom asset filename/glob pattern for firmware zips (e.g. '*.zip')
+    asset_pattern: str = ""
 
 
 def post_install_urls_for(*packages) -> tuple[str, str]:
@@ -103,8 +113,13 @@ def set_live_catalog(entries: list):
 def _catalog_packages():
     if not LIVE_CATALOG:
         return list(CATALOG)
-    covered = {(p.model, p.name) for p in LIVE_CATALOG}
-    fallback = [p for p in CATALOG if (p.model, p.name) not in covered]
+    covered_models_and_names = {(p.model.upper(), p.name.strip().lower()) for p in LIVE_CATALOG}
+    covered_models_and_repos = {(p.model.upper(), p.repo.strip().lower()) for p in LIVE_CATALOG}
+    fallback = [
+        p for p in CATALOG
+        if (p.model.upper(), p.name.strip().lower()) not in covered_models_and_names
+        and (p.model.upper(), p.repo.strip().lower()) not in covered_models_and_repos
+    ]
     return list(LIVE_CATALOG) + fallback
 
 
@@ -172,15 +187,19 @@ def available_models():
 
 
 def software_names_for_model(model: str):
+    seen_lower = set()
     seen = []
     for p in packages_for_model(model):
-        if p.name not in seen:
+        norm = p.name.strip().lower()
+        if norm not in seen_lower:
+            seen_lower.add(norm)
             seen.append(p.name)
     return seen
 
 
 def packages_for_model_software(model: str, software: str):
-    return [p for p in packages_for_model(model) if p.name == software]
+    target = (software or "").strip().lower()
+    return [p for p in packages_for_model(model) if p.name.strip().lower() == target]
 
 
 # ---------------------------------------------------------------------------
@@ -200,7 +219,11 @@ def _classify_variant_model(name, tag_name="", repo=""):
     if "a5" in repo_name and "y1" not in repo_name and "y2" not in repo_name:
         return "A5"
 
-    if "_y2" in lower or lower.startswith("rom_y2"):
+    # Explicit asset name checks for Y1 before repo fallback
+    if any(tok in lower for tok in ("_y1", "rom_y1", "-y1", " y1", "mt6572")):
+        return "Y1"
+
+    if "_y2" in lower or lower.startswith("rom_y2") or "-y2" in lower or " y2" in lower:
         return "Y2"
     if any(token in lower for token in ("6582", "eastaeon", "mt6582")):
         return "Y2"
@@ -208,39 +231,64 @@ def _classify_variant_model(name, tag_name="", repo=""):
         return "Y2"
     if "y2" in tag_lower and "y1" not in tag_lower:
         return "Y2"
+    if "y1" in tag_lower and "y2" not in tag_lower:
+        return "Y1"
     if "y2" in repo_name and "y1" not in repo_name.replace("y2", "", 1):
         return "Y2"
+    if "y1" in repo_name and "y2" not in repo_name:
+        return "Y1"
     return "dual"
 
 
-def _parse_rom_asset_variant(asset, tag_name="", repo=""):
-    """Classify a rom*.zip or *install*.zip asset into hardware type (A/B), resolution, model."""
+def _parse_rom_asset_variant(asset, tag_name="", repo="", has_explicit_type_assets=False, package=None):
+    """Classify a rom*.zip, *install*.zip or general firmware zip asset into hardware type (A/B), resolution, model."""
     try:
         name = asset.get("name", "")
         lower = name.lower()
-        is_rom = fnmatch(lower, "rom*.zip")
-        is_install = fnmatch(lower, "*install*.zip")
-        if not (is_rom or is_install):
+        if not lower.endswith(".zip"):
             return None
+        if _is_source_archive_name(name):
+            return None
+
+        # Check explicit manifest asset shims if package is provided
+        hw_type = None
+        if package is not None:
+            type_a_pat = (getattr(package, "type_a_asset", "") or "").lower()
+            type_b_pat = (getattr(package, "type_b_asset", "") or "").lower()
+            if type_b_pat and fnmatch(lower, type_b_pat):
+                hw_type = "B"
+            elif type_a_pat and fnmatch(lower, type_a_pat):
+                hw_type = "A"
+            elif getattr(package, "hw_type", "") in ("A", "B"):
+                hw_type = package.hw_type
+
         tag_lower = (tag_name or "").lower()
-        is_type_b = "_type_b" in lower or "type-b" in lower or " type b" in lower
-        if not is_type_b and "type-b" in tag_lower:
-            is_type_b = True
-        hw_type = "B" if is_type_b else "A"
+        if hw_type is None:
+            is_explicit_b = any(
+                tok in lower for tok in (
+                    "_type_b", "-type-b", "type-b", " type b", "type_b", "typeb",
+                    "_b.zip", "-b.zip",
+                )
+            )
+            is_type_b = is_explicit_b
+            if not is_type_b and not has_explicit_type_assets and any(
+                tok in tag_lower for tok in ("type-b", "type_b", "type b", "typeb")
+            ):
+                is_type_b = True
+            hw_type = "B" if is_type_b else "A"
+
         if "_360p" in lower:
             resolution = "360p"
         elif "_240p" in lower:
             resolution = "240p"
         else:
             resolution = "native"
-        if is_install and not is_rom:
-            # *install*.zip without a rom* prefix: use the name and repository
-            # to identify the model. Y2Linux writes "Y2Linux-...", which has no
-            # separator before Y2; relying on "_y2"/"-y2" classified it as
-            # dual and the Y2-only filter then dropped the release.
-            model = _classify_variant_model(name, tag_name, repo)
-        else:
-            model = _classify_variant_model(name, tag_name, repo)
+
+        model = _classify_variant_model(name, tag_name, repo)
+        # If model is dual and package specifies a single model, inherit package model
+        if model == "dual" and package is not None and getattr(package, "model", "") in ("Y1", "Y2", "A5"):
+            model = package.model
+
         return {
             "asset": asset,
             "type": hw_type,
@@ -266,33 +314,54 @@ def _is_source_archive_name(name):
     return "source" in lower or "legal-info" in lower
 
 
-def _release_rom_variants(assets, tag_name, repo, repo_has_rom=False):
-    """Variants a release offers: its rom*.zip assets, else its other zips.
+def _release_rom_variants(assets, tag_name, repo, repo_has_rom=False, package=None):
+    """Variants a release offers: its rom*.zip assets, else its candidate firmware zips.
 
     A release that ships any rom*.zip follows the rom*.zip standard, so only
     those assets are offered and the other zips are ignored. Other zips are
-    offered only when the repository has no rom*.zip releases at all, and then
-    only a ``*install*.zip`` or a lone zip of any name is used (Y2Reborn /
-    Y2Linux style releases). Source archives are never install candidates.
+    offered when the repository has no rom*.zip releases, or when an explicit
+    asset_pattern is declared in slidia_manifest.xml.
     """
     assets = [
         a for a in (assets or []) if not _is_source_archive_name(a.get("name"))
     ]
+    # Check if package specifies an asset_pattern shim
+    pat = (getattr(package, "asset_pattern", "") or "").lower() if package else ""
+    if pat:
+        matched = [a for a in assets if fnmatch((a.get("name") or "").lower(), pat)]
+        if matched:
+            has_b = any(
+                any(tok in (a.get("name") or "").lower() for tok in ("_type_b", "-type-b", "type-b", " type b", "type_b", "typeb", "_b.zip", "-b.zip"))
+                for a in matched
+            )
+            variants = [_parse_rom_asset_variant(a, tag_name, repo, has_explicit_type_assets=has_b, package=package) for a in matched]
+            return [v for v in variants if v]
+
     rom_assets = [a for a in assets if _is_rom_zip_name(a.get("name"))]
+    target_assets = rom_assets if rom_assets else assets
+    has_explicit = any(
+        any(
+            tok in (a.get("name") or "").lower()
+            for tok in (
+                "_type_b", "-type-b", "type-b", " type b", "type_b", "typeb",
+                "_b.zip", "-b.zip",
+            )
+        )
+        for a in target_assets
+    )
     if rom_assets:
-        variants = [_parse_rom_asset_variant(a, tag_name, repo) for a in rom_assets]
+        variants = [_parse_rom_asset_variant(a, tag_name, repo, has_explicit_type_assets=has_explicit, package=package) for a in rom_assets]
         return [v for v in variants if v]
-    variants = [_parse_rom_asset_variant(a, tag_name, repo) for a in assets]
-    variants = [v for v in variants if v]
-    if variants or repo_has_rom:
-        return variants
+
+    # Non-rom zips: evaluate all non-source zip assets
     zips = [a for a in assets if (a.get("name") or "").lower().endswith(".zip")]
-    installs = [a for a in zips if fnmatch((a.get("name") or "").lower(), "*install*.zip")]
-    chosen = installs or (zips if len(zips) == 1 else [])
-    return [
-        {"asset": a, "type": "A", "resolution": "native", "model": "dual"}
-        for a in chosen
-    ]
+    if zips:
+        variants = [_parse_rom_asset_variant(a, tag_name, repo, has_explicit_type_assets=has_explicit, package=package) for a in zips]
+        variants = [v for v in variants if v]
+        if variants:
+            return variants
+
+    return []
 
 
 def _resolution_priority(resolution, prefer_240p=False):
@@ -353,6 +422,8 @@ def select_preferred_rom_asset(variants, selected_type=None, model=None, prefer_
         type_matched = [v for v in variants if v.get("type") == selected_type]
         if type_matched:
             variants = type_matched
+        else:
+            return None
     # Sort: resolution first (honoring prefer_240p), then model (exact > dual).
     # Model is the *last* key so it acts as a tiebreaker — a rom_y2.zip
     # always beats a dual rom.zip even if the latter has a nicer resolution.
@@ -484,19 +555,80 @@ def _parse_semver(version: str):
         return None
 
 
-def _semver_from_release_title(title: str):
-    """Read the product version from a release title when its tag has none.
+def detect_title_start_or_end_semver(title: str) -> str | None:
+    """Detect a semantic version at the start or end of a release notes title.
 
-    Y2Linux titles look like ``Y2Linux 1.0 Beta 9.2.13`` while their tags are
-    build identifiers (``baseline-204``). The version after Beta/Alpha/RC is
-    the product version; the earlier number is the platform generation. When
-    there is no prerelease marker, accept only a title with one unambiguous
-    dotted version so a title such as ``Release 2.0.4 for OS 3.0.2`` does not
-    silently turn the OS version into the firmware version.
+    For software releases where a semantic version appears at the start or end
+    of the release notes title (e.g. '1.0.4 - Initial Release', 'Y1 Rockbox 0.6',
+    'Y2Linux 1.0 Beta 9.2.13', or '[v2.1.0] Notes'), this version can be used
+    in place of the release tag on the firmware list / site.
     """
     text = str(title or "").strip()
     if not text:
         return None
+
+    # 1. Check start of title (e.g. "1.0.4 - Release", "v2.1.0 Notes", "[0.6] Rockbox", "Release 2.0.4: Fixes")
+    m_start = re.match(
+        r"^(?:release\s+|version\s+)?(?:\[|\()?(?:v|v\.)?(\d+(?:\.\d+)+)(?:\]|\))?(?:$|[\s:\-_|,])",
+        text,
+        re.IGNORECASE,
+    )
+    if m_start:
+        return m_start.group(1)
+
+    # 2. Check end of title (e.g. "Y1 Rockbox 0.6", "Custom Firmware v3.1.2", "Y2Linux 1.0 Beta 9.2.13")
+    # Clean trailing non-version tokens like (Beta), (240p), [Preview], (ADB)
+    candidate = text
+    for _ in range(4):
+        cleaned = re.sub(
+            r'[\s\-_]*[\(\[](?:beta\d*|alpha\d*|rc\d*|preview|240p|360p|adb|wifi|wi-fi|root|magisk)[\)\]]\s*$',
+            '',
+            candidate,
+            flags=re.IGNORECASE,
+        )
+        if cleaned == candidate:
+            break
+        candidate = cleaned.strip()
+
+    m_end = re.search(
+        r"(?:^|[\s:\-_|,(\[])(?:v|v\.)?(\d+(?:\.\d+)+)(?:\]|\))?\s*$",
+        candidate,
+        re.IGNORECASE,
+    )
+    if m_end:
+        return m_end.group(1)
+
+    return None
+
+
+def release_effective_tag(rel: dict) -> str:
+    """Return the effective release tag for display or tracking.
+
+    If a semantic version is detected at the start or end of the release notes
+    title, it is used in place of the raw release tag on the firmware list / site.
+    """
+    if not rel or not isinstance(rel, dict):
+        return ""
+    name = (rel.get("name") or "").strip()
+    title_semver = detect_title_start_or_end_semver(name)
+    if title_semver:
+        return title_semver
+    return (rel.get("tag_name") or "").strip()
+
+
+def _semver_from_release_title(title: str):
+    """Read the product version from a release title when its tag has none.
+
+    Y2Linux titles look like ``Y2Linux 1.0 Beta 9.2.13`` while their tags are
+    build identifiers (``baseline-204``). The version at start or end, or
+    after Beta/Alpha/RC is the product version.
+    """
+    text = str(title or "").strip()
+    if not text:
+        return None
+    detected = detect_title_start_or_end_semver(text)
+    if detected:
+        return detected
     after_prerelease = re.search(
         r'\b(?:beta|alpha|rc)\s*v?(\d+(?:\.\d+)+)\b', text, re.IGNORECASE
     )
@@ -845,16 +977,22 @@ def classify_release_list(releases, installed_tag, installed_published="", notif
 def release_sort_key(release):
     """Build a sortable 5-tier key so newer releases appear first in reverse sort."""
     tag_name = (release or {}).get("tag_name", "")
+    name = (release or {}).get("name", "")
+    title_semver = detect_title_start_or_end_semver(name)
+
+    numeric_version = None
+    if title_semver:
+        numeric_version = _parse_semver(title_semver)
+
     version_info = parse_version_designations(tag_name)
     clean_version = str(version_info.get("clean_version", "")).lstrip("vV")
 
     tag_timestamp = _extract_tag_timestamp(tag_name)
-    numeric_version = None
-    if not tag_timestamp:
+    if not tag_timestamp and numeric_version is None:
         numeric_version = _parse_semver(clean_version)
         if numeric_version is None:
             numeric_version = _parse_semver(
-                _semver_from_release_title((release or {}).get("name", ""))
+                _semver_from_release_title(name)
             )
 
     published_at = (release or {}).get("published_at", "")
@@ -1081,16 +1219,36 @@ def parse_clean_release_tag_label(rel, prefer_240p=False, version_only=False) ->
             semver_str = v_match.group(1)
 
     version_part = semver_str or date_str
-    if not version_part:
+    title_semver = detect_title_start_or_end_semver(name)
+    if title_semver:
+        version_part = title_semver
+    elif not version_part:
         # Tags such as ``baseline-204`` identify a build, not a version. Their
         # release titles carry the usable version (``Y2Linux 1.0 Beta 9.2.13``).
         version_part = _semver_from_release_title(name)
     if not version_part:
         return "" if version_only else (name or raw)
 
-    # 3. Extract verbs from tag_name (and raw string)
+    # 3. Extract verbs from tag_name (and parenthesized flags in name)
     lower_raw = raw.lower()
     verbs = []
+
+    if name:
+        for paren in re.findall(r"\(([a-zA-Z0-9_\-\s]+)\)", name):
+            p_clean = paren.strip().lower()
+            if p_clean in ("adb", "wifi", "wi-fi", "root", "magisk", "240p", "360p"):
+                if "wi" in p_clean:
+                    v_str = "Wi-Fi"
+                elif p_clean in ("adb", "root"):
+                    v_str = p_clean.upper() if p_clean == "adb" else "Root"
+                elif "240p" in p_clean:
+                    v_str = "240p"
+                elif "360p" in p_clean:
+                    v_str = "360p"
+                else:
+                    v_str = paren.strip().title()
+                if v_str not in verbs:
+                    verbs.append(v_str)
 
     if compound_os_version:
         from .i18n import tr
@@ -1166,13 +1324,21 @@ def format_release_display_label(rel, prefer_240p=False):
     designation_suffix = f" ({' | '.join(filtered_designations)})" if filtered_designations else ""
 
     clean_v = version_info.get("clean_version")
-    title_version = None
-    if not release_version_tuple(tag_name):
-        title_version = _semver_from_release_title(name)
+    title_version = detect_title_start_or_end_semver(name) or (_semver_from_release_title(name) if not clean_v else None)
     if title_version:
         # The tag may be a build identifier such as ``baseline-204``; its
         # "Baseline" word is not a version designation users need to see.
-        label = title_version
+        compound_os = ""
+        compound_m = re.search(
+            r"[-_](?:[a-zA-Z0-9]+[-_]|os[-_])?v?(\d+\.\d+(?:\.\d+)?)(?:[^\d.]|$)",
+            tag_name,
+            re.IGNORECASE,
+        )
+        if compound_m and "os" in tag_name.lower():
+            from .i18n import tr
+            compound_os = f" ({tr('label_for_os').format(version=compound_m.group(1))})"
+        res_suffix = " (240p)" if is_240p else ""
+        label = f"{title_version}{compound_os}{res_suffix}"
     elif name and name != tag_name:
         label = f"{name}{designation_suffix}"
     elif clean_v and any(d.lower() in tag_name.lower() for d in designations):
@@ -1670,7 +1836,9 @@ class ReleasesClient:
                 rel.get("source_repo", "") or "",
             )
             if selected_type:
-                rom_variants = [v for v in rom_variants if v.get("type") == selected_type] or rom_variants
+                rom_variants = [v for v in rom_variants if v.get("type") == selected_type]
+            if not rom_variants:
+                continue
             if not prefer_240p and rom_variants and all(
                 v.get("resolution") == "240p" for v in rom_variants
             ):

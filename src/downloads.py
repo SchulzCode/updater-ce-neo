@@ -86,7 +86,7 @@ def firmware_cache_size() -> tuple[int, int]:
     return count, total_bytes
 
 
-def clear_firmware_cache() -> tuple[int, int]:
+def clear_firmware_cache(exclude=None) -> tuple[int, int]:
     """Delete all downloaded firmware archives (*.zip, *.rar, *.part) and extracted ROM
     staging directories in downloads_dir(). Leaves device tracking records, update reminder
     preferences, and install history completely intact.
@@ -98,10 +98,19 @@ def clear_firmware_cache() -> tuple[int, int]:
     d = downloads_dir()
     if not d.is_dir():
         return 0, 0
+    excluded = set()
+    if exclude:
+        for p in exclude:
+            try:
+                excluded.add(Path(p).resolve())
+            except Exception:
+                pass
     count = 0
     bytes_freed = 0
     for item in list(d.iterdir()):
         try:
+            if item.resolve() in excluded:
+                continue
             if item.is_file():
                 ext = item.suffix.lower()
                 if ext in (".zip", ".rar", ".part", ".tar", ".gz", ".7z") or item.name.endswith(".part"):
@@ -123,6 +132,33 @@ def clear_firmware_cache() -> tuple[int, int]:
         except Exception as e:
             logger.warning("Failed to remove cached firmware item %s: %s", item, e)
     return count, bytes_freed
+
+
+def ensure_disk_space_available(target_path=None, needed_bytes: int = 0) -> bool:
+    """Check if host has enough disk space. Proactively cleans firmware cache if low.
+    Returns True if sufficient space is available, False if out of storage.
+    """
+    import shutil
+
+    d = Path(target_path).parent if target_path else downloads_dir()
+    try:
+        if not d.exists():
+            d.mkdir(parents=True, exist_ok=True)
+        usage = shutil.disk_usage(d)
+        threshold = max(needed_bytes + 50 * 1024 * 1024, 100 * 1024 * 1024)
+        if usage.free < threshold:
+            exclude = None
+            if target_path:
+                tp = Path(target_path)
+                exclude = {tp, Path(f"{tp}.part")}
+            clear_firmware_cache(exclude=exclude)
+            usage = shutil.disk_usage(d)
+            if usage.free < threshold:
+                return False
+        return True
+    except Exception as e:
+        logger.debug("Disk usage check error: %s", e)
+        return True
 
 
 class DownloadWorker(QThread):
@@ -191,6 +227,8 @@ class DownloadWorker(QThread):
             total_size = 0
             last_percent = -1
             last_status_time = 0.0
+            if downloaded == 0:
+                self.progress.emit(0)
             session = requests_module().Session()
 
             for attempt in range(1, MAX_RETRIES + 1):
@@ -250,6 +288,13 @@ class DownloadWorker(QThread):
                     self._response = response
                     logger.info("Streaming download: downloaded=%d, total=%d, mode=%s", downloaded, total_size, file_mode)
 
+                    if total_size > 0:
+                        needed = max(0, total_size - downloaded)
+                        if not ensure_disk_space_available(self.destination, needed):
+                            logger.error("Insufficient disk space to download %s (needed %d bytes)", self.destination, needed)
+                            self.finished.emit(False, "OUT_OF_STORAGE")
+                            return
+
                     speed_bytes_sec = 0.0
                     last_speed_time = time.time()
                     bytes_since_speed = 0
@@ -262,7 +307,20 @@ class DownloadWorker(QThread):
                             if not chunk:
                                 continue
 
-                            f.write(chunk)
+                            try:
+                                f.write(chunk)
+                            except OSError as write_err:
+                                from .flash_service import is_storage_full_error
+                                if is_storage_full_error(str(write_err), write_err):
+                                    clear_firmware_cache(exclude={self.destination, part_file})
+                                    try:
+                                        f.write(chunk)
+                                    except OSError:
+                                        logger.error("Disk full while writing download: %s", write_err)
+                                        self.finished.emit(False, "OUT_OF_STORAGE")
+                                        return
+                                else:
+                                    raise
                             chunk_len = len(chunk)
                             downloaded += chunk_len
                             bytes_since_speed += chunk_len
@@ -317,7 +375,23 @@ class DownloadWorker(QThread):
                         self.finished.emit(False, "USER_CANCELLED")
                         return
 
+                    from .flash_service import is_storage_full_error
+                    if is_storage_full_error(str(exc), exc):
+                        logger.error("Download aborted due to out-of-storage: %s", exc)
+                        self.finished.emit(False, "OUT_OF_STORAGE")
+                        return
+
                     logger.warning("Download error on attempt %d/%d: %s", attempt, MAX_RETRIES, exc)
+                    if "certificate" in str(exc).lower() or "cacert" in str(exc).lower():
+                        # CA bundle issue: reset SSL_CERT_FILE and recreate session
+                        for k in ("SSL_CERT_FILE", "REQUESTS_CA_BUNDLE"):
+                            os.environ.pop(k, None)
+                        try:
+                            import certifi
+                            os.environ["SSL_CERT_FILE"] = certifi.where()
+                        except Exception:
+                            pass
+                        session = requests_module().Session()
                     if attempt < MAX_RETRIES:
                         self.status.emit(tr("dl_retry_fmt").format(attempt=attempt, max=MAX_RETRIES))
                         # Interruptible backoff: a cancel during the pause must

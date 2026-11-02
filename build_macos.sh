@@ -11,7 +11,7 @@
 # Requirements:
 #   - Python 3.11+ in a virtualenv (.venv)
 #   - pip install pyinstaller pyside6 requests pyqt-liquidglass pyobjc-framework-cocoa pyobjc-framework-quartz
-#   - macOS 12+ (Monterey through Golden Gate compatible, Intel & Apple Silicon)
+#   - macOS 11+ (Big Sur through Golden Gate compatible, Intel & Apple Silicon)
 #
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -242,7 +242,7 @@ if [ ! -f "$BUNDLE_ICON" ]; then
     fi
 fi
 
-echo "  -> Target OS: macOS 12 (Monterey) through macOS 26 (Golden Gate)"
+echo "  -> Target OS: macOS 11 (Big Sur) through macOS 26 (Golden Gate)"
 [ -n "$TARGET_ARCH" ] && echo "  -> Architecture: $TARGET_ARCH" || echo "  -> Architecture: Host default (Intel/Apple Silicon)"
 
 # --- Bake the packaging brand -----------------------------------------

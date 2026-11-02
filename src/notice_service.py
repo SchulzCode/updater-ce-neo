@@ -587,6 +587,14 @@ class NoticeService(QObject):
         self._emit_next_notice()
 
     def _emit_next_notice(self) -> None:
+        try:
+            from .remote_flags import is_remote_flag_active
+            if is_remote_flag_active("notices_off"):
+                self.notices_ready.emit([])
+                self.notice_ready.emit(None)
+                return
+        except Exception:
+            pass
         # The Notices list shows every active notice; the Select Software
         # banner shows the first one that has not been hidden from it.
         visible = self.active_notices

@@ -76,7 +76,11 @@ if ADB_TOOLS.exists():
 # add a few hundred megabytes of unusable binaries that the runtime resolver
 # would then have to reject. Match src/linux_sp_flash.arch_supported().
 _X86_MACHINES = ("x86_64", "amd64", "x64", "i386", "i486", "i586", "i686", "x86")
-HOST_IS_X86 = (platform.machine() or "").lower() in _X86_MACHINES
+_env_target_arch = (os.environ.get("TARGET_ARCH") or os.environ.get("BUILD_ARCH") or "").strip().lower()
+if _env_target_arch:
+    HOST_IS_X86 = _env_target_arch in _X86_MACHINES and _env_target_arch not in ("arm64", "aarch64")
+else:
+    HOST_IS_X86 = (platform.machine() or "").lower() in _X86_MACHINES
 
 sp_candidates = [
     PROJECT_ROOT / "SP_Flash_Tool" if HOST_IS_X86 else None,

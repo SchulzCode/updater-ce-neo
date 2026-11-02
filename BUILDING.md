@@ -14,8 +14,9 @@ This guide contains everything required for anyone to clone this repository and 
 - **Architecture**: Supports Intel (`x86_64`), Apple Silicon (`arm64`), and Universal2 (`universal2`).
 
 ### Windows (10 / 11, x64 / ARM64)
-- **Python**: 3.10 or newer (ensure "Add python.exe to PATH" is checked during setup)
+- **Python**: 3.10 or newer (ensure "Add python.exe to PATH" is checked during setup; use native ARM64 Python for ARM64 builds)
 - **Inno Setup 6** (optional, for building the `.exe` setup wizard): [Inno Setup Downloads](https://jrsoftware.org/isdl.php)
+- **Windows 10/11 SDK** (optional, only if packing Microsoft Store `.msix` packages with `MakeAppx.exe`)
 
 ### Linux (Ubuntu, Debian, Fedora, Arch, etc.)
 - **Python**: 3.10 or newer
@@ -48,6 +49,8 @@ chmod +x build_macos.sh
 
 ### Windows (.exe standalone and setup installer)
 
+#### 1. x64 Build (Intel / AMD 64-bit)
+
 In Command Prompt (`cmd.exe`):
 ```cmd
 git clone https://github.com/y1-community/updater-ce-neo.git
@@ -63,10 +66,36 @@ cd updater-ce-neo
 ```
 
 **Output** (both front ends — see section 5):
-- `dist\InnioasisUpdater\InnioasisUpdater.exe` and `dist\MediaTekInstaller\MediaTekInstaller.exe` (standalone portable directories with bundled SP Flash Tool)
-- `dist\UpdaterCE-Setup-2.5.0.exe` and `dist\MediaTekInstaller-Setup-2.5.0.exe` (full Windows installer wizards, each with its own identity so both can be installed side by side)
+- `dist\windows\InnioasisUpdater\InnioasisUpdater.exe` and `dist\windows\MediaTekInstaller\MediaTekInstaller.exe` (standalone portable directories with bundled SP Flash Tool)
+- `dist\windows\UpdaterCE-Portable-2.5.2.zip` and `dist\windows\MediaTekInstaller-Portable-2.5.2.zip` (portable zip archives)
+- `dist\windows\UpdaterCE-Setup-2.5.2.exe` and `dist\windows\MediaTekInstaller-Setup-2.5.2.exe` (full Windows Inno Setup installer wizards, each with its own identity so both can be installed side by side)
 
-> **Note**: On Windows, the app runs 100% SP Flash Tool by default. Press the `M` key on the keyboard to unlock the MTKClient advanced backend option.
+> **Note**: On x64 Windows, the app runs 100% SP Flash Tool by default. Press the `M` key on the keyboard to unlock the MTKClient advanced backend option.
+
+#### 2. ARM64 Build (Qualcomm Snapdragon X Elite / Plus, Surface Pro X, Windows on ARM)
+
+To compile native ARM64 Windows binaries and installers:
+
+In Command Prompt (`cmd.exe`):
+```cmd
+build_windows.bat --arch arm64
+```
+
+Or in PowerShell:
+```powershell
+.\build_windows.ps1 -Arch arm64
+```
+
+> **Auto-detection**: When running on an ARM64 Windows system (or VM) with native ARM64 Python, `build_windows.bat` and `build_windows.ps1` automatically detect the architecture without needing `--arch arm64`.
+
+**ARM64 Output**:
+- `dist\windows\InnioasisUpdater\InnioasisUpdater.exe` and `dist\windows\MediaTekInstaller\MediaTekInstaller.exe` (native ARM64 portable folders)
+- `dist\windows\UpdaterCE-Portable-2.5.2-arm64.zip` and `dist\windows\MediaTekInstaller-Portable-2.5.2-arm64.zip` (portable archives)
+- `dist\windows\UpdaterCE-Setup-2.5.2-arm64.exe` and `dist\windows\MediaTekInstaller-Setup-2.5.2-arm64.exe` (Inno Setup 6 installer compiled with `ArchitecturesAllowed=arm64` and `ArchitecturesInstallIn64BitMode=arm64`)
+- `dist\windows\InnioasisUpdater-2.5.2.0-arm64.msix` (when building with `-Msix`)
+
+**Flashing Backend on Windows ARM64**:
+On Windows ARM64, the app uses **MTKClient** as its flash engine (just like macOS and Linux ARM64). SP Flash Tool is an x86/x64-only binary and is deliberately not bundled on ARM64 builds, saving space and avoiding driver emulation issues. MTKClient communicates directly over USB with MediaTek BROM / Preloader devices without requiring legacy x86 VCOM kernel drivers.
 
 ### Windows (Microsoft Store / MSIX package)
 
@@ -144,7 +173,8 @@ To recompile our customized SP Flash Tool for Linux from source at any time:
 | Platform | Default Backend | Alternate Backend | Bundled Payload |
 | :--- | :--- | :--- | :--- |
 | **macOS** | **MTKClient** | None (SP Flash Tool has no macOS build) | `vendor/mtkclient` + `libusb-1.0.dylib` + `MTK_AllInOne_DA_mt6590.bin` + `tools/adb` |
-| **Windows** | **SP Flash Tool** | **MTKClient** (unlocked via `M` key) | `tools/windows/SP_Flash_Tool_v5.1904_Win` + `tools/adb` |
+| **Windows (x64)** | **SP Flash Tool** | **MTKClient** (unlocked via `M` key) | `tools/windows/SP_Flash_Tool_v5.1904_Win` + `tools/adb` |
+| **Windows (ARM64)** | **MTKClient** | None (SP Flash Tool is x86-only) | Precompiled `mtkclient` + `tools/adb` |
 | **Linux (x86-64)** | **SP Flash Tool** | **MTKClient** | `tools/linux/SP_Flash_Tool_v5.1904_Linux` + `tools/adb` + `libusb-1.0` |
 | **Linux (ARM64)** | **MTKClient** | None (SP Flash Tool is x86-64 only) | Precompiled `mtkclient` + `tools/adb/linux-arm64` + `libusb-1.0` |
 

@@ -1718,7 +1718,7 @@ class SelectPackagePage(QWidget):
         self._refresh_btn.setText(tr("sel_refresh"))
         self._install_btn.setText(tr("sel_install"))
         if self._current_selected_rel:
-            lbl = self._current_selected_rel.get("name") or self._current_selected_rel.get("tag_name") or ""
+            lbl = self._current_selected_rel.get("name") or catalog.release_effective_tag(self._current_selected_rel) or self._current_selected_rel.get("tag_name") or ""
             self._install_btn.setToolTip(tr("sel_install_tooltip").format(lbl=lbl))
         else:
             self._install_btn.setToolTip(tr("sel_install_tooltip_generic"))
@@ -2205,10 +2205,14 @@ class SelectPackagePage(QWidget):
         if hasattr(self, "_notes_group") and self._notes_group.isVisible():
             header_h = self._details_header.sizeHint().height() if hasattr(self, "_details_header") and self._details_header.isVisible() else 0
             notes_h = max(50, self._notes.sizeHint().height()) if hasattr(self, "_notes") else 60
-            trans_h = self._translate_label.sizeHint().height() if hasattr(self, "_translate_label") and self._translate_label.isVisible() else 0
+            card_w = max(160, (self._notes_group.width() - 28) if self._notes_group.width() > 28 else 200)
+            trans_h = 0
+            if hasattr(self, "_translate_label") and self._translate_label.isVisible():
+                trans_h = max(self._translate_label.sizeHint().height(), self._translate_label.heightForWidth(card_w), 24)
+                self._translate_label.setMinimumHeight(trans_h)
             see_more_h = self._see_more_label.sizeHint().height() if hasattr(self, "_see_more_label") and self._see_more_label.isVisible() else 0
             # Card contents margins (top 12, bottom 12) + spacing between rows
-            notes_needed = header_h + notes_h + trans_h + see_more_h + 40
+            notes_needed = header_h + notes_h + trans_h + see_more_h + 36
             if notes_needed > 0:
                 self._notes_group.setMinimumHeight(notes_needed)
                 if hasattr(self, "_pkg_group"):
@@ -2216,7 +2220,7 @@ class SelectPackagePage(QWidget):
                 if page_layout is not None:
                     self._invalidate_layout_tree(page_layout)
                     page_layout.activate()
-                hint_h = max(hint_h, max(self.sizeHint().height(), self.minimumSizeHint().height()))
+                hint_h = max(hint_h, max(self.sizeHint().height(), self.minimumSizeHint().height()), notes_needed + 140)
         return hint_h
 
     @staticmethod
@@ -2319,7 +2323,10 @@ class SelectPackagePage(QWidget):
             item.setFont(font)
 
             tooltip = self._asset_line(rel)
-            if tag:
+            eff_tag = catalog.release_effective_tag(rel)
+            if eff_tag:
+                tooltip = f"{eff_tag}\n{tooltip}".strip()
+            elif tag:
                 tooltip = f"{tag}\n{tooltip}".strip()
             if is_installed:
                 tip = tr("sel_installed_tip")
@@ -2580,6 +2587,9 @@ class SelectPackagePage(QWidget):
                 f'{globe_html}<a href="action:translate_in_app" style="color:{t.fg}; text-decoration:none; font-weight:700;">{trans_txt}</a> &nbsp;·&nbsp; '
                 f'<a href="{url}" style="color:{t.fg}; text-decoration:none; font-weight:700;">{open_txt} ↗</a>'
             )
+        card_w = max(160, (self._notes_group.width() - 28) if hasattr(self, "_notes_group") and self._notes_group.width() > 28 else 200)
+        needed_h = max(self._translate_label.sizeHint().height(), self._translate_label.heightForWidth(card_w), 24)
+        self._translate_label.setMinimumHeight(needed_h)
         self._translate_label.updateGeometry()
         self.content_size_changed.emit()
 
@@ -2711,6 +2721,7 @@ class SelectPackagePage(QWidget):
             "tag_name": rel.get("tag_name", ""),
             "release_label": catalog.format_release_display_label(rel),
             "type_variant": eff_type,
+            "hardware_type": eff_type,
             "published_at": rel.get("published_at", ""),
             "apk_repo": apk_repo,
             "apk_url": apk_url,
@@ -2748,6 +2759,8 @@ class SelectPackagePage(QWidget):
         self._current_package_model = eff_model
         self._current_installed_release_info = self._pending_install_release_info
         self._current_selected_rel = rel
+        self._last_download_percent = 0
+        self._last_download_status_text = ""
         self._download_status_key = "sel_download_start"
         self._install_btn.setEnabled(False)
         display_name = self._install_card_title(pkg.name, rel, eff_model)
@@ -3422,6 +3435,8 @@ class SelectPackagePage(QWidget):
             self._prepare_package(str(dest), self._on_external_prep_done)
             return True
         self.download_started.emit(self._current_package_name, self._current_package_model)
+        self._last_download_percent = 0
+        self._last_download_status_text = ""
         if self._download_worker is not None and self._download_worker.isRunning():
             self._download_worker.cancel()
             retire_worker(self._download_worker, self._active_workers)
@@ -3708,6 +3723,12 @@ class SelectPackagePage(QWidget):
 
     def current_model(self):
         return self._model_combo.currentText()
+
+    def current_hardware_type(self) -> str:
+        """The hardware type ('A', 'B', etc.) if model has variants (Y1), else ''."""
+        if (self.current_model() or "").upper() == "Y1":
+            return getattr(self, "_selected_type", "A") or "A"
+        return ""
 
     def current_software(self):
         """Canonical English software name behind the selected row.

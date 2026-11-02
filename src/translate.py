@@ -57,11 +57,13 @@ def _urlopen(req: urllib.request.Request, timeout: float = 6.0):
 def get_google_translate_release_url(
     rel: Optional[dict] = None, target_lang: Optional[str] = None
 ) -> str:
-    """Build the Google Translate URL for a given GitHub release.
-
-    Format matches:
-    https://github-com.translate.goog/{repo}/releases/{tag}?_x_tr_sl=auto&_x_tr_tl={target_lang}&_x_tr_hl={target_lang}&_x_tr_pto=wapp
-    """
+    """Build the Google Translate URL for a given GitHub release."""
+    try:
+        from .remote_flags import is_remote_flag_active
+        if is_remote_flag_active("null-translate"):
+            return ""
+    except Exception:
+        pass
     lang = (target_lang or "").strip()
     if not lang:
         try:
@@ -97,6 +99,13 @@ def fetch_google_translation(text: str, target_lang: str, timeout: float = 6.0) 
     with unverified fallback, and parses both clients5 and translate.googleapis.com.
     Returns original text if offline or on network failure.
     """
+    try:
+        from .remote_flags import is_remote_flag_active
+        if is_remote_flag_active("null-translate"):
+            return text
+    except Exception:
+        pass
+
     if not text or not text.strip() or is_english_language(target_lang):
         return text
 

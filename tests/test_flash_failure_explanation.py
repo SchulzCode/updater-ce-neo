@@ -259,3 +259,22 @@ def test_stale_usb_loss_does_not_caption_the_next_attempt(app):
         win.close()
         win.deleteLater()
         app.processEvents()
+
+
+def test_storage_full_error_detection_and_explanation(app):
+    """Verify that disk full errors are properly detected and explained across languages."""
+    from src.flash_service import is_storage_full_error
+    import errno
+
+    assert is_storage_full_error("OUT_OF_STORAGE")
+    assert is_storage_full_error("No space left on device")
+    assert is_storage_full_error("There is not enough space on the disk")
+    assert is_storage_full_error(exc=OSError(errno.ENOSPC, "No space left on device"))
+
+    for loc in ("en", "zh-CN", "fr", "es", "de", "ja"):
+        translator().set_language(loc)
+        title, desc = parse_flash_error("OUT_OF_STORAGE", model="Y1")
+        assert title == tr("err_storage_full_title")
+        assert desc == tr("err_storage_full_desc")
+        assert "USB" not in title
+

@@ -23,6 +23,14 @@ SF_SYMBOL = "arrow.triangle.2.circlepath"
 
 def run_in_background_enabled(settings: Optional[QSettings] = None) -> bool:
     """The opt-in switch. Off unless the user turned it on."""
+    try:
+        from .remote_flags import is_remote_flag_active
+        if is_remote_flag_active("background_off") or is_remote_flag_active("no_background"):
+            return False
+        if is_remote_flag_active("background_on") or is_remote_flag_active("force_background"):
+            return True
+    except Exception:
+        pass
     settings = settings or QSettings("innioasis", "updater")
     value = settings.value(RUN_IN_BACKGROUND_KEY, False)
     return str(value).lower() in ("1", "true", "yes")

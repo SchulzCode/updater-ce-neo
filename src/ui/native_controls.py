@@ -672,19 +672,31 @@ class NativeSegmentedPair:
             NSImage,
             NSImageSymbolConfiguration,
             NSAppearance,
+            NSColor,
         )
         from .dark import is_dark
 
+        dark = is_dark()
+        tint = NSColor.whiteColor() if dark else NSColor.labelColor()
         cfg = NSImageSymbolConfiguration.configurationWithPointSize_weight_(
             14.0, NSFontWeightRegular
         )
+        if hasattr(NSImageSymbolConfiguration, "configurationWithHierarchicalColor_"):
+            try:
+                cfg = cfg.configurationByApplyingConfiguration_(
+                    NSImageSymbolConfiguration.configurationWithHierarchicalColor_(tint)
+                )
+            except Exception:
+                pass
 
         def _get_img(btn, fallback):
             sym = getattr(btn, "_symbol", "") or fallback
             name = _SEGMENTED_SF_SYMBOLS.get(sym) or _SF_SYMBOLS.get(sym) or "chevron.forward"
             img = NSImage.imageWithSystemSymbolName_accessibilityDescription_(name, None)
             if img is not None and hasattr(img, "imageWithSymbolConfiguration_"):
-                return img.imageWithSymbolConfiguration_(cfg)
+                img = img.imageWithSymbolConfiguration_(cfg)
+            if img is not None:
+                img.setTemplate_(True)
             return img
 
         img0 = _get_img(self._host, "back")

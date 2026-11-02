@@ -1168,6 +1168,7 @@ class DiagnosticsDialog(QDialog):
         self.setWindowTitle(tr("log_center"))
         self.resize(740, 500)
         self.setMinimumSize(540, 360)
+        self._drag_offset = None
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self._panel = DiagnosticsView(
@@ -1175,6 +1176,24 @@ class DiagnosticsDialog(QDialog):
         )
         self._panel.close_requested.connect(self.accept)
         layout.addWidget(self._panel)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._drag_offset = event.globalPosition().toPoint() - self.pos()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if getattr(self, "_drag_offset", None) is not None and (event.buttons() & Qt.LeftButton):
+            self.move(event.globalPosition().toPoint() - self._drag_offset)
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._drag_offset = None
+        super().mouseReleaseEvent(event)
 
     def __getattr__(self, name):
         panel = self.__dict__.get("_panel")
@@ -2606,15 +2625,40 @@ class InstallConsoleDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setModal(False)
+        self.setWindowFlags(
+            Qt.WindowType.Window
+            | Qt.WindowType.WindowTitleHint
+            | Qt.WindowType.WindowCloseButtonHint
+            | Qt.WindowType.WindowMinMaxButtonsHint
+        )
         self.setWindowTitle(tr("install_output_title"))
         self.resize(560, 360)
         self._stick = True
+        self._drag_offset = None
         layout = QVBoxLayout(self)
         self._log = QTextEdit()
         self._log.setReadOnly(True)
         self._log.setPlaceholderText(tr("install_output_empty"))
         layout.addWidget(self._log)
         self._log.verticalScrollBar().valueChanged.connect(self._on_scroll)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self._drag_offset = event.globalPosition().toPoint() - self.pos()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._drag_offset is not None and (event.buttons() & Qt.LeftButton):
+            self.move(event.globalPosition().toPoint() - self._drag_offset)
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._drag_offset = None
+        super().mouseReleaseEvent(event)
 
     def set_lines(self, lines) -> None:
         filtered = []

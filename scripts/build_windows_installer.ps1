@@ -10,7 +10,9 @@ param(
     [string]$Version = "",
     [string]$OutDir = "",
     [ValidateSet("", "updater_ce", "mediatek_installer")]
-    [string]$Brand = ""
+    [string]$Brand = "",
+    [ValidateSet("", "x64", "arm64")]
+    [string]$Arch = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -51,7 +53,14 @@ $isMtk = ($Brand -eq "mediatek_installer") -or
          (Test-Path (Join-Path $AppDir "MediaTekInstaller.exe")) -or
          ($AppDir -match "MediaTek")
 
+$isArm64 = ($Arch -eq "arm64") -or
+           ($env:TARGET_ARCH -eq "arm64") -or
+           ($AppDir -match "arm64")
+
 $setupBaseName = if ($isMtk) { "MediaTekInstaller-Setup-$Version" } else { "UpdaterCE-Setup-$Version" }
+if ($isArm64 -and -not ($setupBaseName -match "-arm64$")) {
+    $setupBaseName += "-arm64"
+}
 
 # Locate ISCC.exe
 function Find-ISCC {
@@ -86,6 +95,9 @@ $isccArgs = @(
 )
 if ($isMtk) {
     $isccArgs += "/DMyIsMediaTek"
+}
+if ($isArm64) {
+    $isccArgs += "/DMyIsArm64"
 }
 $isccArgs += $issScript
 
