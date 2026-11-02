@@ -1308,12 +1308,19 @@ class UpdateAvailableDialog(QDialog):
             f"body {{ background: transparent; }} a {{ color: {t.accent}; font-weight: 600; text-decoration: none; }}"
         )
         body_text = self._info.body.strip() if self._info else ""
-        if body_text:
-            # No version heading inside the notes: the subtitle above already
-            # says which release this is.
-            self._notes.setHtml(format_markdown_release_notes(body_text))
-        else:
-            self._notes.setPlainText(tr("update_no_notes"))
+        self._translated = None  # (name, body) once Google Translate returns
+        self._translate_worker = None
+        self._is_translating = False
+        self._translate_label = QLabel()
+        self._translate_label.setTextFormat(Qt.RichText)
+        self._translate_label.setOpenExternalLinks(False)
+        self._translate_label.setWordWrap(True)
+        self._translate_label.linkActivated.connect(self._on_translate_link)
+        self._main_layout.addWidget(self._translate_label)
+        self._render_notes()
+        self._update_translate_label()
+        if self._should_auto_translate():
+            self._start_translation()
         # No widget stylesheet: a local one would replace the platform
         # scrollbar. The notes stay clear so the card pane behind them is what
         # the reader sees, exactly as on the Select Software release notes.
