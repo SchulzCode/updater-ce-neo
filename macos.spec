@@ -219,7 +219,7 @@ app = BUNDLE(
         "NSHighResolutionCapable": True,
         "NSRequiresAquaSystemAppearance": False,
         "LSApplicationCategoryType": "public.app-category.utilities",
-        "NSHumanReadableCopyright": "Copyright © 2024-2026 Innioasis Community. All rights reserved.",
+        "NSHumanReadableCopyright": "Copyright © 2024-2026 Ryan Specter. All rights reserved.",
         "CFBundleDocumentTypes": [
             {
                 "CFBundleTypeName": "Firmware Archive",
@@ -281,7 +281,7 @@ try:
             "NSHighResolutionCapable": True,
             "NSRequiresAquaSystemAppearance": False,
             "NSPrincipalClass": "NSApplication",
-            "NSHumanReadableCopyright": "Copyright © 2024-2026 Innioasis Community. All rights reserved.",
+            "NSHumanReadableCopyright": "Copyright © 2024-2026 Ryan Specter. All rights reserved.",
         }
         with open(contents_dir / "Info.plist", "wb") as f:
             plistlib.dump(plist_data, f)

@@ -275,6 +275,20 @@ def wait_for_adb_device(
         time.sleep(min(poll_interval, remaining))
 
 
+def adb_install_apk(adb: str, serial: "AdbDevice | str", apk_path: str | Path, timeout: float = 180) -> tuple[bool, str]:
+    """Install an APK on the device with ``adb install -r``.
+
+    Returns ``(ok, message)``. Failures are reported in the message rather than
+    raised, so the caller can fall back to the guided install.
+    """
+    try:
+        result = _run_adb(adb, *_target(serial), "install", "-r", str(apk_path), timeout=timeout)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return False, str(exc)
+    output = (result.stdout or "").strip() or (result.stderr or "").strip()
+    return (result.returncode == 0 and "Success" in output), output
+
+
 def adb_shell_ls(adb: str, serial: "AdbDevice | str", device_path: str) -> bool:
     """True when ``device_path`` exists on the device.
 

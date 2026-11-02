@@ -14,6 +14,7 @@ Design notes kept from the original:
   (the original ships PATs in ``config.ini``; this port intentionally does not).
 """
 
+import dataclasses
 import json
 import logging
 import os
@@ -54,13 +55,19 @@ class FirmwarePackage:
     icon: str = ""
     icon_dark: str = ""
     image: str = ""
-    is_y2linux: bool = False
     post_install: str = ""
     post_install_2: str = ""
     # Repository handle of the firmware this release was built from, e.g.
     # ``y1-community/y1-stock-rom``. Equal or related firmwares share a data
     # partition, which is what the Keep Data feature depends on.
     derivative: str = ""
+    # Application repository whose APK releases describe what this firmware
+    # deploys (``info_repo``): its tags and notes are listed, while the
+    # firmware itself still comes from ``repo``.
+    info_repo: str = ""
+    # Application repository whose APK the app downloads and installs after the
+    # firmware (``apk_repo``).
+    apk_repo: str = ""
 
 
 def post_install_urls_for(*packages) -> tuple[str, str]:
@@ -136,7 +143,12 @@ CATALOG = [
 
 
 def packages_for_model(model: str):
-    return [p for p in _catalog_packages() if p.model == model]
+    # An info_repo package without a post-install page has no instructions for
+    # its APK, so it is not offered at all.
+    return [
+        p for p in _catalog_packages()
+        if p.model == model and (not p.info_repo or p.post_install or p.post_install_2)
+    ]
 
 
 def available_models():
@@ -222,14 +234,11 @@ def _parse_rom_asset_variant(asset, tag_name="", repo=""):
         else:
             resolution = "native"
         if is_install and not is_rom:
-            # *install*.zip without a rom* prefix: classify by explicit model tags only,
-            # otherwise "dual" (catalogue-declared model governs).
-            if "_y2" in lower or "-y2" in lower:
-                model = "Y2"
-            elif "_a5" in lower or "-a5" in lower:
-                model = "A5"
-            else:
-                model = "dual"
+            # *install*.zip without a rom* prefix: use the name and repository
+            # to identify the model. Y2Linux writes "Y2Linux-...", which has no
+            # separator before Y2; relying on "_y2"/"-y2" classified it as
+            # dual and the Y2-only filter then dropped the release.
+            model = _classify_variant_model(name, tag_name, repo)
         else:
             model = _classify_variant_model(name, tag_name, repo)
         return {
@@ -246,6 +255,17 @@ def _is_rom_zip_name(name):
     return fnmatch((name or "").lower(), "rom*.zip")
 
 
+def _is_source_archive_name(name):
+    """Source-code bundles are never installable firmware assets.
+
+    Some projects publish both the install zip and a source zip/tar in the
+    same release. The install zip is the one the catalogue must use, even when
+    the source archive is the only other zip in the release.
+    """
+    lower = (name or "").lower()
+    return "source" in lower or "legal-info" in lower
+
+
 def _release_rom_variants(assets, tag_name, repo, repo_has_rom=False):
     """Variants a release offers: its rom*.zip assets, else its other zips.
 
@@ -253,8 +273,11 @@ def _release_rom_variants(assets, tag_name, repo, repo_has_rom=False):
     those assets are offered and the other zips are ignored. Other zips are
     offered only when the repository has no rom*.zip releases at all, and then
     only a ``*install*.zip`` or a lone zip of any name is used (Y2Reborn /
-    Y2Linux style releases).
+    Y2Linux style releases). Source archives are never install candidates.
     """
+    assets = [
+        a for a in (assets or []) if not _is_source_archive_name(a.get("name"))
+    ]
     rom_assets = [a for a in assets if _is_rom_zip_name(a.get("name"))]
     if rom_assets:
         variants = [_parse_rom_asset_variant(a, tag_name, repo) for a in rom_assets]
@@ -459,6 +482,28 @@ def _parse_semver(version: str):
         return tuple(int(part) for part in version_str.split('.'))
     except ValueError:
         return None
+
+
+def _semver_from_release_title(title: str):
+    """Read the product version from a release title when its tag has none.
+
+    Y2Linux titles look like ``Y2Linux 1.0 Beta 9.2.13`` while their tags are
+    build identifiers (``baseline-204``). The version after Beta/Alpha/RC is
+    the product version; the earlier number is the platform generation. When
+    there is no prerelease marker, accept only a title with one unambiguous
+    dotted version so a title such as ``Release 2.0.4 for OS 3.0.2`` does not
+    silently turn the OS version into the firmware version.
+    """
+    text = str(title or "").strip()
+    if not text:
+        return None
+    after_prerelease = re.search(
+        r'\b(?:beta|alpha|rc)\s*v?(\d+(?:\.\d+)+)\b', text, re.IGNORECASE
+    )
+    if after_prerelease:
+        return after_prerelease.group(1)
+    versions = re.findall(r'(?<![\d.])(\d+\.\d+(?:\.\d+)+)(?![\d.])', text)
+    return versions[0] if len(versions) == 1 else None
 
 
 def parse_version_designations(version_name: str) -> dict:
@@ -807,6 +852,10 @@ def release_sort_key(release):
     numeric_version = None
     if not tag_timestamp:
         numeric_version = _parse_semver(clean_version)
+        if numeric_version is None:
+            numeric_version = _parse_semver(
+                _semver_from_release_title((release or {}).get("name", ""))
+            )
 
     published_at = (release or {}).get("published_at", "")
     try:
@@ -1033,6 +1082,10 @@ def parse_clean_release_tag_label(rel, prefer_240p=False, version_only=False) ->
 
     version_part = semver_str or date_str
     if not version_part:
+        # Tags such as ``baseline-204`` identify a build, not a version. Their
+        # release titles carry the usable version (``Y2Linux 1.0 Beta 9.2.13``).
+        version_part = _semver_from_release_title(name)
+    if not version_part:
         return "" if version_only else (name or raw)
 
     # 3. Extract verbs from tag_name (and raw string)
@@ -1113,7 +1166,14 @@ def format_release_display_label(rel, prefer_240p=False):
     designation_suffix = f" ({' | '.join(filtered_designations)})" if filtered_designations else ""
 
     clean_v = version_info.get("clean_version")
-    if name and name != tag_name:
+    title_version = None
+    if not release_version_tuple(tag_name):
+        title_version = _semver_from_release_title(name)
+    if title_version:
+        # The tag may be a build identifier such as ``baseline-204``; its
+        # "Baseline" word is not a version designation users need to see.
+        label = title_version
+    elif name and name != tag_name:
         label = f"{name}{designation_suffix}"
     elif clean_v and any(d.lower() in tag_name.lower() for d in designations):
         # Tag name has embedded verbs (e.g. v0.5.1-ADB); format with clean version and designations
@@ -1565,6 +1625,16 @@ class ReleasesClient:
         given (e.g. 'A' or 'B'), only releases with a matching hardware type
         variant are included.
         """
+        info_repo = getattr(package, "info_repo", "") or ""
+        apk_repo = getattr(package, "apk_repo", "") or ""
+        if info_repo or apk_repo:
+            return self._apk_repo_releases(
+                package, model, info_repo or apk_repo, force_refresh=force_refresh,
+                selected_type=selected_type, show_nightly=show_nightly,
+                show_old_rockbox=show_old_rockbox, prefer_240p=prefer_240p,
+                show_original_pre_307=show_original_pre_307,
+                show_safety_blocked=show_safety_blocked,
+            )
         releases = self.get_all_releases(package.repo, force_refresh=force_refresh)
         out = []
         for rel in releases:
@@ -1655,6 +1725,68 @@ class ReleasesClient:
                 rel["selected_resolution"] = preferred.get("resolution")
                 rel["prefer_240p"] = prefer_240p
             out.append(rel)
+        return sorted(out, key=release_sort_key, reverse=True)
+
+    def _apk_repo_releases(self, package, model, apk_source, force_refresh=False, **filters):
+        """Version rows for a package whose ``info_repo`` or ``apk_repo`` names
+        the application repository.
+
+        The rows are that repository's releases carrying an ``*.apk`` asset, so
+        their versions and release notes come from the application. Each row
+        installs the latest firmware from the package's ``repo`` (the firmware
+        that is actually flashed). Where ``info_repo`` or ``apk_repo`` now contains
+        zips matching firmware criteria, it is treated as ``repo`` directly. An
+        ``info_repo`` package with no post-install page has no instructions for its
+        APK, so it lists nothing.
+        """
+        apk_releases = self.get_all_update_releases(apk_source, force_refresh=force_refresh)
+        # If the target repository now publishes zips matching firmware criteria,
+        # treat info_repo / apk_repo as repo directly.
+        has_firmware_zips = any(
+            _release_rom_variants(
+                rel.get("assets") or [],
+                str(rel.get("tag_name", "") or ""),
+                apk_source,
+            )
+            for rel in apk_releases
+        )
+        if has_firmware_zips:
+            direct_firmware = self.releases_for_package(
+                dataclasses.replace(package, repo=apk_source, info_repo="", apk_repo=""),
+                model,
+                force_refresh=force_refresh,
+                **filters,
+            )
+            if direct_firmware:
+                return direct_firmware
+
+        if package.info_repo and not (package.post_install or package.post_install_2):
+            return []
+        firmware = self.releases_for_package(
+            dataclasses.replace(package, info_repo="", apk_repo=""), model, force_refresh=force_refresh, **filters,
+        )
+        if not firmware:
+            return []
+        latest = firmware[0]
+        out = []
+        for rel in apk_releases:
+            assets = rel.get("assets") or []
+            apk_assets = [a for a in assets if str(a.get("name", "")).lower().endswith(".apk")]
+            if not apk_assets:
+                continue
+            row = dict(rel)  # shallow copy, don't mutate cache
+            row["source_repo"] = apk_source
+            row["info_only"] = True
+            row["apk_repo"] = str(getattr(package, "apk_repo", "") or "")
+            apk_asset = apk_assets[0]
+            row["apk_url"] = str(apk_asset.get("browser_download_url") or "")
+            row["apk_name"] = str(apk_asset.get("name") or "")
+            row["apk_size"] = int(apk_asset.get("size") or 0)
+            for key in ("download_url", "asset_name", "asset_size", "selected_resolution", "prefer_240p"):
+                if key in latest:
+                    row[key] = latest[key]
+            row["firmware_tag_name"] = latest.get("tag_name", "")
+            out.append(row)
         return sorted(out, key=release_sort_key, reverse=True)
 
 

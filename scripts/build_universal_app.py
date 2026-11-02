@@ -35,7 +35,12 @@ if not _BUILD_BRAND and (ROOT / "src" / "_build_brand.py").exists():
             _BUILD_BRAND = _line.split("=")[-1].strip().strip('"\'')
             break
 IS_MEDIATEK_INSTALLER_BUILD = _BUILD_BRAND in ("mediatek_installer", "generic_mtk")
-APP_DISPLAY_NAME = "MediaTek Installer" if IS_MEDIATEK_INSTALLER_BUILD else "Updater CE"
+_target_app_out = os.environ.get("INNIOASIS_APP_OUT")
+APP_DISPLAY_NAME = os.environ.get("APP_NAME") or (
+    Path(_target_app_out).stem if _target_app_out else (
+        "MediaTek Installer" if IS_MEDIATEK_INSTALLER_BUILD else "Innioasis Updater"
+    )
+)
 BUNDLE_ID = (
     "com.innioasis.mediatekinstaller" if IS_MEDIATEK_INSTALLER_BUILD else "com.innioasis.updater"
 )
@@ -120,6 +125,9 @@ int main(int argc, char **argv, char **envp) {
     // precompile_tree.py) and CPython runs a sourceless .pyc as a script.
     char launcher_script[1024];
     snprintf(launcher_script, sizeof(launcher_script), "%s/launcher.pyc", app_dir);
+    if (access(launcher_script, 0) != 0) {
+        snprintf(launcher_script, sizeof(launcher_script), "%s/launcher.py", app_dir);
+    }
 
     char python_bin[1024];
     snprintf(python_bin, sizeof(python_bin), "%s/bin/python3.11", python_dir);
@@ -225,9 +233,21 @@ def ensure_cached_assets():
         "pyside6.whl": "https://files.pythonhosted.org/packages/fe/15/1fa71e44d3b345b9eca82d38cf7e6d7505168b978fe98b3610c0e25d8c0e/pyside6-6.9.3-cp39-abi3-macosx_12_0_universal2.whl",
         "pycryptodome.whl": "https://files.pythonhosted.org/packages/db/6c/a1f71542c969912bb0e106f64f60a56cc1f0fabecf9396f45accbe63fa68/pycryptodome-3.23.0-cp37-abi3-macosx_10_9_universal2.whl",
         "pyobjc_core.whl": "https://files.pythonhosted.org/packages/95/df/d2b290708e9da86d6e7a9a2a2022b91915cf2e712a5a82e306cb6ee99792/pyobjc_core-12.1-cp311-cp311-macosx_10_9_universal2.whl",
-        "pyobjc_framework_cocoa.whl": "https://files.pythonhosted.org/packages/3f/07/5760735c0fffc65107e648eaf7e0991f46da442ac4493501be5380e6d9d4/pyobjc_framework_Cocoa-12.1-cp311-cp311-macosx_10_9_universal2.whl",
+        "pyobjc_framework_cocoa.whl": "https://files.pythonhosted.org/packages/3f/07/5760735c0fffc65107e648eaf7e0991f46da442ac4493501be5380e6d9d4/pyobjc_framework_cocoa-12.1-cp311-cp311-macosx_10_9_universal2.whl",
+        "pyobjc_framework_quartz.whl": "https://files.pythonhosted.org/packages/b7/ef/dcd22b743e38b3c430fce4788176c2c5afa8bfb01085b8143b02d1e75201/pyobjc_framework_quartz-12.1-cp311-cp311-macosx_10_9_universal2.whl",
+        "capstone.whl": "https://files.pythonhosted.org/packages/da/f3/43f4dbfc36c7740d512621a9d42b276ac21bb6ca7cb974d4c8a19060d387/capstone-5.0.9-py3-none-macosx_10_9_universal2.whl",
     }
-    pure_deps = ["requests", "pyusb", "pyserial", "colorama", "certifi", "urllib3", "idna", "charset_normalizer"]
+    pure_deps = [
+        "requests",
+        "pyusb",
+        "pyserial",
+        "colorama",
+        "certifi",
+        "urllib3",
+        "idna",
+        "charset_normalizer",
+        "pyqt-liquidglass",
+    ]
 
     import ssl
     try:
@@ -261,7 +281,7 @@ def ensure_cached_assets():
                         wheel_text = cached.read(metadata[0]).decode("utf-8", "replace") if metadata else ""
                         expected_tokens = expected_filename.lower().replace("_", "-").split("-")
                         cached_ok = cached_ok and any(
-                            line.lower().startswith("tag:") and "macosx_12_0_universal2" in line.lower()
+                            line.lower().startswith("tag:") and "universal2" in line.lower()
                             for line in wheel_text.splitlines()
                         )
                         # WHEEL tags do not carry the distribution version; the
@@ -529,7 +549,10 @@ def build():
             shutil.copy2(unar_src, tools_res / "unar")
 
     # 6. Icon
-    icon_icns = ASSETS / "icon.icns"
+    icon_name = "icon_generic_mtk.icns" if IS_MEDIATEK_INSTALLER_BUILD else "icon.icns"
+    icon_icns = ASSETS / icon_name
+    if not icon_icns.exists():
+        icon_icns = ASSETS / "icon.icns"
     if icon_icns.exists():
         shutil.copy2(icon_icns, RESOURCES / "icon.icns")
 
@@ -552,7 +575,7 @@ def build():
         "NSHighResolutionCapable": True,
         "NSRequiresAquaSystemAppearance": False,
         "NSPrincipalClass": "NSApplication",
-        "NSHumanReadableCopyright": "Copyright © 2024-2026 Innioasis Community. All rights reserved.",
+        "NSHumanReadableCopyright": "Copyright © 2024-2026 Ryan Specter. All rights reserved.",
         "CFBundleDocumentTypes": [
             {
                 "CFBundleTypeName": "Firmware Archive",
@@ -579,6 +602,9 @@ def build():
         ], check=True)
     elif shutil.which("codesign"):
         print(">>> Signing bundle with native codesign...")
+        for inner_bin in APP_DIR.rglob("*"):
+            if inner_bin.is_file() and not inner_bin.is_symlink() and inner_bin.suffix in (".dylib", ".so"):
+                subprocess.run(["codesign", "--force", "-s", "-", str(inner_bin)], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run([
             "codesign", "--force", "--deep", "--entitlements", str(entitlements), "-s", "-", str(APP_DIR)
         ], check=True)

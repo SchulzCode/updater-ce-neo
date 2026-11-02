@@ -1,10 +1,45 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Notice feed for Updater CE, served from https://innioasis.app/notice.xml
-  (or the y1-community/innioasis-updater repository when that domain is unavailable).
+  Innioasis Updater CE Notice Feed Markup Specification
+  Hosted at: https://innioasis.app/notice.xml
 
-  Only notices listed in the remote feed are shown in the app's Notices list.
-  This bundled copy is a fallback for when neither is reachable, so it holds no notices.
+  Displays on-screen hint toast announcements to users of the app.
+  
+  Fields:
+  - id: required, unique string identifier for the notice.
+  - persistent: boolean ("true" | "false", default: "false").
+      * "false" (or omitted): Non-persistent notice. When dismissed by the user,
+        it is permanently dismissed and will not return on the next app run.
+      * "true": Persistent notice. It will return on every app launch, even if
+        dismissed during a prior run.
+      * CACHE INVALIDATION: If the remote notice.xml contents change from the
+        locally cached file on the user's computer, the new file is automatically
+        loaded and the updated notice is shown, even if previously dismissed.
+  - severity: "info" | "warning" | "critical" (default: "info").
+  - from: optional ISO date YYYY-MM-DD. Shown on or after this date.
+  - until: optional ISO date YYYY-MM-DD. Shown on or before this date.
+  - models: optional comma-separated list of target models (e.g. "Y1,Y2"). Omit for all models.
+
+  Child elements:
+  - <title>: required, headline of the notice.
+  - <content>: required, description/body text (also supports <body>).
+  - <link>: optional URL opened when the user clicks the action button.
 -->
 <notices updated="2026-10-25">
+
+  <!-- Example 1: Non-persistent advisory (can be dismissed without returning at next app run) -->
+    <notice id="2026-10-31-firmware-advisory" persistent="false" severity="info" from="2026-10-31" until="2026-12-31" models="Y1,Y2">
+    <title>Bricking issue fixed for Rockbox-Y1.</title>
+    <content>Rockbox-Y1 0.5 is now compatible with Y1s sold after April 2026.</content>
+    <link>https://innioasis.app</link>
+  
+  <notice id="2026-10-25-firmware-advisory" persistent="false" severity="info" from="2026-10-25" until="2026-12-31" models="Y1,Y2">
+    <title>About Notices in Updater CE</title>
+    <content>You'll get important alerts about device safety issues reported by the community here, such as when devices are being bricked by certain firmware .</content>
+    <link>https://innioasis.app</link>
+  </notice>
+
+
+  </notice>
+
 </notices>

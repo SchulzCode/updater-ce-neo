@@ -1684,6 +1684,9 @@ class FlashPage(QWidget):
         self._keep_data_hint = QLabel("")
         self._keep_data_hint.setWordWrap(True)
         self._keep_data_hint.setProperty("cssClass", "hint")
+        self._keep_data_hint.setTextFormat(Qt.RichText)
+        self._keep_data_hint.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        self._keep_data_hint.linkActivated.connect(self._on_keep_data_hint_link)
         self._keep_data_hint.setVisible(False)
         copy.addWidget(self._keep_data_hint)
         self._keep_data_warning = QLabel("")
@@ -1694,8 +1697,16 @@ class FlashPage(QWidget):
         self._keep_data_cb.toggled.connect(self._update_keep_data_warning)
         self._keep_data_allowed = True
         self._keep_data_confirm_active = False
+        self._keep_data_erase_confirm_active = False
         self._keep_data_force_hidden = False
         self._wait_col = copy
+
+        self._keep_data_microsd_note = QLabel(tr("keep_data_microsd_reassurance"))
+        self._keep_data_microsd_note.setWordWrap(True)
+        self._keep_data_microsd_note.setProperty("cssClass", "dimmed")
+        self._keep_data_microsd_note.setStyleSheet("font-size: 11px; margin-top: 2px;")
+        self._keep_data_microsd_note.setVisible(False)
+        copy.addWidget(self._keep_data_microsd_note)
 
         # Retained for attribute compatibility, but kept hidden and not added to layout
         self._attempt_lbl = QLabel("")
@@ -1734,12 +1745,16 @@ class FlashPage(QWidget):
         self._paperclip_img = _SvgVectorWidget()
         self._paperclip_img.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
-        self._paperclip_hint_host = QWidget()
+        self._paperclip_hint_host = QFrame()
+        self._paperclip_hint_host.setProperty("cssClass", "card")
+        self._paperclip_hint_host.setStyleSheet(
+            "QFrame { background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; }"
+        )
         hint_layout = QHBoxLayout(self._paperclip_hint_host)
-        hint_layout.setContentsMargins(0, 10, 0, 8)
-        hint_layout.setSpacing(14)
-        hint_layout.addWidget(self._paperclip_img, 0, Qt.AlignmentFlag.AlignTop)
-        hint_layout.addWidget(self._paperclip_hint, 1, Qt.AlignmentFlag.AlignTop)
+        hint_layout.setContentsMargins(10, 8, 10, 8)
+        hint_layout.setSpacing(12)
+        hint_layout.addWidget(self._paperclip_img, 0, Qt.AlignmentFlag.AlignVCenter)
+        hint_layout.addWidget(self._paperclip_hint, 1, Qt.AlignmentFlag.AlignVCenter)
         self._paperclip_hint_host.setVisible(False)
         copy.addWidget(self._paperclip_hint_host)
         self._update_paperclip_hint()
@@ -1961,7 +1976,7 @@ class FlashPage(QWidget):
         self._view_guide_btn = QPushButton(tr("post_install_view_guide_btn"))
         self._view_guide_btn.setCursor(Qt.ArrowCursor)
         self._view_guide_btn.setStyleSheet("")
-        self._view_guide_btn.clicked.connect(self._open_post_install_guide)
+        self._view_guide_btn.clicked.connect(self._open_view_guide)
         self._view_guide_btn.setVisible(False)
         self._coffee_btn = QPushButton(tr("donate_completion_coffee"))
         self._coffee_btn.setCursor(Qt.ArrowCursor)
@@ -2233,6 +2248,8 @@ class FlashPage(QWidget):
 
     def show_preparing(self):
         self._complete = False
+        self._wait_copy = "preparing"
+        self._sync_keep_data_visibility()
         self._switch_view(self._preparing_view)
         self._prep_banner.set_key("flash_preparing")
         self._prep_step_key = "step_extract"
@@ -2287,6 +2304,7 @@ class FlashPage(QWidget):
         self._complete = False
         self._prompt_only = False
         self._wait_copy = "please_wait_connecting" if connecting else "please_wait"
+        self._sync_keep_data_visibility()
         self._switch_view(self._waiting_view)
         if connecting:
             self._wait_prompt_label.setText(self._wait_connecting_prompt_text())
@@ -2311,6 +2329,7 @@ class FlashPage(QWidget):
         self._complete = False
         self._prompt_only = False
         self._wait_copy = "entering_password"
+        self._sync_keep_data_visibility()
         self._switch_view(self._waiting_view)
         self._wait_prompt_label.setText(tr("install_linux_entering_password"))
         self._set_indeterminate(self._wait_progress_bar)
@@ -2449,9 +2468,10 @@ class FlashPage(QWidget):
         if hasattr(self, "_progress_card"):
             self._progress_card.setVisible(True)
         if getattr(self, "_wait_copy", "") in ("connect", "please_wait", "please_wait_connecting"):
-            self._wait_copy = "stage"
             if hasattr(self, "_wait_prompt_label"):
                 self._wait_prompt_label.setText(self._step_label.text())
+        self._wait_copy = "stage"
+        self._sync_keep_data_visibility()
         self._switch_view(self._flashing_view)
         failed = self._failed
         done = bool(getattr(self, "_complete", False)) and not failed
@@ -2499,10 +2519,14 @@ class FlashPage(QWidget):
         open_browser(MEDIATEK_DRIVERS_URL)
 
     def _set_determinate(self, bar: QProgressBar, percent) -> None:
-        percent = max(0, min(100, int(percent)))
+        try:
+            val = float(percent)
+        except (TypeError, ValueError):
+            val = 0.0
+        val = max(0.0, min(100.0, val))
         bar.setRange(0, 100)
         bar.setFormat("%p%")
-        bar.setValue(percent)
+        bar.setValue(val)
         bar.setTextVisible(True)
 
     def show_install_failure(self, message: str, explanation: str = "", percent: int = 0) -> None:
@@ -3016,11 +3040,36 @@ class FlashPage(QWidget):
         if hasattr(self, "_theme_row"):
             self._theme_row.setVisible(False)
         self._hide_theme_wizard_chips()
+        if self.themes.is_apk_stage:
+            self._log_theme(f"[APK Install] Player detected via ADB (serial: {serial}). Installing application...")
+            self._eta_label.setText(tr("rockbox_stage_installing"))
+            self._start_adb_theme_push(serial)
+            return
         self._log_theme(f"[Rockbox Themes] Player detected via ADB (serial: {serial}). Waiting {ROCKBOX_BOOT_WAIT_MS // 1000}s for Rockbox to populate .rockbox...")
         self._eta_label.setText(tr("rockbox_stage_pushing"))
         QTimer.singleShot(ROCKBOX_BOOT_WAIT_MS, lambda: self._start_adb_theme_push(serial))
 
     def _start_adb_theme_push(self, serial: str) -> None:
+        if self.themes.is_apk_stage:
+            self._log_theme("[APK Install] Installing application package over ADB...")
+            self._eta_label.setText(tr("rockbox_stage_installing"))
+            self.themes.reset_progress()
+            from ..adb import find_adb_binary
+            from ..theme_pack import AdbApkInstallWorker
+
+            adb_bin = find_adb_binary()
+            self._adb_push_worker = AdbApkInstallWorker(
+                adb_bin,
+                serial,
+                apk_path=self.themes.apk_path,
+                apk_url=self.themes.apk_url,
+                parent=self,
+            )
+            self._adb_push_worker.progress.connect(self._on_theme_push_progress)
+            self._adb_push_worker.log.connect(self._log_theme)
+            self._adb_push_worker.finished.connect(self._on_theme_push_finished)
+            self._adb_push_worker.start()
+            return
         self._log_theme("[Rockbox Themes] Pushing 360p themes & fonts over ADB...")
         self._eta_label.setText(tr("rockbox_stage_pushing"))
         self.themes.reset_progress()
@@ -3123,6 +3172,8 @@ class FlashPage(QWidget):
         """
         from PySide6.QtWidgets import QFileDialog
 
+        from ..downloads import default_picker_dir
+
         title = tr("rockbox_step_select_player_folder")
         existing = self.themes.folder_dialog
         if existing is not None:
@@ -3135,6 +3186,10 @@ class FlashPage(QWidget):
         dialog.setFileMode(QFileDialog.FileMode.Directory)
         dialog.setOption(QFileDialog.Option.ShowDirsOnly, True)
         dialog.setOption(QFileDialog.Option.DontResolveSymlinks, True)
+        # Without an explicit start folder the native panel can inherit the
+        # launch/current directory. If that is inside Documents, macOS treats
+        # the picker as Documents access and prompts for it.
+        dialog.setDirectory(default_picker_dir())
         dialog.fileSelected.connect(self._on_theme_folder_chosen)
         dialog.finished.connect(self._on_theme_folder_dialog_finished)
         self.themes.attach_folder_dialog(dialog)
@@ -3178,6 +3233,20 @@ class FlashPage(QWidget):
                 "[Rockbox Themes] Player appeared over ADB; using it instead of the picked folder."
             )
             self._on_adb_device_found(live[0])
+            return
+        if self.themes.is_apk_stage:
+            import shutil
+            from ..theme_pack import ensure_apk_file
+
+            self._stop_adb_presence_watch()
+            try:
+                apk_file = ensure_apk_file(self.themes.apk_path, self.themes.apk_url)
+                dest_dir = Path(chosen)
+                dest_dir.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(apk_file, dest_dir / apk_file.name)
+                self._finish_rockbox_themes_stage(manual_count=1, dest=str(dest_dir))
+            except Exception as e:
+                self._giveup_rockbox_themes_stage(str(e))
             return
         from ..theme_pack import (
             find_or_create_rockbox_dir,
@@ -3433,15 +3502,13 @@ class FlashPage(QWidget):
         self.set_attempt_timeout(0)
         self.clear_install_failure()
         self.show_waiting()
+        self.clear_keep_data_confirmation()
+        self._set_yes_no_glyphs(False)
         prompt = self._power_off_prompt_text()
         self._wait_prompt_label.setText(prompt)
         if hasattr(self, "_keep_data_cb"):
-            # The one-time access step is not a flash prompt: its Next only
-            # installs the udev rules, so the tick belongs on the run after it.
-            has_ud = getattr(self, "_has_userdata", True)
             self._keep_data_force_hidden = False
-            self._keep_data_cb.setVisible(not permission and has_ud)
-        self._update_keep_data_warning()
+        self._sync_keep_data_visibility()
         self._set_determinate(self._wait_progress_bar, 0)
         # Nothing has been flashed yet, so stepping back needs no question:
         # the cancel chip stops the run outright.
@@ -3453,15 +3520,35 @@ class FlashPage(QWidget):
         self._update_paperclip_hint()
         self._apply_stop_hold()
 
+    def _keep_data_visible(self) -> bool:
+        """The tick is only for the power-off-and-disconnect prompt."""
+        return bool(
+            getattr(self, "_has_userdata", True)
+            and getattr(self, "_keep_data_allowed", True)
+            and getattr(self, "_wait_copy", "") == "power_off"
+            and not getattr(self, "_permission_prompt", False)
+            and not getattr(self, "_keep_data_confirm_active", False)
+            and not getattr(self, "_keep_data_force_hidden", False)
+            and not getattr(self, "_complete", False)
+            and not getattr(self, "_failed", False)
+        )
+
+    def _sync_keep_data_visibility(self) -> None:
+        cb = getattr(self, "_keep_data_cb", None)
+        if cb is None:
+            return
+        visible = self._keep_data_visible()
+        cb.setVisible(visible)
+        if not visible:
+            self._keep_data_warning.setVisible(False)
+        self._update_keep_data_warning()
+
     def set_has_userdata(self, has_userdata: bool, preserve_data_default: bool = False) -> None:
-        """Control whether the Keep My Data checkbox is visible and its default state."""
+        """Remember whether the package has user data and its default choice."""
         self._has_userdata = bool(has_userdata)
         if hasattr(self, "_keep_data_cb"):
-            # Show it again for a package that does have userdata: the previous
-            # run may have hidden it (or the GUI handoff prompt did).
             self._keep_data_cb.setChecked(self._has_userdata and bool(preserve_data_default))
-            self._keep_data_cb.setVisible(self._has_userdata)
-        self._update_keep_data_warning()
+        self._sync_keep_data_visibility()
 
     def set_keep_data_available(self, available: bool, label: str = "") -> None:
         """Gate the tick by the catalogue's derivative compatibility rule."""
@@ -3470,17 +3557,13 @@ class FlashPage(QWidget):
             text = label or tr("flash_keep_data_option")
             self._keep_data_cb.setText(text)
             self._keep_data_cb.setAccessibleName(text)
-            self._keep_data_cb.setVisible(
-                bool(available)
-                and bool(getattr(self, "_has_userdata", True))
-                and getattr(self, "_wait_copy", "") == "power_off"
-            )
-        self._update_keep_data_warning()
+        self._sync_keep_data_visibility()
 
     def _update_keep_data_warning(self) -> None:
         """Explain what happens without the tick, in model-appropriate terms."""
         warning = getattr(self, "_keep_data_warning", None)
         cb = getattr(self, "_keep_data_cb", None)
+        microsd_note = getattr(self, "_keep_data_microsd_note", None)
         if warning is None or cb is None:
             return
         model = str(getattr(self, "_model", "") or "").upper()
@@ -3507,6 +3590,9 @@ class FlashPage(QWidget):
         if warning.text() != text:
             warning.setText(text)
         warning.setVisible(bool(text))
+        if microsd_note is not None:
+            microsd_visible = visible and (cb.isChecked() or not getattr(self, "_keep_data_allowed", True))
+            microsd_note.setVisible(microsd_visible)
         self._notify_geometry_change()
 
     def show_keep_data_confirmation(
@@ -3514,6 +3600,7 @@ class FlashPage(QWidget):
     ) -> None:
         """Ask for the currently installed firmware on the same progress card."""
         self._keep_data_confirm_active = True
+        self._keep_data_erase_confirm_active = False
         self._wait_copy = "keep_data_confirm"
         self._keep_data_force_hidden = True
         self._prompt_only = True
@@ -3529,6 +3616,11 @@ class FlashPage(QWidget):
         self._keep_data_choice.setVisible(len(names) > 1)
         self._keep_data_hint.setText(hint or "")
         self._keep_data_hint.setVisible(bool(hint))
+        if hasattr(self, "_keep_data_microsd_note"):
+            self._keep_data_microsd_note.setVisible(True)
+        # A yes/no question: the pair reads as a tick (or a circle where that
+        # culture means yes) and an X, never as back and forward arrows.
+        self._set_yes_no_glyphs(True)
         self._wait_continue_btn.setVisible(True)
         self._wait_continue_btn.setEnabled(True)
         self._wait_cancel_btn.setVisible(True)
@@ -3536,17 +3628,77 @@ class FlashPage(QWidget):
         self._set_determinate(self._wait_progress_bar, 0)
         self._notify_geometry_change()
 
+    def show_keep_data_erase_confirmation(self, question: str, explainer: str = "") -> None:
+        """Ask whether to install and erase settings (or settings + media)."""
+        self._keep_data_erase_confirm_active = True
+        self._keep_data_confirm_active = False
+        self._wait_copy = "keep_data_erase_confirm"
+        self._keep_data_force_hidden = True
+        self._prompt_only = True
+        self._wait_prompt_label.setText(question or "")
+        self._keep_data_cb.setVisible(False)
+        if hasattr(self, "_keep_data_choice"):
+            self._keep_data_choice.setVisible(False)
+        if hasattr(self, "_keep_data_warning"):
+            self._keep_data_warning.setVisible(False)
+        self._keep_data_hint.setText(explainer or "")
+        self._keep_data_hint.setVisible(bool(explainer))
+        if hasattr(self, "_keep_data_microsd_note"):
+            self._keep_data_microsd_note.setVisible(True)
+        self._set_yes_no_glyphs(True)
+        self._wait_continue_btn.setVisible(True)
+        self._wait_continue_btn.setEnabled(True)
+        self._wait_cancel_btn.setVisible(True)
+        self._wait_cancel_btn.setEnabled(True)
+        self._set_determinate(self._wait_progress_bar, 0)
+        self._notify_geometry_change()
+
+    def on_try_anyway(self, cb) -> None:
+        self._try_anyway_callback = cb
+
+    def _on_keep_data_hint_link(self, link: str) -> None:
+        if link == "try-anyway":
+            cb = getattr(self, "_try_anyway_callback", None)
+            if callable(cb):
+                cb()
+
+    def _set_yes_no_glyphs(self, yes_no: bool) -> None:
+        """Swap the wait card's chips between Next/Back and Yes/No glyphs."""
+        if yes_no:
+            from i18n import current_language
+
+            # Where a circle means yes (Japan), the yes chip is a ring and the
+            # no chip is an X; elsewhere the yes chip is a tick.
+            yes_symbol = "circle" if str(current_language()).startswith("ja") else "check"
+            self._wait_continue_btn._symbol = yes_symbol
+            self._wait_cancel_btn._symbol = "cancel"
+            labels = (tr("btn_yes"), tr("btn_no"))
+        else:
+            self._wait_continue_btn._symbol = "next"
+            self._wait_cancel_btn._symbol = "back"
+            labels = (tr("btn_next"), tr("btn_back"))
+        # Tooltips and accessible names follow the glyphs, so the hover text
+        # reads Yes/No on a question rather than the stale Next/Back labels.
+        for btn, label in zip((self._wait_continue_btn, self._wait_cancel_btn), labels):
+            btn.setToolTip(label)
+            btn.setAccessibleName(label)
+            btn.rebuild_arrow()
+
     def keep_data_confirm_choice(self) -> str:
         return self._keep_data_choice.currentText() if hasattr(self, "_keep_data_choice") else ""
 
     def clear_keep_data_confirmation(self) -> None:
         self._keep_data_confirm_active = False
+        self._keep_data_erase_confirm_active = False
         self._keep_data_force_hidden = False
+        self._set_yes_no_glyphs(False)
         if hasattr(self, "_keep_data_choice"):
             self._keep_data_choice.setVisible(False)
         if hasattr(self, "_keep_data_hint"):
             self._keep_data_hint.setVisible(False)
-        self._update_keep_data_warning()
+        if hasattr(self, "_keep_data_microsd_note"):
+            self._keep_data_microsd_note.setVisible(False)
+        self._sync_keep_data_visibility()
 
     def show_gui_handoff_prompt(self, hint: str) -> None:
         """Power-off line plus a small download-mode hint. Continue does not flash."""
@@ -3556,6 +3708,7 @@ class FlashPage(QWidget):
         if hasattr(self, "_keep_data_cb"):
             self._keep_data_cb.setVisible(False)
         self._keep_data_force_hidden = True
+        self._keep_data_cb.setVisible(False)
         if hasattr(self, "_keep_data_warning"):
             self._keep_data_warning.setVisible(False)
         if hasattr(self, "_wait_mode_hint"):
@@ -3689,9 +3842,23 @@ class FlashPage(QWidget):
         if hasattr(self, "_post_install_hint"):
             self._post_install_hint.setVisible(bool(post_install) and not donations_shown)
         if hasattr(self, "_view_guide_btn"):
-            self._view_guide_btn.setVisible(bool(post_install_2) and donations_shown)
+            self._view_guide_btn.setVisible(bool(post_install or post_install_2) and donations_shown)
+        if hasattr(self, "_coffee_btn"):
+            if post_install_2:
+                self._coffee_btn.setText(tr("donate_completion_coffee_guide"))
+            else:
+                self._coffee_btn.setText(tr("donate_completion_coffee"))
 
     def _open_post_install_guide(self) -> None:
+        """Globe and inline hint: the firmware's setup page (``post_install``)."""
+        from ..browser import open_browser
+
+        url = getattr(self, "_post_install_url", "")
+        if url:
+            open_browser(url)
+
+    def _open_view_guide(self) -> None:
+        """View Guide (donations shown): ``post_install2``, falling back to ``post_install``."""
         from ..browser import open_browser
 
         url = getattr(self, "_post_install_url_2", "") or getattr(self, "_post_install_url", "")
@@ -3731,7 +3898,10 @@ class FlashPage(QWidget):
             self._appeal_body.setText(tr("donate_completion_body"))
             _apply_card_text(self._appeal_body)
         if hasattr(self, "_coffee_btn"):
-            self._coffee_btn.setText(tr("donate_completion_coffee"))
+            if getattr(self, "_post_install_url_2", ""):
+                self._coffee_btn.setText(tr("donate_completion_coffee_guide"))
+            else:
+                self._coffee_btn.setText(tr("donate_completion_coffee"))
         if hasattr(self, "_not_now_btn"):
             self._not_now_btn.setText(tr("donate_not_now"))
         if hasattr(self, "_appeal_dont"):
@@ -3750,9 +3920,12 @@ class FlashPage(QWidget):
             lines = [tr("donate_completion_themes_subtitle").format(model=model)]
             self._complete_note.setText("\n".join(lines))
             return
-        installed = tr("donate_completion_subtitle").format(
-            software=software, model=model
-        )
+        if not software or software.startswith(("Get ready to install", "Installing software", "Get your")):
+            installed = tr("donate_completion_subtitle_the_software").format(model=model)
+        else:
+            installed = tr("donate_completion_subtitle").format(
+                software=software, model=model
+            )
         lines = [installed]
         if self.themes.placement_failed:
             # The one thing the reader needs after a give-up: what went wrong
@@ -3858,8 +4031,7 @@ class FlashPage(QWidget):
         self._wait_copy = "connect"
         self._wait_status.set_status("idle")
         # The connect prompt is not the power-off prompt: no Keep Data tick.
-        if hasattr(self, "_keep_data_cb"):
-            self._keep_data_cb.setVisible(False)
+        self._sync_keep_data_visibility()
         prompt = self._connect_device_prompt_text()
         if hasattr(self, "_wait_prompt_label"):
             self._wait_prompt_label.setText(prompt)
@@ -3953,19 +4125,23 @@ class FlashPage(QWidget):
         self._set_determinate(self._prep_progress, percent)
 
     def update_progress(self, percent):
-        percent = int(percent or 0)
+        try:
+            val = float(percent or 0)
+        except (TypeError, ValueError):
+            val = 0.0
+        val = max(0.0, min(100.0, val))
         if (
             getattr(self, "_wait_copy", "") == "please_wait"
-            and percent <= 0
+            and val <= 0
             and self._stack.currentWidget() is self._waiting_view
         ):
             self._set_indeterminate(self._wait_progress_bar)
             return
-        if percent > 0 and getattr(self, "_wait_copy", "") == "please_wait":
+        if val > 0 and getattr(self, "_wait_copy", "") == "please_wait":
             self._wait_copy = "stage"
-        self._set_determinate(self._progress_bar, percent)
+        self._set_determinate(self._progress_bar, val)
         if self._stack.currentWidget() is self._waiting_view and not self._prompt_only:
-            self._set_determinate(self._wait_progress_bar, percent)
+            self._set_determinate(self._wait_progress_bar, val)
 
     def update_step(self, step_key):
         self._step_key = step_key
@@ -4032,10 +4208,12 @@ class FlashPage(QWidget):
             return
 
         elapsed = (time.monotonic() - getattr(self, "_action_shown_at", 0.0)) * 1000.0
-        if elapsed >= self._ACTION_HOLD_MS and not getattr(self, "_action_pending_text", None):
+        is_final = any(kw in text.lower() for kw in ("complete", "error", "finish", "fail", "success"))
+        if (is_final or not text or (elapsed >= self._ACTION_HOLD_MS and not getattr(self, "_action_pending_text", None))):
             self._action_apply_text(text)
             self._action_shown_at = time.monotonic()
             self._action_shown_text = text
+            self._action_pending_text = None
             return
 
         # Hold: remember the newest line and apply it once the hold ends.
@@ -4163,7 +4341,7 @@ class FlashPage(QWidget):
         if hasattr(self, "_download_cancel_btn"):
             self._download_cancel_btn.setToolTip(tr("flash_btn_cancel"))
         copy = getattr(self, "_wait_copy", "")
-        if hasattr(self, "_wait_prompt_label") and (self._prompt_only or copy == "power_off"):
+        if hasattr(self, "_wait_prompt_label") and copy == "power_off":
             self._wait_prompt_label.setText(self._power_off_prompt_text())
         elif hasattr(self, "_wait_prompt_label") and copy == "please_wait_connecting":
             self._wait_prompt_label.setText(self._wait_connecting_prompt_text())
@@ -4181,6 +4359,8 @@ class FlashPage(QWidget):
             self._keep_data_cb.setText(tr("flash_keep_data_option"))
             self._keep_data_cb.setToolTip(tr("flash_keep_data_tooltip"))
             self._keep_data_cb.setAccessibleName(tr("flash_keep_data_option"))
+        if hasattr(self, "_keep_data_microsd_note"):
+            self._keep_data_microsd_note.setText(tr("keep_data_microsd_reassurance"))
         self._update_paperclip_hint()
         if hasattr(self, "_flash_retry_btn"):
             self._flash_retry_btn.setText(tr("flash_btn_retry"))

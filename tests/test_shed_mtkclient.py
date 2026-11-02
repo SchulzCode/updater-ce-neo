@@ -47,6 +47,7 @@ def test_shed_mtkclient_does_not_remove_on_arm64(tmp_path):
     with patch("src.paths.IS_WINDOWS", True), \
          patch("src.paths.IS_MAC", False), \
          patch("platform.machine", return_value="ARM64"), \
+         patch("src.flash_service._windows_hardware_is_arm64", return_value=True), \
          patch("src.paths.SP_FLASH_TOOL_DIR", fake_sp), \
          patch("src.paths.INSTALL_DIR", fake_install), \
          patch("src.paths.BUNDLE_DIR", fake_install), \

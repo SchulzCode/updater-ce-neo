@@ -11,7 +11,7 @@ import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from .config import DONORS_CSV_URL, MONTHLY_GOAL_USD, github_fallback_url
+from .config import DONORS_CSV_URL, MONTHLY_GOAL_USD, site_source_urls
 from .network import requests_module
 
 requests = requests_module()
@@ -145,9 +145,14 @@ def format_donation_when(dt, now=None) -> str:
 def load_donors_file(paths):
     """Read the first existing non-empty donors.csv among ``paths``."""
     for p in paths:
-        if Path(p).is_file():
+        cand = Path(p)
+        if not cand.is_file() and cand.name == "donors.csv" and cand.parent.name == "assets":
+            alt = cand.parent / "online" / "donors.csv"
+            if alt.is_file():
+                cand = alt
+        if cand.is_file():
             try:
-                text = Path(p).read_text(encoding="utf-8", errors="ignore")
+                text = cand.read_text(encoding="utf-8", errors="ignore")
                 if text.strip():
                     return text
             except Exception:
@@ -176,6 +181,9 @@ def cached_donors_path() -> Path:
     return d / "donors.csv"
 
 
+_default_cached_donors_path = cached_donors_path
+
+
 def _log_connectivity(ok: bool, detail: str) -> None:
     """Record the reachability of the feed as a connectivity check.
 
@@ -201,7 +209,7 @@ def fetch_remote_donors_async(on_result):
 
     def _cached():
         text = load_donors_file([cached_donors_path()])
-        if not text:
+        if not text and cached_donors_path is _default_cached_donors_path:
             # First run (or a fresh install): use the copy baked into the app.
             try:
                 from . import online_data
@@ -226,47 +234,34 @@ def fetch_remote_donors_async(on_result):
 
     def _worker():
         reason = ""
-        try:
-            resp = _fetch_text(f"{DONORS_CSV_URL}?_t={int(time.time())}")
-            if resp.status_code == 200 and resp.text.strip():
-                text = resp.text
-                parsed = parse_donors_csv_text(text)
-                if parsed:
-                    try:
-                        cached_donors_path().write_text(text, encoding="utf-8")
-                    except Exception as ce:
-                        logger.debug("Could not cache donors.csv to disk: %s", ce)
-                    _log_connectivity(True, f"{_DONORS_HOST} responded ({len(text)} bytes)")
-                try:
-                    on_result(parsed)
-                except RuntimeError:
-                    pass
-                return
-            elif resp.status_code == 200:
-                reason = f"{_DONORS_HOST} returned an unusable feed (HTTP {resp.status_code})"
-            else:
-                reason = f"{_DONORS_HOST} returned HTTP {resp.status_code}"
-        except Exception as e:
-            reason = f"{_DONORS_HOST} unreachable ({e})"
-
-        # innioasis.app is unavailable: try the same file from the website's GitHub repo.
-        try:
-            resp = _fetch_text(github_fallback_url(DONORS_CSV_URL))
-            if resp.status_code == 200:
-                parsed = parse_donors_csv_text(resp.text)
-                if parsed:
-                    try:
-                        cached_donors_path().write_text(resp.text, encoding="utf-8")
-                    except Exception as ce:
-                        logger.debug("Could not cache donors.csv to disk: %s", ce)
-                    _log_connectivity(True, "GitHub fallback responded")
-                    try:
-                        on_result(parsed)
-                    except RuntimeError:
-                        pass
-                    return
-        except Exception as e:
-            logger.debug("donors.csv GitHub fallback failed: %s", e)
+        # Raw GitHub first (fresh commit), then innioasis.app, then the
+        # maintainer's fork if the organisation repository is unavailable.
+        for url in site_source_urls("donors.csv"):
+            separator = "&" if "?" in url else "?"
+            try:
+                resp = _fetch_text(f"{url}{separator}_t={int(time.time())}")
+                if resp.status_code == 200 and resp.text.strip():
+                    text = resp.text
+                    parsed = parse_donors_csv_text(text)
+                    if parsed:
+                        try:
+                            cached_donors_path().write_text(text, encoding="utf-8")
+                        except Exception as ce:
+                            logger.debug("Could not cache donors.csv to disk: %s", ce)
+                        _log_connectivity(True, f"{_DONORS_HOST} responded ({len(text)} bytes)")
+                        try:
+                            on_result(parsed)
+                        except RuntimeError:
+                            pass
+                        return
+                    reason = f"{_DONORS_HOST} returned an unusable feed (HTTP {resp.status_code})"
+                elif resp.status_code == 200:
+                    reason = f"{_DONORS_HOST} returned an empty feed (HTTP {resp.status_code})"
+                else:
+                    reason = f"{_DONORS_HOST} returned HTTP {resp.status_code}"
+            except Exception as e:
+                reason = f"{_DONORS_HOST} unreachable ({e})"
+                logger.debug("donors.csv source failed: %s", e)
 
         _log_connectivity(False, reason)
         # Falling back to the newest local copy keeps the app usable offline.

@@ -425,6 +425,7 @@ def main():
             da_file=da_file,
             auth_file=auth_file,
             keep_data="--keep-data" in sys.argv,
+            is_rockbox="--rockbox" in sys.argv,
         )
         worker.progress.connect(lambda x: print(f"[PROGRESS] {x}", flush=True))
         worker.step_changed.connect(lambda x: print(f"[STEP] {x}", flush=True))

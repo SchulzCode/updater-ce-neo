@@ -83,6 +83,38 @@ def test_notice_service_persistence(tmp_path, monkeypatch):
     assert "p-true" not in service.get_dismissed_ids()
 
 
+def test_a_changed_notice_reappears_after_dismissal(tmp_path):
+    from dataclasses import replace
+
+    service = NoticeService()
+    service._cache_file = tmp_path / "notice.xml"
+    service._cache_dir = tmp_path
+
+    def parse(content, title="Notice"):
+        return parse_notice_xml(
+            f'<notices><notice id="editable" persistent="true">'
+            f'<title>{title}</title><content>{content}</content>'
+            f'</notice></notices>'
+        )[0]
+
+    original = parse("Original body")
+    service._active_notices = [original]
+    service.dismiss_notice(original)
+    assert service.active_notices == []
+
+    # Reparse, as a remote refresh does: the words changed, so the dismissal
+    # must not keep the new wording hidden.
+    changed = parse("Changed body")
+    service._active_notices = [changed]
+    assert [n.id for n in service.active_notices] == ["editable"]
+
+    # A translated copy of the same source wording keeps its source digest and
+    # stays dismissed until the source itself changes.
+    service.dismiss_notice(changed)
+    service._active_notices = [replace(changed, title="Translated", content="Traduit")]
+    assert service.active_notices == []
+
+
 def test_action_buttons_cursor_is_arrow_cursor():
     app = QApplication.instance() or QApplication(sys.argv)
     btn = _RoundNextButton(symbol="next", accent=True)

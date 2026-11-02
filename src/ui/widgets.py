@@ -1427,7 +1427,7 @@ class NoticeToast(QFrame):
         if self._notice:
             from ..notice_service import NoticeService
 
-            NoticeService.instance().dismiss_notice(self._notice)
+            NoticeService.instance().dismiss_for_session(self._notice)
         self.setVisible(False)
         self.dismissed.emit()
 
@@ -1752,6 +1752,8 @@ class InstallProgress(QProgressBar):
             return getattr(self, "_failed_text", "") or tr("install_failed")
         pv = getattr(self, "_precise_value", None)
         if pv is not None and not self.is_busy():
+            if abs(pv - round(pv)) < 1e-4:
+                return f"{int(round(pv))}%"
             return f"{pv:.1f}%"
         return super().text()
 

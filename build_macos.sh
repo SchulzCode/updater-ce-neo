@@ -22,7 +22,8 @@ APP_ID="com.innioasis.updater"
 # generic cross-platform MediaTek Installer instead: its own name and bundle
 # id, and an app that knows it is offline-only.
 BRAND="$(printf '%s' "${BUILD_BRAND:-updater_ce}" | tr '[:upper:]-' '[:lower:]_')"
-VERSION=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' src/config.py 2>/dev/null || echo "2.5.2")
+VERSION=$(sed -n 's/.*APP_VERSION[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' src/config.py 2>/dev/null || echo "2.5.2")
+[ -z "$VERSION" ] && VERSION="2.5.2"
 DIST_DIR="dist/macos"
 BUILD_DIR="build/macos"
 SPEC_FILE="macos.spec"
@@ -249,7 +250,15 @@ echo "  -> Target OS: macOS 12 (Monterey) through macOS 26 (Golden Gate)"
 trap 'rm -f src/_build_brand.py' EXIT
 
 log_step 3 "$TOTAL_STEPS" "Building Standalone macOS Application Bundle" "Compiling $APP_NAME into self-contained .app bundle..."
-if [ "$(uname -s)" = "Darwin" ]; then
+if [ "$TARGET_ARCH" = "universal2" ] || [ "$(uname -s)" != "Darwin" ]; then
+    # --- Universal 2 (Intel + Apple Silicon) Mach-O build ---
+    echo "  -> Building Universal 2 Mach-O .app bundle..."
+    INNIOASIS_APP_OUT="$DIST_DIR/$APP_NAME.app" APP_NAME="$APP_NAME" BUILD_BRAND="$BRAND" "$PYTHON" scripts/build_universal_app.py
+    rm -rf "$DIST_DIR/$APP_NAME"
+
+    log_step 4 "$TOTAL_STEPS" "Applying Mach-O Code Signatures" "Applying ad-hoc code signatures to universal application bundle..."
+    echo "  -> Universal bundle signatures applied."
+else
     "$PYTHON" -m PyInstaller \
         --noconfirm \
         --clean \
@@ -269,14 +278,6 @@ if [ "$(uname -s)" = "Darwin" ]; then
         codesign --force --deep -s - "$DIST_DIR/$APP_NAME.app"
     fi
     echo "  -> Code signing completed successfully."
-else
-    # --- Universal 2 (Intel + Apple Silicon) Mach-O build via LLVM/clang/rcodesign ---
-    echo "  -> Building Universal 2 Mach-O .app bundle via LLVM cross-compiler..."
-    INNIOASIS_APP_OUT="$DIST_DIR/$APP_NAME.app" BUILD_BRAND="$BRAND" "$PYTHON" scripts/build_universal_app.py
-    rm -rf "$DIST_DIR/$APP_NAME"
-
-    log_step 4 "$TOTAL_STEPS" "Applying Mach-O Code Signatures" "Applying ad-hoc code signatures to universal application bundle..."
-    echo "  -> Universal bundle signatures applied."
 fi
 
 APP_SIZE=$(du -sh "$DIST_DIR/$APP_NAME.app" 2>/dev/null | cut -f1 || echo "unknown")

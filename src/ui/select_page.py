@@ -229,15 +229,15 @@ _RELEASE_NOTES_MAX_PX = RELEASE_NOTES_MAX_LINES * _RELEASE_NOTES_LINE_PX + 8
 
 
 class _ReleaseNotesBrowser(QTextBrowser):
-    """Release notes view that grows to its content, up to five lines."""
+    """Release notes view that grows to its content with headroom for translation hints."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         from PySide6.QtGui import QTextOption
 
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        self.setMinimumHeight(80)
-        self.setMaximumHeight(_RELEASE_NOTES_MAX_PX)
+        self.setMinimumHeight(60)
+        self.setMaximumHeight(140)
         self.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
 
     def sizeHint(self) -> QSize:
@@ -249,16 +249,14 @@ class _ReleaseNotesBrowser(QTextBrowser):
         if w > 0:
             doc.setTextWidth(w)
         doc_h = int(doc.documentLayout().documentSize().height())
-        target_h = max(28, doc_h + 8)
-        # Notes scroll inside their card; five lines is enough to see what a
-        # release changed without the window growing to fit the whole body.
-        target_h = min(target_h, _RELEASE_NOTES_MAX_PX)
+        target_h = max(40, doc_h + 8)
+        target_h = min(target_h, 140)
         from PySide6.QtCore import QSize
         return QSize(super().sizeHint().width(), target_h)
 
     def minimumSizeHint(self) -> QSize:
         from PySide6.QtCore import QSize
-        return QSize(50, 28)
+        return QSize(50, 48)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -553,9 +551,9 @@ class SelectPackagePage(QWidget):
                 NoticeService.instance().fetch_async()
             except Exception:
                 pass
-        self.set_online_mode(is_online)
+        self.set_online_mode(is_online, _from_poll=True)
 
-    def set_online_mode(self, is_online: bool):
+    def set_online_mode(self, is_online: bool, *, _from_poll: bool = False):
         if is_generic_mtk() and is_online:
             return
         was_available = self._online_available
@@ -571,16 +569,17 @@ class SelectPackagePage(QWidget):
         # Never move the screen under a running task, under a selection the
         # reader made in the catalogue, or after they deliberately opened the
         # local-file screen. The toast reports the change either way.
+        page_visible = self.isVisible() or (win is self)
         may_switch = (
             not is_busy
-            and self.isVisible()
+            and page_visible
             and not self._manual_local
-            and self._current_selected_rel is None
+            and (not _from_poll or self._current_selected_rel is None)
         )
         if is_online:
             if may_switch:
                 self._show_online_view(refresh=not was_available)
-        elif may_switch and was_available:
+        elif may_switch:
             self._views.setCurrentWidget(self._local_tab)
         show_toast = self._connectivity_known and was_available != is_online
         self._connectivity_known = True
@@ -1414,7 +1413,8 @@ class SelectPackagePage(QWidget):
             self._current_package_model = det_m or ""
             if det_m:
                 self._select_model_for_manual(det_m)
-            self._current_package_name = release_install_heading(det_m, (p.parent.name, p.name))
+            inf_name, inf_ver = infer_release_name(det_m, (p.parent.name, p.name))
+            self._current_package_name = f"{inf_name} {inf_ver}".strip() if inf_name else ""
             self._selected_type = det_t or None
         self._remember_gui_local(package_target, self._current_package_model, self._current_package_name)
         self._set_local_banner("sel_current_pkg", p.name)
@@ -2117,7 +2117,26 @@ class SelectPackagePage(QWidget):
                 str(combo.itemData(i) or combo.itemText(i)) for i in range(combo.count())
             ]
             if names != existing:
+                # Keep the user's software choice; only the list contents change.
                 self._populate_software_combo(names, select=current_sw)
+                if self._find_software_index(current_sw) < 0 and combo.count():
+                    combo.setCurrentIndex(0)
+                self._refresh_releases_keep_selection()
+
+    def _refresh_releases_keep_selection(self):
+        """Re-list releases after a background refresh, keeping the chosen release and scroll."""
+        package = self.current_package()
+        if package is None:
+            return
+        selected = self._release_list.currentItem()
+        selected_tag = ""
+        if selected is not None:
+            rel = selected.data(Qt.UserRole) or {}
+            selected_tag = rel.get("tag_name", "") or ""
+        scroll = self._release_list.verticalScrollBar().value()
+        self._target_tag_to_select = selected_tag or None
+        self._scroll_to_restore = scroll
+        self._refresh_releases(force_refresh=False)
 
     def _release_row_height(self) -> int:
         """Height of one release row, from a real row or the list font."""
@@ -2144,17 +2163,25 @@ class SelectPackagePage(QWidget):
             margins = layout.contentsMargins().top() + layout.contentsMargins().bottom()
         return list_h + btn_h + link_h + margins + spacing * 3
 
-    def _fit_release_list_height(self):
-        """Size the release list to its contents (capped).
+    def _max_visible_rows(self) -> int:
+        """Gradually scale visible release list items up on larger screens."""
+        screen = self.screen()
+        if screen is not None:
+            avail_h = screen.availableGeometry().height()
+            if avail_h >= 1000:
+                return 7
+            elif avail_h >= 880:
+                return 6
+            elif avail_h >= 800:
+                return 5
+        return 4
 
-        With few items the list is exactly as tall as its rows, so the
-        Install / Restore button and the Install-from-file link sit directly
-        below them instead of floating under list whitespace. With many
-        items the list stops at MAX_VISIBLE_RELEASE_ROWS and scrolls.
-        """
+    def _fit_release_list_height(self):
+        """Size the release list to its contents (capped, responsive to display height)."""
         count = self._release_list.count()
+        max_rows = self._max_visible_rows()
         if count:
-            rows = min(count, MAX_VISIBLE_RELEASE_ROWS)
+            rows = min(count, max_rows)
             height = sum(
                 max(1, self._release_list.sizeHintForRow(i)) for i in range(rows)
             )
@@ -2167,20 +2194,30 @@ class SelectPackagePage(QWidget):
         self._release_list.updateGeometry()
 
     def content_height_hint(self) -> int:
-        """Height the page needs to show its contents without compression.
-
-        The list sits several layouts deep (card, split, view stack), and a
-        refill leaves stale hint caches in those nested layouts — measuring
-        the page directly would report the previous rows. So invalidate
-        every layout from the list up to the page, then take the larger of
-        the page's size and minimum hints (the list enforces its height via
-        min/max, which sizeHint() alone ignores).
-        """
+        """Height the page needs to show its contents without compression or text clipping."""
         page_layout = self.layout()
         if page_layout is not None:
             self._invalidate_layout_tree(page_layout)
             page_layout.activate()
-        return max(self.sizeHint().height(), self.minimumSizeHint().height())
+        hint_h = max(self.sizeHint().height(), self.minimumSizeHint().height())
+
+        # Ensure release notes card fits header + body + translate notes + see more without overlap
+        if hasattr(self, "_notes_group") and self._notes_group.isVisible():
+            header_h = self._details_header.sizeHint().height() if hasattr(self, "_details_header") and self._details_header.isVisible() else 0
+            notes_h = max(50, self._notes.sizeHint().height()) if hasattr(self, "_notes") else 60
+            trans_h = self._translate_label.sizeHint().height() if hasattr(self, "_translate_label") and self._translate_label.isVisible() else 0
+            see_more_h = self._see_more_label.sizeHint().height() if hasattr(self, "_see_more_label") and self._see_more_label.isVisible() else 0
+            # Card contents margins (top 12, bottom 12) + spacing between rows
+            notes_needed = header_h + notes_h + trans_h + see_more_h + 40
+            if notes_needed > 0:
+                self._notes_group.setMinimumHeight(notes_needed)
+                if hasattr(self, "_pkg_group"):
+                    self._pkg_group.setMinimumHeight(notes_needed)
+                if page_layout is not None:
+                    self._invalidate_layout_tree(page_layout)
+                    page_layout.activate()
+                hint_h = max(hint_h, max(self.sizeHint().height(), self.minimumSizeHint().height()))
+        return hint_h
 
     @staticmethod
     def _invalidate_layout_tree(layout) -> None:
@@ -2306,6 +2343,10 @@ class SelectPackagePage(QWidget):
                         selected_row = row
                         break
             self._release_list.setCurrentRow(selected_row)
+            scroll_to = getattr(self, "_scroll_to_restore", None)
+            if scroll_to is not None:
+                self._scroll_to_restore = None
+                self._release_list.verticalScrollBar().setValue(scroll_to)
             self._prefetch_release_icons(releases)
             if self._install_btn.isEnabled():
                 self._install_btn.setDefault(True)
@@ -2657,6 +2698,11 @@ class SelectPackagePage(QWidget):
             if not self._prompt_pre_install(eff_model, eff_type):
                 return
 
+        dest_dir = downloads.downloads_dir()
+        apk_repo = str(rel.get("apk_repo") or getattr(pkg, "apk_repo", "") or "")
+        apk_url = str(rel.get("apk_url") or "") if apk_repo else ""
+        apk_name = Path(str(rel.get("apk_name") or "app.apk")).name
+        apk_dest = dest_dir / f"{pkg.slug}_{rel.get('tag_name', 'latest')}_{apk_name}" if apk_url else ""
         self._current_package_model = eff_model
         self._pending_install_release_info = {
             "model": eff_model,
@@ -2666,8 +2712,10 @@ class SelectPackagePage(QWidget):
             "release_label": catalog.format_release_display_label(rel),
             "type_variant": eff_type,
             "published_at": rel.get("published_at", ""),
+            "apk_repo": apk_repo,
+            "apk_url": apk_url,
+            "apk_path": str(apk_dest) if apk_dest else "",
         }
-        dest_dir = downloads.downloads_dir()
         fname = Path(rel.get("asset_name") or "rom.zip").name
         dest = dest_dir / f"{pkg.slug}_{rel.get('tag_name', 'latest')}_{fname}"
         extract_dir = compute_extract_dir(dest)
@@ -2891,9 +2939,10 @@ class SelectPackagePage(QWidget):
                 self._current_package_model = eff_model
                 self._select_model_for_manual(eff_model)
                 if not self._current_package_name or self._current_package_name.startswith(("Installing software", "Get ready to install", "Get your")):
-                    self._current_package_name = release_install_heading(
+                    inf_name, inf_ver = infer_release_name(
                         eff_model, (Path(str(self._current_package_path or "")).name,)
                     )
+                    self._current_package_name = f"{inf_name} {inf_ver}".strip() if inf_name else ""
                 if self._details_package:
                     import dataclasses
                     self._details_package = dataclasses.replace(
@@ -2961,7 +3010,8 @@ class SelectPackagePage(QWidget):
             self._current_package_model = det_m or ""
             if det_m:
                 self._select_model_for_manual(det_m)
-            self._current_package_name = release_install_heading(det_m, (display_name,))
+            inf_name, inf_ver = infer_release_name(det_m, (display_name,))
+            self._current_package_name = f"{inf_name} {inf_ver}".strip() if inf_name else ""
 
             if det_t:
                 self._selected_type = det_t

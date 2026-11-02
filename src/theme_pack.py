@@ -981,6 +981,70 @@ class AdbPushWorker(QThread):
         self.progress.emit(curr, total)
 
 
+def ensure_apk_file(apk_path: str | Path, apk_url: str = "") -> Path:
+    """Return a downloaded local APK file path, fetching ``apk_url`` if needed."""
+    target = Path(apk_path) if apk_path else (downloads_dir() / Path(apk_url or "app.apk").name)
+    if target.is_file() and target.stat().st_size > 0:
+        return target
+    if not apk_url:
+        raise FileNotFoundError(f"APK file not found: {target}")
+    import requests
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = target.with_suffix(".apk.part")
+    with requests.get(apk_url, stream=True, timeout=60) as resp:
+        resp.raise_for_status()
+        with open(tmp_path, "wb") as dst:
+            for chunk in resp.iter_content(chunk_size=65536):
+                if chunk:
+                    dst.write(chunk)
+    os.replace(tmp_path, target)
+    return target
+
+
+class AdbApkInstallWorker(QThread):
+    """Download (if needed) and install an ``apk_repo`` APK over ADB."""
+
+    progress = Signal(int, int)
+    log = Signal(str)
+    finished = Signal(bool, str)
+
+    def __init__(
+        self,
+        adb: str,
+        serial: str,
+        apk_path: str | Path = "",
+        apk_url: str = "",
+        parent=None,
+    ):
+        super().__init__(parent)
+        self._adb = adb
+        self._serial = serial
+        self._apk_path = str(apk_path or "")
+        self._apk_url = str(apk_url or "")
+
+    def run(self):
+        try:
+            from . import adb as _adb
+
+            if self.isInterruptionRequested():
+                self.finished.emit(False, "APK installation cancelled")
+                return
+            self.progress.emit(10, 100)
+            local_apk = ensure_apk_file(self._apk_path, self._apk_url)
+            if self.isInterruptionRequested():
+                self.finished.emit(False, "APK installation cancelled")
+                return
+            self.progress.emit(50, 100)
+            self.log.emit(f"[APK Install] Installing {local_apk.name} over ADB...")
+            ok, msg = _adb.adb_install_apk(self._adb, self._serial, local_apk)
+            self.progress.emit(100, 100)
+            self.finished.emit(ok, msg)
+        except Exception as e:
+            logger.exception("ADB APK installation failed: %s", e)
+            self.finished.emit(False, str(e))
+
+
 class DirMergeWorker(QThread):
     """Merge the combined theme payload into a USB-storage ``.rockbox`` folder.
 

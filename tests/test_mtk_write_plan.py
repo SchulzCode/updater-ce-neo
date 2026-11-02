@@ -102,6 +102,42 @@ def test_y2_writes_the_preloader_first_at_boot1_and_skips_table_stubs(tmp_path):
     assert by_name["ANDROID"]["length"] == (by_name["ANDROID"]["path"]).stat().st_size
 
 
+def test_y2linux_manifest_uses_its_absolute_addresses_not_the_legacy_bias(tmp_path):
+    import json
+
+    scatter = _fixture(tmp_path, "MT6582_Android_scatter.txt")
+    (scatter.parent / "manifest.json").write_text(json.dumps({
+        "schema": "org.schulzcode.y2linux.release/v1",
+        "payloads": [
+            {"target_partition": "BOOTIMG", "absolute_start_bytes": 0x1D80000},
+            {"target_partition": "ANDROID", "absolute_start_bytes": 0x5180000},
+            {"target_partition": "USRDATA", "absolute_start_bytes": 0x40380000},
+        ],
+    }), encoding="utf-8")
+
+    overrides = fs._y2linux_manifest_addresses(scatter)
+    # RECOVERY has no manifest payload; its scatter physical address is already
+    # absolute and must not receive the generic +8 MiB legacy bias.
+    assert overrides["RECOVERY"] == 0x2D80000
+    plan = fs.build_mtk_write_plan(
+        scatter, "Y2", preloader_first=False, address_overrides=overrides
+    )
+    by_name = {step["name"].upper(): step for step in plan}
+    assert by_name["BOOTIMG"]["offset"] == 0x1D80000
+    assert by_name["RECOVERY"]["offset"] == 0x2D80000
+    assert by_name["ANDROID"]["offset"] == 0x5180000
+    assert by_name["USRDATA"]["offset"] == 0x40380000
+
+    keep = fs.build_mtk_write_plan(
+        scatter,
+        "Y2",
+        preloader_first=False,
+        skip_data_partitions=True,
+        address_overrides=overrides,
+    )
+    assert "USRDATA" not in {step["name"].upper() for step in keep}
+
+
 def test_y2_addressing_uses_only_matching_completed_readback_capture(tmp_path, monkeypatch):
     import json
 

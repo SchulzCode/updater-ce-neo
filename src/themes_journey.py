@@ -31,6 +31,8 @@ class ThemesJourney:
         self._player_taken = False
         self._multiple_players = False
         self._last_logged_progress = 0
+        self._apk_path = ""
+        self._apk_url = ""
         # Set once the completion screen has taken over from the stage.
         self.completion_shown = False
         # UI objects whose lifetime *is* journey state: the ADB presence
@@ -105,6 +107,26 @@ class ThemesJourney:
         """More than one player is attached, so no transfer can be addressed."""
         return self._multiple_players
 
+    @property
+    def apk_path(self) -> str:
+        """Local destination path for an ``apk_repo`` APK stage."""
+        return self._apk_path
+
+    @property
+    def apk_url(self) -> str:
+        """Remote download URL for an ``apk_repo`` APK stage."""
+        return self._apk_url
+
+    @property
+    def is_apk_stage(self) -> bool:
+        """True when the stage installs an APK from ``apk_repo`` rather than Rockbox themes."""
+        return bool(self._apk_path or self._apk_url)
+
+    def set_apk(self, apk_path: str = "", apk_url: str = "") -> None:
+        """Configure or clear the ``apk_repo`` payload for this stage."""
+        self._apk_path = str(apk_path or "")
+        self._apk_url = str(apk_url or "")
+
     def begin(self, model: str, *, automatic: bool = False) -> None:
         """Start a stage from a clean slate."""
         self._model = (model or "Y1")
@@ -137,6 +159,8 @@ class ThemesJourney:
 
     def mark_completion_shown(self) -> None:
         self.completion_shown = True
+        self._apk_path = ""
+        self._apk_url = ""
         self.clear_power_on()
 
     # ------------------------------------------------------------------
@@ -198,8 +222,11 @@ class ThemesJourney:
         """Whether a stage may start, and the log line when it may not.
 
         An automatic start obeys the in-beta Settings switch; the Settings
-        button starts the stage by hand and is never gated.
+        button starts the stage by hand and is never gated. APK stages are
+        required by the selected ``apk_repo`` package and always start.
         """
+        if self.is_apk_stage:
+            return True, ""
         if automatic and not self._auto_install_enabled(settings):
             return False, (
                 "[Rockbox Themes] Themes auto-install is off in Settings; "

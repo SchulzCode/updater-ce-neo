@@ -3,6 +3,7 @@
 import logging
 import os
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -46,13 +47,21 @@ def default_picker_dir() -> str:
     firmware archives normally arrive, so start there (and fall back to the
     app's own download folder) instead of touching Documents.
     """
-    for candidate in (Path.home() / "Downloads", downloads_dir()):
+    try:
+        app_downloads = downloads_dir()
+    except OSError:
+        app_downloads = None
+    for candidate in (Path.home() / "Downloads", app_downloads):
+        if candidate is None:
+            continue
         try:
             if candidate.is_dir():
                 return str(candidate)
         except OSError:
             continue
-    return str(Path.home())
+    # Never hand a native panel the home folder: that is what asks macOS for
+    # Documents access. The temp folder is an accessible neutral fallback.
+    return tempfile.gettempdir()
 
 
 def firmware_cache_size() -> tuple[int, int]:

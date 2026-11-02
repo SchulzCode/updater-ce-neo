@@ -126,6 +126,15 @@ def prepare_window_for_glass(window: QMainWindow | QWidget) -> bool:
     # Configure Qt translucent background
     window.setAttribute(Qt.WA_TranslucentBackground, True)
 
+    # Native PyObjC preparation: configures NSWindow style mask and titlebar
+    # without prematurely showing the window or replacing Qt's view.
+    try:
+        if _pyobjc_prepare_window(window):
+            _ensure_seamless_titlebar(window)
+            return True
+    except Exception as e:
+        logger.debug("PyObjC window preparation fallback skipped: %s", e)
+
     if _has_pyqt_liquidglass and hasattr(_liquidglass_module, "prepare_window_for_glass"):
         try:
             _liquidglass_module.prepare_window_for_glass(window)
@@ -133,13 +142,6 @@ def prepare_window_for_glass(window: QMainWindow | QWidget) -> bool:
             return True
         except Exception as e:
             logger.warning("pyqt_liquidglass.prepare_window_for_glass failed: %s", e)
-
-    # Native PyObjC preparation fallback
-    try:
-        if _pyobjc_prepare_window(window):
-            return True
-    except Exception as e:
-        logger.debug("PyObjC window preparation fallback skipped: %s", e)
 
     # Zero-dependency ctypes preparation fallback
     try:
@@ -442,6 +444,17 @@ def apply_glass(
     except Exception as e:
         logger.debug("Existing glass view check error: %s", e)
 
+    # Native PyObjC application: applies NSVisualEffectView directly behind
+    # Qt content without swapping the window's contentView.
+    try:
+        res = _pyobjc_apply_glass(window, corner_radius)
+        if res:
+            _ensure_seamless_titlebar(window)
+            apply_monochrome_window_buttons(window)
+            return True
+    except Exception as e:
+        logger.debug("PyObjC glass effect application failed: %s", e)
+
     if _has_pyqt_liquidglass and hasattr(_liquidglass_module, "apply_glass_to_window"):
         try:
             pad = (padding, padding, padding, padding) if isinstance(padding, (int, float)) else padding
@@ -466,16 +479,6 @@ def apply_glass(
             return True
         except Exception as e:
             logger.warning("pyqt_liquidglass.apply_glass_to_window failed: %s", e)
-
-    # Native PyObjC application fallback
-    try:
-        res = _pyobjc_apply_glass(window, corner_radius)
-        if res:
-            _ensure_seamless_titlebar(window)
-            apply_monochrome_window_buttons(window)
-            return True
-    except Exception as e:
-        logger.debug("PyObjC glass effect application failed: %s", e)
 
     # Native ctypes application fallback
     try:
@@ -730,6 +733,7 @@ def _pyobjc_prepare_window(window: QMainWindow | QWidget) -> bool:
         ns_window.setTitlebarAppearsTransparent_(True)
         ns_window.setTitleVisibility_(NSWindowTitleHidden)
         ns_window.setOpaque_(False)
+        ns_window.setBackgroundColor_(NSColor.clearColor())
         ns_window.setMovableByWindowBackground_(True)
         import AppKit
         if is_liquid_glass_supported():
@@ -770,6 +774,8 @@ def _pyobjc_apply_glass(window: QMainWindow | QWidget, corner_radius: float) -> 
         if not superview:
             superview = content_view
         frame = superview.bounds()
+        if frame.size.width <= 0 or frame.size.height <= 0:
+            frame = content_view.bounds() if content_view else ns_window.frame()
 
         existing_glass = getattr(window, "_pyobjc_glass_view", None)
         if existing_glass is not None:

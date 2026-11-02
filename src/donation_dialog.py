@@ -1000,6 +1000,16 @@ class DonationDialog(QDialog):
         )
         layout.addWidget(self._intro_label)
 
+        if self.context == "install_success":
+            from .config import install_power_on_steps
+            steps = install_power_on_steps(self.model)
+            self._steps_label = QLabel(steps)
+            self._steps_label.setWordWrap(True)
+            self._steps_label.setStyleSheet(
+                f"font-size: 12px; font-weight: 600; color: {title_color}; line-height: 1.35;"
+            )
+            layout.addWidget(self._steps_label)
+
         # 4. Opt-out
         if self.context == "install_success":
             self._dont_ask = QCheckBox(tr("donate_dont_ask"))

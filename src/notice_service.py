@@ -61,6 +61,9 @@ class Notice:
     models: tuple[str, ...] = ()
     # CSV of platforms this notice targets (``mac,windows``); empty means all.
     platforms: tuple[str, ...] = ()
+    # Digest of the source wording. It survives translation so switching
+    # language cannot make a dismissed notice look newly edited.
+    source_fingerprint: str = ""
 
     def is_active_for(self, model: str = "", platform: str = "") -> bool:
         """Check if notice is within its date window and matches the given model."""
@@ -87,8 +90,11 @@ def notice_fingerprint(notice: Notice) -> str:
 
     Dismissal is remembered against this digest, not just the id, so editing a
     notice's title or body makes it visible again while an untouched notice
-    stays dismissed.
+    stays dismissed. ``source_fingerprint`` is used when present so a language
+    change does not count as an edit.
     """
+    if notice.source_fingerprint:
+        return notice.source_fingerprint
     text = "\n".join(
         str(part or "").strip()
         for part in (notice.title, notice.content, notice.full_content)
@@ -163,12 +169,17 @@ def parse_notice_xml(xml_content: str) -> list[Notice]:
         return []
 
     notices: list[Notice] = []
+    seen_ids: dict[str, int] = {}
     # Find all <notice> elements (under root or nested)
     elements = root.findall(".//notice") if root.tag != "notice" else [root]
     for el in elements:
         notice_id = el.get("id", "").strip()
         if not notice_id:
             continue
+        count = seen_ids.get(notice_id, 0)
+        seen_ids[notice_id] = count + 1
+        if count > 0:
+            notice_id = f"{notice_id}_{count}"
 
         # Title
         title_el = el.find("title")
@@ -230,6 +241,7 @@ def parse_notice_xml(xml_content: str) -> list[Notice]:
             models=models,
             platforms=platforms,
         )
+        notice.source_fingerprint = notice_fingerprint(notice)
         # The app already carries the one-time battery toast on Select
         # Software. A feed notice repeating it is a separate thing and never
         # enters the notice system at all.
@@ -262,8 +274,12 @@ class NoticeService(QObject):
         self._cache_dir = app_cache_dir()
         self._cache_file = self._cache_dir / "notice.xml"
         self._session_dismissed: set[str] = set()
+        self._session_dismissed_fingerprints: dict[str, str] = {}
+        self._banner_dismissed: set[str] = set()
         self._active_notices: list[Notice] = []
         self._current_model: str = ""
+        self._fetch_lock = threading.Lock()
+        self._fetch_inflight = False
 
     @property
     def active_notices(self) -> list[Notice]:
@@ -277,13 +293,23 @@ class NoticeService(QObject):
                 # The dedicated toast covers this; do not repeat it as a
                 # notice or notify about it.
                 continue
-            if notice.id in self._session_dismissed:
-                continue
-            if not notice.persistent and notice.id in dismissed_past:
+            fingerprint = notice_fingerprint(notice)
+            compound_key = f"{notice.id}::{fingerprint}"
+            if notice.id in self._session_dismissed or compound_key in self._session_dismissed:
+                # A changed notice is new again even within the same session;
+                # an unchanged one (including a translated copy) stays hidden.
+                stored = self._session_dismissed_fingerprints.get(notice.id, "") or self._session_dismissed_fingerprints.get(compound_key, "")
+                if not stored or stored == fingerprint:
+                    continue
+                self._session_dismissed.discard(notice.id)
+                self._session_dismissed.discard(compound_key)
+                self._session_dismissed_fingerprints.pop(notice.id, None)
+                self._session_dismissed_fingerprints.pop(compound_key, None)
+            if not notice.persistent and (notice.id in dismissed_past or compound_key in dismissed_past):
                 # A legacy dismissal has no digest: keep it dismissed. Once a
                 # notice has a digest, only the same words stay hidden.
-                stored = dismissed_fingerprints.get(notice.id, "")
-                if not stored or stored == notice_fingerprint(notice):
+                stored = dismissed_fingerprints.get(notice.id, "") or dismissed_fingerprints.get(compound_key, "")
+                if not stored or stored == fingerprint:
                     continue
             if not notice.is_active_for(self._current_model, platform):
                 continue
@@ -358,20 +384,36 @@ class NoticeService(QObject):
         if callable(sync):
             sync()
 
+    def dismiss_for_session(self, notice: Notice) -> None:
+        """Hide a notice from the Select Software banner only.
+
+        Nothing is written to settings, so the notice stays in the Notices
+        list and comes back on the next launch.
+        """
+        self._banner_dismissed.add(notice_fingerprint(notice))
+        self._emit_next_notice()
+
     def dismiss_notice(self, notice: Notice) -> None:
-        """Dismiss a notice.
+        """Dismiss a notice for good from the Notices list (its X).
 
         If persistent=False, it is recorded in QSettings so it never returns
         on subsequent app runs (unless remote XML changes).
         If persistent=True, it is dismissed only for the current app session.
         """
+        fp = notice_fingerprint(notice)
+        compound_key = f"{notice.id}::{fp}"
         self._session_dismissed.add(notice.id)
+        self._session_dismissed.add(compound_key)
+        self._session_dismissed_fingerprints[notice.id] = fp
+        self._session_dismissed_fingerprints[compound_key] = fp
         if not notice.persistent:
             dismissed = self.get_dismissed_ids()
             dismissed.add(notice.id)
+            dismissed.add(compound_key)
             self.set_dismissed_ids(dismissed)
             fingerprints = self.get_dismissed_fingerprints()
-            fingerprints[notice.id] = notice_fingerprint(notice)
+            fingerprints[notice.id] = fp
+            fingerprints[compound_key] = fp
             self.set_dismissed_fingerprints(fingerprints)
         self._emit_next_notice()
 
@@ -381,12 +423,22 @@ class NoticeService(QObject):
         self._emit_next_notice()
 
     def fetch_async(self, force: bool = True) -> None:
-        """Fetch remote notice.xml in a background thread."""
+        """Fetch remote notice.xml in a background thread, never concurrently."""
+        with self._fetch_lock:
+            if self._fetch_inflight:
+                return
+            self._fetch_inflight = True
         self.refresh_started.emit()
-        thread = threading.Thread(target=self._fetch_worker, args=(force,), daemon=True)
-        thread.start()
+        try:
+            thread = threading.Thread(target=self._fetch_worker, args=(force,), daemon=True)
+            thread.start()
+        except Exception:
+            with self._fetch_lock:
+                self._fetch_inflight = False
+            self.refresh_finished.emit()
+            raise
 
-    def start_passive_refresh(self, interval_ms: int = 15 * 60 * 1000) -> None:
+    def start_passive_refresh(self, interval_ms: int = 60_000) -> None:
         """Re-check the feed on a calm interval.
 
         Notices change rarely, so this is minutes-scale background work rather
@@ -405,6 +457,8 @@ class NoticeService(QObject):
         try:
             self._fetch_worker_inner(force=force)
         finally:
+            with self._fetch_lock:
+                self._fetch_inflight = False
             self.refresh_finished.emit()
 
     def _fetch_worker_inner(self, force: bool = True) -> None:
@@ -533,7 +587,12 @@ class NoticeService(QObject):
         self._emit_next_notice()
 
     def _emit_next_notice(self) -> None:
-        # The modal lists every active notice; the banner shows the first one.
+        # The Notices list shows every active notice; the Select Software
+        # banner shows the first one that has not been hidden from it.
         visible = self.active_notices
         self.notices_ready.emit(visible)
-        self.notice_ready.emit(visible[0] if visible else None)
+        banner = next(
+            (n for n in visible if notice_fingerprint(n) not in self._banner_dismissed),
+            None,
+        )
+        self.notice_ready.emit(banner)

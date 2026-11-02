@@ -105,7 +105,7 @@ DisableProgramGroupPage=yes
 ; kept, except the retired LocalAppData\Innioasis Updater folder, which the
 ; [Code] section sends to {autopf} instead.
 UsePreviousAppDir=yes
-UsePreviousGroup=yes
+UsePreviousGroup=no
 UsePreviousTasks=yes
 ; All users (admin) is the only install mode. Running processes are stopped
 ; explicitly in CurStepChanged(ssInstall), so the Restart Manager prompt is off.
@@ -134,7 +134,7 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 VersionInfoVersion={#MyAppVersion}
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription={#MyAppName} Installer
-VersionInfoCopyright=Copyright (C) 2024-2026 Innioasis Community
+VersionInfoCopyright=Copyright (C) 2024-2026 Ryan Specter
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -723,8 +723,8 @@ Source: "{#MyDistDir}\_internal\mtkclient\*"; DestDir: "{app}\_internal\mtkclien
 Source: "{#MyRepoRoot}tools\DriverInstall.exe"; DestDir: "{tmp}"; Flags: ignoreversion skipifsourcedoesntexist; Check: ShouldInstallDriver
 
 [Icons]
-Name: "{userprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: startmenuicon; Check: ShouldInstallMainApp
-Name: "{userprograms}\{cm:SpFlashToolShortcut}"; Filename: "{app}\SP_Flash_Tool\flash_tool.exe"; WorkingDir: "{app}\SP_Flash_Tool"; IconFilename: "{app}\SP_Flash_Tool\flash_tool.exe"; Tasks: startmenuicon
+Name: "{userprograms}\Innioasis Updater"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: startmenuicon; Check: ShouldInstallMainApp
+Name: "{userprograms}\SP Flash Tool"; Filename: "{app}\SP_Flash_Tool\flash_tool.exe"; WorkingDir: "{app}\SP_Flash_Tool"; IconFilename: "{app}\SP_Flash_Tool\flash_tool.exe"; Tasks: startmenuicon
 Name: "{userprograms}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"; Tasks: startmenuicon
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; Check: ShouldInstallMainApp
 
@@ -821,7 +821,9 @@ var
   Tail: String;
 begin
   Tail := ' ' + Lowercase(GetCmdTail);
-  Result := (Pos(' -update', Tail) > 0) or (Pos(' /update', Tail) > 0);
+  Result :=
+    (Pos(' -update', Tail) > 0) or (Pos(' /update', Tail) > 0) or
+    (Pos(' -upgrade', Tail) > 0) or (Pos(' /upgrade', Tail) > 0);
 end;
 
 { Without -update, a pre-3.0 data folder marked by firmware_downloader.py is
@@ -1416,8 +1418,13 @@ begin
     end;
 
     ShowStep('StepShortcuts');
-    PurgeRetiredShortcuts;
-    RemoveInnioasisCommunityFolder;
+    { An update keeps the shortcut placements the user already has. A fresh
+      install clears the old Innioasis / SP Flash entries and folders first. }
+    if not ShouldPreserveUserData then
+    begin
+      PurgeRetiredShortcuts;
+      RemoveInnioasisCommunityFolder;
+    end;
 
     ShowStep('StepLegacy');
     if not ShouldPreserveUserData then

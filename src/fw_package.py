@@ -70,7 +70,6 @@ class FwPackage:
     has_rockbox_240p: bool = False
     has_ini: bool = False
     has_preserve_data_scatter: bool = False
-    is_y2linux: bool = False
     post_install: str = ""
     post_install_2: str = ""
 
@@ -175,7 +174,7 @@ def read_fw_package_ini(path: Union[str, Path]) -> FwIni:
     sw_type = get_first("target_type", "target type", "type", "type_variant", "variant")
     desc = get_first("description", "desc")
     post_install = get_first("post_install", "post install")
-    post_install_2 = get_first("post_install_2", "post install 2")
+    post_install_2 = get_first("post_install2", "post_install_2", "post install 2")
 
     return FwIni(
         enabled=enabled,
@@ -494,15 +493,6 @@ def read_package(
         # fw_package.ini beside the app: its updater image may sit there too.
         image = _package_image(ini.parent)
 
-    eff_name_low = eff_name.lower()
-    meta_name_low = (meta.name or "").lower()
-    folder_low = folder_p.name.lower()
-    all_source = " ".join(str(s).lower() for s in source_names)
-    is_y2linux = any(
-        k in eff_name_low or k in meta_name_low or k in folder_low or k in all_source
-        for k in ("y2linux", "y2reborn")
-    )
-
     return FwPackage(
         folder=folder_p.resolve(),
         scatter=scatter.resolve(),
@@ -518,7 +508,6 @@ def read_package(
         has_preserve_data_scatter=scatter_has_preserve_data_variant(folder_p),
         post_install=meta.post_install,
         post_install_2=meta.post_install_2,
-        is_y2linux=is_y2linux,
     )
 
 
@@ -739,6 +728,10 @@ def prune_to_firmware_package(extract_dir: Union[str, Path]) -> list[str]:
             keep.add(ini.resolve())
     if (folder / FW_PACKAGE_INI).is_file():
         keep.add((folder / FW_PACKAGE_INI).resolve())
+    # Y2Linux's manifest carries the authoritative absolute partition
+    # addresses; MTKclient needs it beside the scatter when flashing.
+    if (folder / "manifest.json").is_file():
+        keep.add((folder / "manifest.json").resolve())
 
     for _name, img in _list_expected_images(scatter):
         if img.exists():

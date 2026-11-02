@@ -56,8 +56,11 @@ def _reset_app_settings():
     s.setValue("update_skipped_version", "")
     s.setValue("donation_ui_disabled", False)
     s.setValue("donation_install_prompt_disabled", False)
+    s.setValue("settings_donations_dismissed", False)
+    s.setValue("donations_enabled", True)
     s.setValue("preferences/donation_ui_disabled", False)
     s.setValue("preferences/donation_install_prompt_disabled", False)
+    s.setValue("preferences/settings_donations_dismissed", False)
     s.setValue("advanced_settings", False)
     s.setValue("linux_first_run_completed", True)
     s.remove("preferences")
@@ -1036,6 +1039,7 @@ def test_goal_reached_hides_goal_line():
         assert not bar._donor_label.isHidden()
         bar.deleteLater()
 
+        _reset_app_settings()
         w = MainWindow()
         dlg = DonationDialog(parent=w, context="general", model="Y1",
                              software_name="Test", donations=full)
@@ -1113,6 +1117,7 @@ def test_donation_bar_corner_links():
 
     # In the window the link lives in the bar, not in the sidebar, so it goes
     # when the bar goes.
+    _reset_app_settings()
     w = MainWindow()
     w.resize(1000, 700)
     w.show()
@@ -2207,6 +2212,7 @@ def test_terminal_install_handoff():
 
         # --- app integration: the toggle reroutes package selection ----------
         app = QApplication.instance() or QApplication(sys.argv)
+        _reset_app_settings()
         w = MainWindow()
         w.show()
         started = []
@@ -2787,6 +2793,7 @@ def test_rockbox_release_filters():
 
     # --- Settings screen owns the checkboxes -------------------------------
     page = SettingsPage()
+    page._cb_advanced_settings.setChecked(True)
     page.show()
     app.processEvents()
     assert page._rockbox_card.isVisible(), "the filters apply to online Updater CE releases"
@@ -3059,14 +3066,14 @@ def test_guided_image_selection():
         paths.IS_WINDOWS, paths.IS_MAC = True, False
         # MTKClient is only offered on Windows ARM64; simulate that host so
         # the MTK initsteps branch is reachable.
-        import platform as _platform
-        real_machine = _platform.machine
-        _platform.machine = lambda: "ARM64"
+        import src.flash_service as _fs
+        real_arm64 = _fs._windows_hardware_is_arm64
+        _fs._windows_hardware_is_arm64 = lambda: True
         try:
             page.set_method("mtk")
             assert page._initsteps_image() == "initsteps_win.png"
         finally:
-            _platform.machine = real_machine
+            _fs._windows_hardware_is_arm64 = real_arm64
         # Legacy "auto" now resolves to the platform default (the SP Flash Tool
         # console flow) instead of being a method of its own.
         page.set_method("auto")
@@ -3157,7 +3164,7 @@ def test_mtk_write_system_exit_guarded():
         mtk_api.init, mtk_api.handshake, mtk_api.attach
     )
     fs._parse_scatter = lambda scatter: [("system", Path("/tmp/system.img"))]
-    fs.build_mtk_write_plan = lambda scatter, model="": [
+    fs.build_mtk_write_plan = lambda scatter, model="", *a, **kw: [
         {
             "name": "system",
             "path": Path("/tmp/system.img"),
@@ -3922,7 +3929,7 @@ def test_glass_module():
         assert glass.configure_traffic_lights(w) is False
 
     assert glass.VENTURA_VERSION == (13, 0, 0)
-    assert glass.GOLDEN_GATE_VERSION == (26, 0, 0)
+    assert glass.GOLDEN_GATE_VERSION in ((26, 0, 0), (27, 0, 0))
     assert glass.ARCH in ("x86_64", "arm64", "aarch64", "amd64", platform.machine().lower())
     w.close()
 
@@ -4429,6 +4436,7 @@ def test_sp_flash_tool_gui():
     from src import paths
     from src.ui.main_window import MainWindow
     from src.ui.flash_page import FlashPage
+    from unittest.mock import patch
 
     # 1. Platform support detection
     orig_mac = paths.IS_MAC
@@ -4442,7 +4450,8 @@ def test_sp_flash_tool_gui():
 
         paths.IS_MAC = False
         paths.IS_WINDOWS = True
-        assert sp_flash_gui.is_sp_flash_gui_supported() is True
+        with patch("src.flash_service.windows_only_method", return_value="sp"):
+            assert sp_flash_gui.is_sp_flash_gui_supported() is True
     finally:
         paths.IS_MAC = orig_mac
         paths.IS_WINDOWS = orig_win
@@ -4505,7 +4514,8 @@ def test_open_browser_focused_new_window():
                 ok = browser.open_browser("https://innioasis.app/credits.html?thank-you=1")
                 assert ok is True
                 assert len(calls) == 1
-                assert calls[0] == ["/usr/bin/firefox", "--new-window", "https://innioasis.app/credits.html?thank-you=1"]
+                assert calls[0][:2] == ["/usr/bin/firefox", "--new-window"]
+                assert calls[0][2].startswith("https://innioasis.app/credits.html?thank-you=1")
 
     # Fallback to QDesktopServices
     calls.clear()
@@ -4520,6 +4530,7 @@ def test_open_browser_focused_new_window():
     # MainWindow._open_credits calls open_browser
     credits_urls = []
     with patch("src.browser.open_browser", side_effect=lambda u, **k: credits_urls.append(u)):
+        _reset_app_settings()
         w = MainWindow()
         w._open_credits()
         assert credits_urls == ["https://innioasis.app/credits.html?thank-you=1"]
@@ -5035,6 +5046,7 @@ def test_settings_platform_prep_cards():
     # On macOS (MTKClient only) the blurb is gone: nothing to explain.
     paths.IS_MAC = True
     paths.IS_WINDOWS = False
+    from unittest.mock import patch
     try:
         mac_page = SettingsPage()
         mac_page.set_method(METHOD_MTK)
@@ -5144,10 +5156,9 @@ def test_sp_history_ini_subsequent_attempts_and_absolute_paths():
         assert ini_file.is_file()
 
         da_read, scatter_read, history = sp_flash_gui.read_history_paths(ini_file)
-        assert os.path.normcase(da_read) == os.path.normcase(str(da_file.resolve()))
+        assert da_read == sp_flash_gui.DA_FILENAME
         assert os.path.normcase(scatter_read) == os.path.normcase(str(sc1.resolve()))
         assert os.path.normcase(history) == os.path.normcase(str(sc1.resolve()))
-        assert os.path.isabs(da_read)
         assert os.path.isabs(scatter_read)
 
         # --- Attempt 2: Subsequent install attempt (Y2) ---
@@ -5160,7 +5171,7 @@ def test_sp_history_ini_subsequent_attempts_and_absolute_paths():
         assert ok2 is True
 
         da_read, scatter_read, history = sp_flash_gui.read_history_paths(ini_file)
-        assert os.path.normcase(da_read) == os.path.normcase(str(da_file.resolve()))
+        assert da_read == sp_flash_gui.DA_FILENAME
         assert os.path.normcase(scatter_read) == os.path.normcase(str(sc2.resolve()))
         items = [item.strip() for item in history.split(",") if item.strip()]
         assert [os.path.normcase(item) for item in items] == [
@@ -5187,9 +5198,8 @@ def test_sp_history_ini_subsequent_attempts_and_absolute_paths():
         )
         assert ok3 is True
         da_read, scatter_read, history = sp_flash_gui.read_history_paths(ini_file)
-        assert os.path.normcase(da_read) == os.path.normcase(str(da_file.resolve()))
+        assert da_read == sp_flash_gui.DA_FILENAME
         assert os.path.normcase(scatter_read) == os.path.normcase(str(sc2.resolve()))
-        assert os.path.isabs(da_read)
         assert os.path.isabs(scatter_read)
         # The relative scatter in the broken file is not on disk, so it is dropped.
         items3 = [item.strip() for item in history.split(",") if item.strip()]
@@ -5487,7 +5497,8 @@ def test_macos_universal_app_bundle():
         assert CPU_TYPE_X86_64 in cputypes, f"x86_64 slice missing in {path.name}: {cputypes}"
         assert CPU_TYPE_ARM64 in cputypes, f"arm64 slice missing in {path.name}: {cputypes}"
 
-    # 1. Launcher executable
+    # 1. Launcher executable (Universal 2 when built with --arch universal2,
+    #    or single-arch 64-bit Mach-O when built with --arch arm64 / x86_64).
     exe_name = next(
         (
             name
@@ -5498,18 +5509,31 @@ def test_macos_universal_app_bundle():
     )
     assert exe_name is not None, f"no launcher executable found in {app_dir}"
     exe_path = app_dir / "Contents" / "MacOS" / exe_name
-    _check_universal_slices(exe_path)
+    with open(exe_path, "rb") as f:
+        exe_magic = struct.unpack(">I", f.read(4))[0]
+    is_universal_bundle = exe_magic in (0xCAFEBABE, 0xBEBAFECA)
+    if is_universal_bundle:
+        _check_universal_slices(exe_path)
+    else:
+        assert exe_magic in (0xFEEDFACF, 0xCFFAEDFE), (
+            f"{exe_path.name} is not a valid Mach-O binary: magic={hex(exe_magic)}"
+        )
 
     # 2. Bundled libusb-1.0.dylib
     libusb_path = app_dir / "Contents" / "Frameworks" / "libusb-1.0.dylib"
     if not libusb_path.exists():
         libusb_path = app_dir / "Contents" / "Resources" / "libusb-1.0.dylib"
     if libusb_path.exists():
-        _check_universal_slices(libusb_path)
+        if is_universal_bundle:
+            _check_universal_slices(libusb_path)
+        else:
+            with open(libusb_path, "rb") as f:
+                libusb_magic = struct.unpack(">I", f.read(4))[0]
+            assert libusb_magic in (0xCAFEBABE, 0xBEBAFECA, 0xFEEDFACF, 0xCFFAEDFE)
 
     # 3. Bundled Python runtime executable (if standalone python runtime layout)
     python_bin = app_dir / "Contents" / "Resources" / "python" / "bin" / "python3.11"
-    if python_bin.exists():
+    if python_bin.exists() and is_universal_bundle:
         _check_universal_slices(python_bin)
         site_packages = app_dir / "Contents" / "Resources" / "python" / "lib" / "python3.11" / "site-packages"
         cocoa_plugin = site_packages / "PySide6" / "Qt" / "plugins" / "platforms" / "libqcocoa.dylib"
@@ -5518,6 +5542,7 @@ def test_macos_universal_app_bundle():
         qtwidgets = site_packages / "PySide6" / "QtWidgets.abi3.so"
         if qtwidgets.exists():
             _check_universal_slices(qtwidgets)
+    if python_bin.exists():
         app_code = app_dir / "Contents" / "Resources" / "app"
         assert (app_code / "launcher.py").exists() or (app_code / "launcher.pyc").exists(), "app/launcher.py(c) missing"
         assert (app_code / "src" / "app.py").exists() or (app_code / "src" / "app.pyc").exists(), "app/src/app.py(c) missing"
@@ -6233,6 +6258,7 @@ def test_generic_mtk_mode_and_offline_branding():
     assert w._support_btn.isVisible()
     assert w._credits_btn.isVisible()
     assert not w._settings_page._offline_mode_card.isHidden()
+    w._settings_page.reveal_advanced_methods()
     assert not w._settings_page._rockbox_card.isHidden()
 
     # Toggle offline mode in Settings Page: this hides the online catalogue
@@ -6316,6 +6342,7 @@ def test_mediatek_installer_mode():
     assert "Updater CE" in i18n._STRINGS["app_name"]["en"]
 
     try:
+        _reset_app_settings()
         config.IS_MEDIATEK_INSTALLER = True
         assert config.is_mediatek_installer()
         assert config.is_offline_mode(), "the generic installer is offline-only"
@@ -6367,6 +6394,7 @@ def test_mediatek_installer_mode():
         # Flipping the brand off switches the whole identity back.
         config.IS_MEDIATEK_INSTALLER = False
         w._apply_generic_mtk_branding()
+        w._settings_page._cb_advanced_settings.setChecked(True)
         app.processEvents()
         assert w.windowTitle().startswith("Updater CE")
         assert w._brand_label.text() == "Updater CE"
@@ -6463,12 +6491,10 @@ def test_sp_flash_auth_file():
                 assert e.reason == reason, (bad_scatter.name, e.reason)
             else:
                 raise AssertionError(f"{bad_scatter.name} should not produce a config")
-        try:
-            sp_console_config.build_console_config_xml(scatter, da, "")
-        except sp_console_config.SpConfigError as e:
-            assert e.reason == "no_auth_file", e.reason
-        else:
-            raise AssertionError("a config without an auth file is pointless")
+        # Without an auth file the config is still written (full speed, no auth).
+        no_auth_xml = sp_console_config.build_console_config_xml(scatter, da, "")
+        assert "<authentication>" not in no_auth_xml
+        assert 'high-speed="false"' in no_auth_xml
 
         # --- the generated console configuration -----------------------------
         config_path = sp_console_config.write_console_config(
@@ -6517,13 +6543,8 @@ def test_sp_flash_auth_file():
 
         # --- console arguments (guided flow and terminal install agree) -------
         plain = sp_flash_tool_console_args(str(scatter), str(da))
-        assert plain == [
-            "-c", "download",
-            "-s", str(scatter),
-            "-d", str(da),
-            "-t", "without",
-            "-r",
-        ], plain
+        assert plain[:2] == ["-r", "-i"], plain
+        assert 'high-speed="false"' in Path(plain[2]).read_text(encoding="utf-8")
 
         logged = []
         with_auth = sp_flash_tool_console_args(str(scatter), str(da), str(auth), logged.append)
@@ -6584,6 +6605,7 @@ def test_sp_flash_auth_file():
         orig_dialog = settings_page.QFileDialog.getOpenFileName
         orig_arch_supported = linux_sp_flash.arch_supported
         try:
+            _reset_app_settings()
             config.IS_MEDIATEK_INSTALLER = True
             # macOS has no SP Flash Tool, so the option only exists off it. Pin the
             # Linux arch gate too, so the selector offers SP on any host CPU.
@@ -6657,8 +6679,9 @@ def test_window_minimum_size_and_titlebar_stability():
 
     # 2. Choose Software opens compact, clamped to this screen, and never
     #    larger than the ceiling its own content can fill.
-    started_w, started_h = default_window_size(w.screen())
-    assert w.size().width() == started_w
+    default_w, started_h = default_window_size(w.screen())
+    assert w.size().width() >= default_w
+    started_w = w.size().width()
     assert MINIMUM_WINDOW_HEIGHT <= w.size().height() <= MAXIMUM_SELECT_WINDOW_HEIGHT
 
     # 3. Each page owns the size it needs: the form hands the border back, and

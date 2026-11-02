@@ -109,12 +109,14 @@ def auth_file_usable(path) -> bool:
 
 
 def build_console_config_xml(
-    scatter, da_file, auth_file, connection_timeout_ms: int = CONNECTION_TIMEOUT_MS
+    scatter, da_file, auth_file=None, connection_timeout_ms: int = CONNECTION_TIMEOUT_MS
 ) -> str:
-    """Console configuration XML for a flash that needs an auth file.
+    """Console configuration XML for a flash, with or without an auth file.
 
     The command is always ``<download-only/>``: partitions are written, none
     are formatted. User data is kept only by leaving it out of ``scatter``.
+    ``high-speed="false"`` runs the BROM download at the tool's full write
+    speed (the tool reads any value other than ``"true"`` as full speed).
 
     Raises :class:`SpConfigError` when the scatter does not tell us the chip
     or storage type, since a wrong guess there is worse than no flash.
@@ -122,8 +124,6 @@ def build_console_config_xml(
     ``connection_timeout_ms`` is the tool's connection window, the only place
     it can be set for a driven flash.
     """
-    if not auth_file:
-        raise SpConfigError("no_auth_file", "no authentication file was given")
     general = parse_scatter_general(scatter)
     chip = general["platform"]
     if not _CHIP_RE.match(chip or ""):
@@ -141,8 +141,8 @@ def build_console_config_xml(
             f"        <storage-type>{escape(str(storage))}</storage-type>",
             f"        <download-agent>{escape(str(da_file))}</download-agent>",
             f"        <scatter>{escape(str(scatter))}</scatter>",
-            f"        <authentication>{escape(str(auth_file))}</authentication>",
-            '        <connection type="BromUSB" high-speed="true"'
+            *([f"        <authentication>{escape(str(auth_file))}</authentication>"] if auth_file else []),
+            '        <connection type="BromUSB" high-speed="false"'
             ' without-battery="true"'
             f' timeout-count="{int(connection_timeout_ms)}" com-port="" />',
             "    </general>",
@@ -158,11 +158,11 @@ def build_console_config_xml(
 def write_console_config(
     scatter,
     da_file,
-    auth_file,
+    auth_file=None,
     target_dir: Optional[Path] = None,
     connection_timeout_ms: int = CONNECTION_TIMEOUT_MS,
 ) -> Path:
-    """Write the console configuration for an authenticated flash."""
+    """Write the console configuration for a flash (auth file optional)."""
     directory = Path(target_dir) if target_dir else config_dir()
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / CONFIG_FILE_NAME

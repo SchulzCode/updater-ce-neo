@@ -93,9 +93,11 @@ def compatible_software_names(pkg, model: str = "") -> list:
     """Software names compatible with ``pkg``, original software first."""
     packages = compatible_packages(pkg, model)
     names: list[str] = []
+    seen: set[str] = set()
     for candidate in packages:
         name = str(getattr(candidate, "name", "") or "").strip()
-        if name and name not in names:
+        if name and name.casefold() not in seen:
+            seen.add(name.casefold())
             names.append(name)
     names.sort(key=lambda n: (n.casefold() != "original software", n.casefold()))
     return names

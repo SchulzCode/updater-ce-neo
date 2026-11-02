@@ -2064,6 +2064,10 @@ def sync_cached_palettes(app: QApplication) -> None:
             viewport = widget.viewport()
             if viewport is None:
                 continue
+            if viewport.testAttribute(Qt.WidgetAttribute.WA_NoSystemBackground):
+                # Erases to its parent card on purpose (release notes): an
+                # opaque Base here would paint a plate behind the text.
+                continue
             base = viewport.palette().color(QPalette.ColorRole.Base)
             if base.alpha() == 0 or widget.autoFillBackground():
                 apply_readable_palette(viewport)

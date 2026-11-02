@@ -494,20 +494,54 @@ METHOD_MTK_MAC = "mtk_mac"
 
 
 _WINDOWS_INTEL_MACHINES = ("x86_64", "amd64", "x64", "i386", "i486", "i586", "i686", "x86")
+_IMAGE_FILE_MACHINE_ARM64 = 0xAA64
+
+
+def _windows_hardware_is_arm64():
+    """True when the Windows PC's CPU is ARM64, even if this process is x86-64.
+
+    An x86-64 build running under Prism emulation reports ``AMD64`` from
+    ``platform.machine()``, so ask the OS for the native machine type instead.
+    Falls back to the WOW64 environment variables when the API is unavailable.
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.windll.kernel32
+        process_machine = wintypes.USHORT(0)
+        native_machine = wintypes.USHORT(0)
+        ok = kernel32.IsWow64Process2(
+            kernel32.GetCurrentProcess(),
+            ctypes.byref(process_machine),
+            ctypes.byref(native_machine),
+        )
+        if ok:
+            return native_machine.value == _IMAGE_FILE_MACHINE_ARM64
+    except Exception:
+        pass
+    env_arch = " ".join(
+        os.environ.get(k, "") for k in ("PROCESSOR_ARCHITEW6432", "PROCESSOR_ARCHITECTURE")
+    ).upper()
+    return "ARM64" in env_arch
 
 
 def windows_only_method():
-    """The one install method Windows may use, decided by the CPU.
+    """The one install method Windows may use, decided by the PC's CPU.
 
     SP Flash Tool ships only as an x86/x86-64 Windows build, so Intel/AMD
-    Windows gets SP Flash Tool and no route to MTKClient. Any other Windows CPU
-    (ARM64) gets MTKClient only. Returns ``None`` off Windows, where the
-    per-platform rules below apply instead.
+    Windows gets SP Flash Tool and no route to MTKClient. ARM64 Windows, whether
+    native or x86-64 emulated under Prism, gets MTKClient only. Returns ``None``
+    off Windows, where the per-platform rules below apply instead.
     """
     if paths.IS_MAC or not paths.IS_WINDOWS:
         return None
-    machine = (platform.machine() or "").lower()
-    return METHOD_SP if machine in _WINDOWS_INTEL_MACHINES else METHOD_MTK
+    if _windows_hardware_is_arm64():
+        return METHOD_MTK
+    if sys.platform == "win32":
+        machine = (platform.machine() or "").lower()
+        return METHOD_SP if machine in _WINDOWS_INTEL_MACHINES else METHOD_MTK
+    return METHOD_SP
 
 
 def default_flash_method():
@@ -549,6 +583,9 @@ def normalise_method(method):
         return default_flash_method()
     if paths.IS_MAC:
         return METHOD_MTK
+    locked = windows_only_method()
+    if locked:
+        return locked
     if value in ("auto", METHOD_MTK_MAC):
         return default_flash_method()
     return value
@@ -1223,6 +1260,38 @@ def _is_android_sparse(file_path) -> bool:
         return magic == _ANDROID_SPARSE_MAGIC_BYTES
     except Exception:
         return False
+
+
+def _sparse_data_size(file_path) -> int:
+    """Return the total unsparse data bytes of an Android sparse image without decompressing it."""
+    try:
+        p = Path(file_path)
+        if not p.is_file() or p.stat().st_size < 28:
+            return p.stat().st_size if p.is_file() else 0
+        with open(p, "rb") as rf:
+            hdr = rf.read(28)
+            if len(hdr) != 28:
+                return p.stat().st_size
+            magic, major, _minor, file_hdr_sz, chunk_hdr_sz, blk_sz, _total_blks, total_chunks, _checksum = unpack("<I4H4I", hdr)
+            if magic != _ANDROID_SPARSE_MAGIC or major != 1:
+                return p.stat().st_size
+            if file_hdr_sz > 28:
+                rf.seek(file_hdr_sz - 28, os.SEEK_CUR)
+            data_bytes = 0
+            for _ in range(total_chunks):
+                chdr = rf.read(12)
+                if len(chdr) != 12:
+                    break
+                chunk_type, _reserved, chunk_sz, total_sz = unpack("<2H2I", chdr)
+                if chunk_hdr_sz > 12:
+                    rf.seek(chunk_hdr_sz - 12, os.SEEK_CUR)
+                data_sz = total_sz - chunk_hdr_sz
+                if chunk_type in (0xCAC1, 0xCAC2):  # RAW or FILL
+                    data_bytes += chunk_sz * blk_sz
+                rf.seek(data_sz, os.SEEK_CUR)
+            return data_bytes if data_bytes > 0 else p.stat().st_size
+    except Exception:
+        return Path(file_path).stat().st_size if Path(file_path).is_file() else 0
 
 
 def _convert_sparse_to_raw(sparse_path, out_dir):
@@ -1987,32 +2056,41 @@ def sp_flash_tool_console_args(scatter_arg, da_arg, auth_file="", log=None):
     """Console arguments for flash_tool, carrying an auth file when one is set.
 
     SP Flash Tool has no ``--auth`` switch, so an authentication file is only
-    reachable through the console configuration file (``-i``). Both routes run
-    Download Only. A set auth file that is
-    missing, empty or cannot be written raises :class:`SpAuthFileError`: flashing
-    without the file the user chose would be silently wrong.
+    reachable through the console configuration file (``-i``). Runs use the
+    configuration file (Download Only, full speed) whenever the scatter names
+    its chip and storage type; otherwise the plain Download Only command line
+    is used. A set auth file that is missing, empty or cannot be written raises
+    :class:`SpAuthFileError`: flashing without the file the user chose would be
+    silently wrong.
     """
+    from . import sp_console_config
+
     auth = str(auth_file or "").strip()
     if auth:
-        from . import sp_console_config
-
         if not sp_console_config.auth_file_usable(auth):
             raise SpAuthFileError(auth, "missing")
-        try:
-            config = sp_console_config.write_console_config(
-                scatter_arg, da_arg, auth
-            )
-        except sp_console_config.SpConfigError as e:
+    # Every console run goes through the configuration file: its
+    # ``high-speed="false"`` is the only way to request SP Flash Tool's full
+    # write speed. ``<download-only/>`` writes the scatter's images and formats
+    # nothing, so a partition left out of the scatter keeps its contents.
+    try:
+        config = sp_console_config.write_console_config(
+            scatter_arg, da_arg, auth or None
+        )
+    except sp_console_config.SpConfigError as e:
+        if auth:
             raise SpAuthFileError(auth, e.reason) from e
-        except OSError as e:
+        config = None
+    except OSError as e:
+        if auth:
             raise SpAuthFileError(auth, "write_failed") from e
-        if log:
+        config = None
+    if config is not None:
+        if auth and log:
             log(tr("sp_auth_loaded").format(path=auth))
         return ["-r", "-i", str(config)]
-    # ``-c download`` is Download Only (SP Flash Tool maps it to its
-    # ``download-only`` command): the scatter's downloadable images are written
-    # and nothing is formatted. Format All + Download is never used, so a
-    # partition left out of the scatter keeps its contents.
+    # Fallback when the scatter does not name its chip or storage type: the
+    # plain command line (Download Only, tool's default speed).
     return [
         "-c", "download",
         "-s", scatter_arg,
@@ -2384,7 +2462,7 @@ def stage_firmware_for_flashing(
         if not dest_auth.exists() or dest_auth.stat().st_size != p.stat().st_size:
             shutil.copy2(p, dest_auth)
 
-    for ini_name in ("fw_package.ini", "updater.png", "updater.jpg", "updater.jpeg"):
+    for ini_name in ("fw_package.ini", "manifest.json", "updater.png", "updater.jpg", "updater.jpeg"):
         f = src_folder / ini_name
         if f.is_file():
             dest_f = dest_folder / ini_name
@@ -2977,6 +3055,46 @@ def _scatter_region_parttype(region: str, partition_name: str = "") -> str:
     return "user"
 
 
+def _y2linux_manifest_addresses(scatter_path):
+    """Absolute write addresses declared by a Y2Linux release manifest.
+
+    Y2Linux's scatter uses the stock Y2 physical column, but its manifest is
+    the authoritative install map (the release's own install.md says to stop if
+    SP Flash Tool shows different addresses). The generic legacy mapper adds
+    the Y2 stock MBR bias, which would move every Y2Linux image 8 MiB past its
+    partition. Use the manifest's absolute starts for those packages only.
+    """
+    import json
+
+    try:
+        manifest = Path(scatter_path).parent / "manifest.json"
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return {}
+    schema = str(data.get("schema") or "")
+    if not schema.startswith("org.schulzcode.y2linux.release"):
+        return {}
+    overrides = {}
+    for payload in data.get("payloads") or ():
+        if not isinstance(payload, dict):
+            continue
+        name = str(payload.get("target_partition") or "").strip().upper()
+        address = payload.get("absolute_start_bytes")
+        if name and isinstance(address, int) and address >= 0:
+            overrides[name] = address
+    # RECOVERY is not one of the manifest payloads, but the scatter's physical
+    # column is already the absolute start for it. Use that as the fallback
+    # rather than the generic +8 MiB legacy bias.
+    for entry in _parse_scatter_entries(scatter_path):
+        if not entry.get("is_download") or entry.get("tail_relative"):
+            continue
+        name = str(entry.get("name") or "").strip().upper()
+        physical = entry.get("physical_start_addr")
+        if name and name not in overrides and isinstance(physical, int) and physical >= 0:
+            overrides[name] = physical
+    return overrides
+
+
 def build_mtk_write_plan(
     scatter_path,
     model="",
@@ -2987,6 +3105,7 @@ def build_mtk_write_plan(
     user_addressing=None,
     user_size=None,
     block_size=None,
+    address_overrides=None,
 ):
     """Return the ordered write plan the shipped 1.1.7 build performs.
 
@@ -3003,6 +3122,10 @@ def build_mtk_write_plan(
     ``legacy_preloader_last``), the preloader is moved to the very end so an interrupted
     write leaves the existing BROM/preloader boot mechanism intact.
 
+    ``address_overrides`` maps partition names to absolute byte addresses for
+    packages whose manifest supplies its own layout (Y2Linux). It takes
+    precedence over the generic legacy MBR calibration.
+
     Non-empty partition tables (MBR, EBR1) shipped in the package are included
     so the device has its partition tables configured, while all-zero empty stubs
     are skipped via ``_is_empty_placeholder_image``.
@@ -3017,6 +3140,11 @@ def build_mtk_write_plan(
     if not entries:
         return []
     scatter_dir = scatter_p.parent
+    overrides = {
+        str(name).strip().upper(): int(address)
+        for name, address in (address_overrides or {}).items()
+        if str(name).strip()
+    }
 
     plan = []
     seen = set()
@@ -3050,7 +3178,7 @@ def build_mtk_write_plan(
         if key in seen:
             continue
         seen.add(key)
-        length = image.stat().st_size
+        length = _sparse_data_size(image) if _is_android_sparse(image) else image.stat().st_size
         if length <= 0:
             continue
         parttype = _scatter_region_parttype(entry.get("region", ""), name)
@@ -3060,15 +3188,24 @@ def build_mtk_write_plan(
         # inside eMMC boot1 (the preloader) and at the head of the user area
         # (which the MBR occupies).
         offset = int(entry.get("offset") or 0)
-        if user_addressing is not None and parttype == "user":
+        absolute = overrides.get(name.strip().upper())
+        if absolute is not None:
+            # Y2Linux supplies an install map in its manifest; do not apply the
+            # stock Y2 physical+0x800000 calibration on top of it.
+            offset = absolute
+        elif user_addressing is not None and parttype == "user":
             raw_part = raw_parts[int(entry.get("order", 0))]
             calibrated = _resolve_scatter_user_addr_for_candidate(
                 raw_part, user_addressing, user_size, block_size or DEFAULT_SCATTER_BLOCK_SIZE
             )
             if calibrated is None:
-                raise PackageLayoutError(
-                    f"Cannot resolve the {name} USER address from this scatter and device capacity"
-                )
+                offset_val = entry.get("offset")
+                if offset_val is not None:
+                    calibrated = int(offset_val)
+                else:
+                    raise PackageLayoutError(
+                        f"Cannot resolve the {name} USER address from this scatter and device capacity"
+                    )
             if user_size and calibrated + length > user_size:
                 raise PackageLayoutError(
                     f"{name} image at 0x{calibrated:X} exceeds the eMMC USER capacity"
@@ -4866,6 +5003,8 @@ class FlashWorker(QThread):
             # A flag rather than a tenth position, so the existing argument
             # order (and a hand-run command) stays valid.
             cmd.append("--keep-data")
+        if getattr(self, "_is_rockbox_flow", False):
+            cmd.append("--rockbox")
 
         final_ok = None
         final_msg = ""
@@ -4895,7 +5034,7 @@ class FlashWorker(QThread):
                 self._touch_attempt()
                 if line.startswith("[PROGRESS] "):
                     try:
-                        pct = int(line[len("[PROGRESS] "):])
+                        pct = float(line[len("[PROGRESS] "):])
                     except ValueError:
                         pct = None
                     # Stay at 0 until the tool has moved past the USB search.
@@ -5561,6 +5700,15 @@ class FlashWorker(QThread):
             )
             user_size = _get_emmc_user_size(mtk)
             block_size = _parse_scatter_block_size(scatter_file)
+            y2_addresses = _y2linux_manifest_addresses(scatter_file)
+            if y2_addresses:
+                self._log(
+                    "Y2Linux manifest addresses: "
+                    + ", ".join(
+                        f"{name}=0x{address:X}"
+                        for name, address in sorted(y2_addresses.items())
+                    )
+                )
             plan = build_mtk_write_plan(
                 scatter_file,
                 getattr(self, "package_model", "") or self.model,
@@ -5569,6 +5717,7 @@ class FlashWorker(QThread):
                 user_addressing=addressing,
                 user_size=user_size,
                 block_size=block_size,
+                address_overrides=y2_addresses,
             )
         except PackageLayoutError as e:
             unresolved = "auto-probe" in str(e)
@@ -6222,6 +6371,9 @@ class FlashWorker(QThread):
         be reported as a completed install. Offsets are 512-aligned because the
         legacy DA reads whole sectors.
         """
+        daloader = getattr(mtk, "daloader", None)
+        if daloader is None or not hasattr(daloader, "readflash"):
+            return
         path = Path(file_path)
         try:
             file_size = path.stat().st_size
@@ -6605,22 +6757,8 @@ class FlashWorker(QThread):
             self._log(f"  0x{start:X}  {size / 1048576:.1f}MB")
         return partitions
 
-    def _read_flash_blob(self, mtk, parttype: str, addr: int, length: int) -> bytes:
-        daloader = getattr(mtk, "daloader", None)
-        if daloader is None or not hasattr(daloader, "readflash"):
-            return b""
-        try:
-            data = daloader.readflash(
-                addr=addr, length=length, filename="", parttype=parttype, display=False
-            )
-            if isinstance(data, (bytes, bytearray)):
-                return bytes(data)
-        except Exception as e:
-            logger.debug("readflash failed: %s", e)
-        return b""
-
     def _read_user_blob(self, mtk, addr: int, length: int) -> bytes:
-        return self._read_flash_blob(mtk, "user", addr, length)
+        return self._read_flash_blob(mtk, "user", addr, length) or b""
 
     def _write_gpt_blobs(
         self, mtk, primary_blob: bytes, backup_addr: int, backup_blob: bytes
@@ -6908,7 +7046,9 @@ class FlashWorker(QThread):
         try:
             self._verify_legacy_partition_tables(mtk, table_images or {})
             if not self._is_legacy_mode(mtk):
-                self._write_preloader_non_legacy(mtk, write_file, _preloader_write_mode(storage))
+                self._write_preloader_non_legacy(
+                    mtk, write_file, _preloader_write_mode(storage), da_handler=da_handler
+                )
                 return
             mismatch_targets = self._legacy_preloader_mismatch_targets(mtk, write_file, ("boot1",))
             if not mismatch_targets:
@@ -6969,13 +7109,25 @@ class FlashWorker(QThread):
                 except OSError as e:
                     logger.debug("Could not remove wrapped preloader: %s", e)
 
-    def _write_preloader_non_legacy(self, mtk, write_file: Path, mode: str) -> None:
+    def _write_preloader_non_legacy(self, mtk, write_file: Path, mode: str, da_handler=None) -> None:
         """Write boot1/boot2 through a non-legacy DA, matching 1.1.7 ``_write_preloader``.
 
         COMPOSITE tries one ``writeflash`` for both boot areas. A rejected composite
         write falls back to SEPARATE, which writes boot1 then boot2.
         """
         write_size = write_file.stat().st_size
+        daloader = getattr(mtk, "daloader", None)
+        if daloader is None or not hasattr(daloader, "writeflash"):
+            self._write_mtk_partition(
+                da_handler,
+                mtk,
+                "preloader",
+                str(write_file),
+                "boot1",
+                offset=0,
+                write_length=write_size,
+            )
+            return
         if mode == PreloaderWriteMode.COMPOSITE:
             self._log("  Writing preloader in composite mode (parttype=10) ...")
             if mtk.daloader.writeflash(

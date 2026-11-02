@@ -723,7 +723,7 @@ class MainWindow(QMainWindow):
         # The refresh is ttl-gated and runs off the UI thread: free when the
         # cached copies are current, silent when the network is not there.
         self._online_refresh_timer = QTimer(self)
-        self._online_refresh_timer.setInterval(30 * 60 * 1000)
+        self._online_refresh_timer.setInterval(5 * 60 * 1000)
         self._online_refresh_timer.timeout.connect(self._refresh_online_data)
         self._online_refresh_timer.start()
         self._step_now = ""
@@ -1095,7 +1095,7 @@ class MainWindow(QMainWindow):
             # Notices must arrive while the window is out of the way too: the
             # timer lives with the service, not with the notices page, and a
             # force-refresh checks the tiny XML file rather than waiting hours.
-            _notices.start_passive_refresh(5 * 60 * 1000)
+            _notices.start_passive_refresh()
             QTimer.singleShot(700, _notices.fetch_async)
         except Exception:
             logger.debug("Notice notifications could not be connected", exc_info=True)
@@ -2022,6 +2022,7 @@ class MainWindow(QMainWindow):
         self._flash_page.on_cancel_wait(self._on_cancel_wait)
         self._flash_page.on_install_retry(self._on_progress_retry)
         self._flash_page.on_power_off_continue(self._on_power_off_continue)
+        self._flash_page.on_try_anyway(self._on_keep_data_try_anyway)
         self._flash_page.on_install_done(self._on_install_done)
         self._error_page.on_retry(self._on_progress_retry)
         self._error_page.on_reconnect(self._on_reconnect)
@@ -2531,6 +2532,21 @@ class MainWindow(QMainWindow):
         s_ref.clear()
         s_ref.remove("battery_hint_dismissed")
 
+        # Notice read-state is cleared with the settings: dismissed notices
+        # come back, including ones dismissed earlier in this session.
+        try:
+            from ..notice_service import NoticeService
+
+            notices = NoticeService.instance()
+            for key in ("dismissed_notice_ids", "dismissed_notice_fingerprints"):
+                for store in (s, s_caps, s_ref):
+                    store.remove(key)
+            notices._session_dismissed.clear()
+            notices._banner_dismissed.clear()
+            notices._emit_next_notice()
+        except Exception as e:
+            logger.debug("Notice read-state reset failed: %s", e)
+
         # 2. Reset device_tracking and ensure credits/donations are opted in
         device_tracking.set_donation_ui_disabled(False, s)
         device_tracking.set_donation_install_prompt_disabled(False, s)
@@ -2800,12 +2816,43 @@ class MainWindow(QMainWindow):
         self._install_complete = False
         self._install_failed = False
         self.themes.reset_completion()
+        self.themes.set_apk("", "")
         self._compact_install_screen = False
         self._is_360p_rockbox = True
         self._flash_page.set_model(model)
         self._nav_to_page(_PAGE_FLASH)
         self._show_rockbox_power_on_prompt(model)
         return True
+
+    def _apk_install_info(self) -> tuple[str, str]:
+        """Return ``(apk_path, apk_url)`` when the selected release comes from an ``apk_repo``."""
+        page = getattr(self, "_select_page", None)
+        if page is None:
+            return "", ""
+        info = getattr(page, "current_installed_release_info", lambda: None)() or {}
+        apk_repo = str(info.get("apk_repo") or "")
+        apk_url = str(info.get("apk_url") or "")
+        apk_path = str(info.get("apk_path") or "")
+        if not apk_repo:
+            pkg = getattr(page, "_details_package", None)
+            rel = getattr(page, "_current_selected_rel", None)
+            apk_repo = str(
+                (rel.get("apk_repo") if isinstance(rel, dict) else "")
+                or getattr(pkg, "apk_repo", "")
+                or ""
+            )
+            if apk_repo and isinstance(rel, dict):
+                apk_url = str(rel.get("apk_url") or "")
+                apk_name = Path(str(rel.get("apk_name") or "app.apk")).name
+                if apk_url and not apk_path:
+                    from .. import downloads
+
+                    slug = str(getattr(pkg, "slug", "") or "app")
+                    tag = str(rel.get("tag_name") or "latest")
+                    apk_path = str(downloads.downloads_dir() / f"{slug}_{tag}_{apk_name}")
+        if not (apk_repo and (apk_url or apk_path)):
+            return "", ""
+        return apk_path, apk_url
 
     def _rockbox_themes_required(self) -> tuple[bool, str]:
         """Whether the selected Y1/Y2 Rockbox build needs bundled 360p assets.
@@ -4631,7 +4678,9 @@ class MainWindow(QMainWindow):
             eff_model = "Y2"
 
         is_360p_rockbox, eff_model = self._rockbox_themes_required()
-        self._is_360p_rockbox = is_360p_rockbox
+        apk_path, apk_url = self._apk_install_info()
+        self.themes.set_apk(apk_path, apk_url)
+        self._is_360p_rockbox = is_360p_rockbox or bool(apk_path or apk_url)
 
         try:
             from ..sleep_inhibit import acquire_sleep_inhibition
@@ -4717,6 +4766,7 @@ class MainWindow(QMainWindow):
             self._flash_page.set_detected()
             self._flash_page.set_device_flashing()
             self._flash_page.show_flashing()
+            self._flash_page._warning.setVisible(False)
             self._settings_page.set_method_enabled(False)
             self._enter_flashing_state()
         elif step == STEP_PLEASE_WAIT:
@@ -4784,10 +4834,15 @@ class MainWindow(QMainWindow):
             self._worker_eta = ETA_UNKNOWN
             self._flash_page.set_prep_eta_seconds(0)
             return
-        self._last_progress = percent
         if getattr(self, "_step_now", "") == STEP_EXTRACTING:
+            self._last_progress = percent
             self._flash_page.update_prep_progress(percent)
             return
+        # Rockbox installs reserve the final 10% for themes and fonts. The
+        # backend (FlashWorker) already maps the write progress to 0-90% for
+        # Rockbox and 0-100% for standard releases, so percent is passed through
+        # directly without double-scaling.
+        self._last_progress = percent
         self._flash_page.update_progress(percent)
         self._retry_page.update_progress(percent)
 
@@ -5170,6 +5225,7 @@ class MainWindow(QMainWindow):
                 catalogue_latest=latest_tag,
             )
         if hasattr(self, "_settings_page"):
+            self._settings_page.mark_firmware_installed()
             self._settings_page.refresh_settings()
 
         try:
@@ -5193,6 +5249,9 @@ class MainWindow(QMainWindow):
 
         is_360p_rockbox, eff_model = self._rockbox_themes_required()
         is_240p_rockbox = self._rockbox_240p_detected()
+        apk_path, apk_url = self._apk_install_info()
+        wants_apk = bool(apk_path or apk_url)
+        self.themes.set_apk(apk_path, apk_url)
 
         self._is_360p_rockbox = is_360p_rockbox
         self._is_240p_rockbox = is_240p_rockbox
@@ -5207,7 +5266,7 @@ class MainWindow(QMainWindow):
 
         themes_auto = themes_auto_install_enabled(self.settings)
         wants_themes = is_360p_rockbox
-        if wants_themes and themes_auto:
+        if wants_apk or (wants_themes and themes_auto):
             self._nav_to_page(_PAGE_FLASH)
             # Keep the completion screen's recorded success state while the
             # post-flash theme wizard runs. USB enumeration is expected to
@@ -5379,6 +5438,7 @@ class MainWindow(QMainWindow):
     def _finish_themes_stage(self, donation_disabled: bool) -> None:
         if self.themes.completion_shown:
             return
+        was_apk_stage = self.themes.is_apk_stage
         self.themes.mark_completion_shown()
         self.themes.finish()
         self._sync_install_nav_entry()
@@ -5414,7 +5474,7 @@ class MainWindow(QMainWindow):
         # only block — the try-again copy is why the user is reading.
         self._flash_page.show_completion_note(
             donation_disabled or themes_failed, software=software, model=model,
-            themes_installed=themes_installed,
+            themes_installed=themes_installed and not was_apk_stage,
         )
         self._adjust_window_geometry()
         self._sync_sp_history()
@@ -5764,9 +5824,14 @@ class MainWindow(QMainWindow):
         # follows has to obey what the card showed then.
         self._keep_data = self._flash_page.keep_data_checked()
         if getattr(self, "_keep_data_confirm_pending", False):
-            # The second Next confirms the currently installed firmware; the
-            # run proceeds with Keep Data exactly as ticked.
+            # The user confirmed their currently installed firmware with Yes (checkmark)
             self._keep_data_confirm_pending = False
+            self._keep_data = True
+            self._flash_page.clear_keep_data_confirmation()
+        elif getattr(self, "_keep_data_erase_confirm_pending", False):
+            # The user confirmed continuing without Keep Data with Yes (checkmark)
+            self._keep_data_erase_confirm_pending = False
+            self._keep_data = False
             self._flash_page.clear_keep_data_confirmation()
         elif self._keep_data and self._keep_data_needs_confirmation():
             self._begin_keep_data_confirmation()
@@ -5804,7 +5869,7 @@ class MainWindow(QMainWindow):
             return False
 
     def _begin_keep_data_confirmation(self) -> None:
-        """Ask which compatible firmware is already on the player, in-card."""
+        """Ask whether the player is currently running compatible firmware, in-card."""
         from .. import keep_data
         from ..config import device_label_for_model
 
@@ -5814,17 +5879,53 @@ class MainWindow(QMainWindow):
         software = str(getattr(pkg, "name", "") or self._package_name or "").strip()
         names = keep_data.compatible_software_names(pkg, model) if pkg is not None else []
         if len(names) > 1:
-            question = tr("keep_data_which_firmware_fmt").format(model=model_name)
+            name_bullets = "\n".join(f"• {n}" for n in names)
+            question = f"{tr('keep_data_which_firmware_fmt').format(model=model_name)}\n{name_bullets}"
         else:
+            software_label = names[0] if names else (software or tr("software_original"))
             question = tr("keep_data_running_fmt").format(
-                model=model_name, software=software or tr("software_original")
+                model=model_name, software=software_label
             )
         self._keep_data_confirm_pending = True
+        hint = tr("keep_data_only_compatible_hint")
         self._flash_page.show_keep_data_confirmation(
-            question, tr("keep_data_only_compatible_hint"), names
+            question, hint, ()
         )
         self._sync_install_nav_entry()
         self._adjust_window_geometry()
+
+    def _begin_keep_data_erase_confirmation(self) -> None:
+        """Explain that data cannot be kept with the current firmware, and ask whether to proceed."""
+        from ..config import device_label_for_model
+
+        model = self._package_model or ""
+        y1_like = "Y1" in model.upper() or "A5" in model.upper()
+        model_name = device_label_for_model(model) if model else tr("device_fallback_word")
+        if y1_like:
+            question = tr("keep_data_erase_prompt_y1").format(model=model_name)
+            explainer = tr("keep_data_erase_explainer_y1")
+        else:
+            question = tr("keep_data_erase_prompt_other").format(model=model_name)
+            explainer = tr("keep_data_erase_explainer_other")
+        self._keep_data_erase_confirm_pending = True
+        self._flash_page.show_keep_data_erase_confirmation(question, explainer)
+        self._sync_install_nav_entry()
+        self._adjust_window_geometry()
+
+    def _on_keep_data_try_anyway(self) -> None:
+        """Subvert Keep Data restriction for this particular install."""
+        self._keep_data = True
+        self._keep_data_confirm_pending = False
+        self._keep_data_erase_confirm_pending = False
+        self._flash_page.clear_keep_data_confirmation()
+        self._install_failed = False
+        self._saw_all_command_exec = False
+        self._failure_title = ""
+        self._flash_page.clear_install_failure()
+        self._power_off_prompt = False
+        self._pre_install_guided = True
+        self._flash_page.leave_power_off_prompt()
+        self._begin_flash_flow()
 
     def _on_retry_flash(self):
         self.sm.reset_for_retry()
@@ -5845,6 +5946,15 @@ class MainWindow(QMainWindow):
         self._nav_to_page(_PAGE_FLASH)
 
     def _on_cancel_wait(self):
+        if getattr(self, "_keep_data_confirm_pending", False):
+            self._keep_data_confirm_pending = False
+            self._begin_keep_data_erase_confirmation()
+            return
+        if getattr(self, "_keep_data_erase_confirm_pending", False):
+            self._keep_data_erase_confirm_pending = False
+            self._flash_page.clear_keep_data_confirmation()
+            self._flash_page.show_power_off_prompt()
+            return
         self._return_to_select_software()
 
     def _show_mtk_stall_restart_prompt(self):
@@ -7003,6 +7113,8 @@ class MainWindow(QMainWindow):
             self._diagnostics_page.retranslate()
         if self.statusBar() and hasattr(self.statusBar(), "retranslate"):
             self.statusBar().retranslate()
+        from ..notice_service import NoticeService
+        NoticeService.instance().reload_translations()
         self._apply_generic_mtk_branding()
         # Every row has its new language's text now: the rail takes the width
         # that copy needs instead of eliding it
@@ -7014,7 +7126,7 @@ class MainWindow(QMainWindow):
             # drop-down before repopulating the software list for the current
             # model.
             self._select_page.refresh_models()
-            self._select_page._on_model_changed()
+            self._select_page._on_manifest_refreshed(entries)
             # Check for device firmware updates when new releases/manifest is loaded
             self._check_device_firmware_updates(manual=False)
 
@@ -7842,7 +7954,7 @@ class MainWindow(QMainWindow):
         if getattr(self, "_background_update_timer", None) is not None:
             return
         timer = QTimer(self)
-        timer.setInterval(6 * 60 * 60 * 1000)
+        timer.setInterval(5 * 60 * 1000)
         timer.timeout.connect(self._background_update_tick)
         timer.start()
         self._background_update_timer = timer

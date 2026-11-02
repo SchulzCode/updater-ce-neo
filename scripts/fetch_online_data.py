@@ -34,8 +34,8 @@ def main(argv=None) -> int:
     parser.add_argument(
         "--max-age-hours",
         type=float,
-        default=24.0,
-        help="skip a file whose bundled copy is younger than this (default: 24)",
+        default=0.0,
+        help="skip a file whose bundled copy is younger than this (default: 0, always fetch the latest)",
     )
     parser.add_argument(
         "--force", action="store_true", help="download every file regardless of its age"

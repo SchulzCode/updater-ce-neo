@@ -209,6 +209,10 @@ _SVG_TEMPLATES = {
     "check": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="5 12.5 9.5 17 19 7"/>
     </svg>""",
+    # An open ring: the "yes" mark where a circle, not a tick, means yes.
+    "circle": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2.4">
+        <circle cx="12" cy="12" r="8"/>
+    </svg>""",
     # A bin, for deleting things that take space (the firmware cache).
     "trash": """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <polyline points="3 6 5 6 21 6"/>
@@ -243,6 +247,7 @@ _SF_SYMBOL_MAP = {
     "folder": "folder",
     "complete": "checkmark.circle.fill",
     "check": "checkmark",
+    "circle": "circle",
     "trash": "trash",
     "retry": "arrow.clockwise",
     "chevron.left": "chevron.backward",

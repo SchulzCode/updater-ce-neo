@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QAbstractSpinBox,
     QApplication,
     QComboBox,
+    QDialog,
     QFrame,
     QLineEdit,
     QTextEdit,
@@ -68,7 +69,7 @@ def card_fill_under(widget: QWidget) -> QColor | None:
     parent = widget.parentWidget() if widget is not None else None
     while parent is not None:
         if (
-            isinstance(parent, QFrame)
+            (isinstance(parent, (QFrame, QDialog)))
             and parent.property("cssClass") == "card"
             and not getattr(parent, "_glass_clear", False)
         ):

@@ -1,9 +1,10 @@
 """Settings page, install method, release reminders and donation preferences."""
 
 import logging
+import sys
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QSettings, QSize, Qt, QThread, QTimer, Signal
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -49,9 +50,42 @@ logger = logging.getLogger(__name__)
 
 # Where Windows users get the MediaTek USB driver before their first flash.
 MEDIATEK_DRIVERS_URL = "https://innioasis.app/guide.html"
+# ARM64 Windows (native or x86-64 under Prism) needs a different driver guide.
+MEDIATEK_DRIVERS_ARM64_URL = "https://armsdr.com/drivers.html"
 
 # Install-method identifiers are owned by flash_service; platform routing
 # chooses the available flash engine without exposing platform-specific aliases.
+
+
+class _AddDeviceReleasesWorker(QThread):
+    """Fetches the live release list for one package off the UI thread."""
+
+    loaded = Signal(object)
+
+    def __init__(self, package, model, selected_type):
+        super().__init__()
+        self._package = package
+        self._model = model
+        self._selected_type = selected_type
+
+    def run(self):
+        try:
+            releases = catalog.ReleasesClient().releases_for_package(
+                self._package,
+                self._model,
+                selected_type=self._selected_type,
+            )
+        except Exception:
+            logging.exception("Add device: could not load releases")
+            releases = []
+        self.loaded.emit(releases)
+
+
+def _stop_add_device_workers(workers) -> None:
+    """Interrupt and wait for any release fetch still running when the page goes."""
+    for worker in list(workers):
+        worker.requestInterruption()
+        worker.wait(1000)
 
 
 class SettingsPage(QWidget):
@@ -681,6 +715,17 @@ class SettingsPage(QWidget):
         self._notifications_unavailable.setVisible(False)
         notif_layout.addWidget(self._notifications_unavailable)
 
+        # Add device: records a device's installed software without a flash,
+        # so Player Update can track it. Opens inline, not as a dialog. It hides
+        # after a firmware install completes.
+        self._add_device_button = QPushButton(tr("settings_add_device"))
+        self._add_device_button.setCursor(Qt.PointingHandCursor)
+        self._add_device_button.clicked.connect(self._toggle_add_device_panel)
+        notif_layout.addWidget(self._add_device_button, 0, Qt.AlignLeft)
+        self._add_device_panel = self._build_add_device_panel()
+        self._add_device_panel.setVisible(False)
+        notif_layout.addWidget(self._add_device_panel)
+
         # This switch is linked to "Run in Background": either one turns the
         # other on, and the background card remains the place that explains
         # what staying open means.
@@ -1017,13 +1062,25 @@ class SettingsPage(QWidget):
         btn_row.addStretch()
         layout.addLayout(btn_row)
 
+        self._arm64_driver_note = QLabel(
+            "ARM64 Windows support is untested. On Snapdragon and RTX Spark laptops, "
+            "Zadig can be used with Driver Signature Enforcement disabled to install "
+            "WinUSB or libusb for the MT6227 Preloader device in Device Manager. "
+            "See the ARM64 driver guide for the steps."
+        )
+        self._arm64_driver_note.setWordWrap(True)
+        self._arm64_driver_note.setProperty("cssClass", "subtitle")
+        self._arm64_driver_note.setVisible(bool(paths.IS_WINDOWS and windows_only_method() == METHOD_MTK))
+        layout.addWidget(self._arm64_driver_note)
+
         card.set_layout(layout)
         return card
 
     def _on_download_drivers(self):
         from ..browser import open_browser
 
-        open_browser(MEDIATEK_DRIVERS_URL)
+        is_arm64 = bool(paths.IS_WINDOWS and windows_only_method() == METHOD_MTK)
+        open_browser(MEDIATEK_DRIVERS_ARM64_URL if is_arm64 else MEDIATEK_DRIVERS_URL)
 
     # ------------------------------------------------------------------
     # Install method
@@ -1034,25 +1091,20 @@ class SettingsPage(QWidget):
         if paths.IS_MAC:
             # No SP Flash Tool build exists for macOS.
             return (METHOD_MTK,)
-        if paths.IS_WINDOWS and windows_only_method() == METHOD_SP and not advanced:
-            # Flashing method dropdown shouldn't be available to x86/x64 windows users
-            # by default because we intend to only use flash_tool on Windows.
-            return (METHOD_SP,)
-        locked = windows_only_method()
-        if locked and not advanced:
-            # Windows is fixed by CPU: x86/x64 gets SP Flash Tool only, ARM64 MTKClient only.
-            return (locked,)
+        if not advanced:
+            locked = windows_only_method()
+            if locked:
+                # Windows is fixed by CPU by default: Intel/AMD gets SP
+                # Flash Tool only, ARM64 (native or emulated) gets MTKClient only.
+                return (locked,)
         if not paths.IS_WINDOWS and not paths.IS_MAC:
             # On Linux, MTKClient is the default on every architecture. SP Flash
             # Tool is offered as a backup / retry on x86/x86_64 hosts only.
             from .. import linux_sp_flash
-            if not linux_sp_flash.arch_supported():
+            if sys.platform.startswith("linux") and not linux_sp_flash.arch_supported():
                 return (METHOD_MTK,)
             return (METHOD_MTK, METHOD_SP)
-        methods = [METHOD_SP]
-        if advanced or not paths.IS_WINDOWS:
-            methods.append(METHOD_MTK)
-        return tuple(methods)
+        return (METHOD_SP, METHOD_MTK)
 
     def _on_advanced_settings_toggled(self, checked: bool) -> None:
         was_revealed = bool(getattr(self, "_advanced_revealed", False))
@@ -1487,6 +1539,161 @@ class SettingsPage(QWidget):
     # ------------------------------------------------------------------
     # Refresh
     # ------------------------------------------------------------------
+    def _build_add_device_panel(self) -> QWidget:
+        """Inline form: Model, Type (Y1 only), Software, Version, Save/Cancel."""
+        panel = QWidget()
+        form = QVBoxLayout(panel)
+        form.setContentsMargins(0, 4, 0, 0)
+        form.setSpacing(6)
+
+        self._add_device_model = QComboBox()
+        self._add_device_type = QComboBox()
+        self._add_device_type.addItem("Type A", "A")
+        self._add_device_type.addItem("Type B", "B")
+        self._add_device_software = QComboBox()
+        self._add_device_version = QComboBox()
+        self._add_device_status = QLabel("")
+        self._add_device_status.setWordWrap(True)
+        self._add_device_status.setProperty("cssClass", "dimmed")
+
+        for caption_key, combo in (
+            ("settings_add_device_model", self._add_device_model),
+            ("settings_add_device_type", self._add_device_type),
+            ("settings_add_device_software", self._add_device_software),
+            ("settings_add_device_version", self._add_device_version),
+        ):
+            label = QLabel(tr(caption_key))
+            form.addWidget(label)
+            form.addWidget(combo)
+            if combo is self._add_device_type:
+                self._add_device_type_label = label
+
+        form.addWidget(self._add_device_status)
+
+        buttons = QHBoxLayout()
+        self._add_device_save = QPushButton(tr("settings_add_device_save"))
+        self._add_device_save.setCursor(Qt.PointingHandCursor)
+        self._add_device_save.clicked.connect(self._save_add_device)
+        self._add_device_cancel = QPushButton(tr("settings_add_device_cancel"))
+        self._add_device_cancel.setCursor(Qt.PointingHandCursor)
+        self._add_device_cancel.clicked.connect(self._hide_add_device_panel)
+        buttons.addWidget(self._add_device_save)
+        buttons.addWidget(self._add_device_cancel)
+        buttons.addStretch(1)
+        form.addLayout(buttons)
+
+        self._add_device_workers = []
+        self.destroyed.connect(lambda *_, ws=self._add_device_workers: _stop_add_device_workers(ws))
+        self._add_device_model.currentIndexChanged.connect(self._on_add_device_model_changed)
+        self._add_device_type.currentIndexChanged.connect(self._on_add_device_software_changed)
+        self._add_device_software.currentIndexChanged.connect(self._on_add_device_software_changed)
+        return panel
+
+    def _toggle_add_device_panel(self):
+        if self._add_device_panel.isVisible():
+            self._hide_add_device_panel()
+            return
+        self._add_device_model.blockSignals(True)
+        self._add_device_model.clear()
+        self._add_device_model.addItems(catalog.available_models() or list(DEVICE_MODELS))
+        self._add_device_model.blockSignals(False)
+        self._on_add_device_model_changed()
+        self._add_device_panel.setVisible(True)
+
+    def _hide_add_device_panel(self):
+        self._add_device_panel.setVisible(False)
+        self._add_device_status.setText("")
+
+    def _on_add_device_model_changed(self, *_):
+        model = self._add_device_model.currentText().strip()
+        is_y1 = model.upper() == "Y1"
+        self._add_device_type_label.setVisible(is_y1)
+        self._add_device_type.setVisible(is_y1)
+        self._add_device_software.blockSignals(True)
+        self._add_device_software.clear()
+        self._add_device_software.addItems(catalog.software_names_for_model(model))
+        self._add_device_software.blockSignals(False)
+        self._on_add_device_software_changed()
+
+    def _add_device_package(self):
+        model = self._add_device_model.currentText().strip()
+        software = self._add_device_software.currentText().strip()
+        packages = catalog.packages_for_model_software(model, software)
+        return packages[0] if packages else None
+
+    def _on_add_device_software_changed(self, *_):
+        """Fill Version from the live release list, fetched off the UI thread."""
+        package = self._add_device_package()
+        self._add_device_version.clear()
+        if package is None:
+            return
+        model = self._add_device_model.currentText().strip()
+        selected_type = (
+            self._add_device_type.currentData() if model.upper() == "Y1" else None
+        )
+        self._add_device_status.setText(tr("settings_add_device_loading"))
+        self._add_device_version.addItem(tr("settings_add_device_loading"), "")
+        request_id = object()
+        self._add_device_request = request_id
+        worker = _AddDeviceReleasesWorker(package, model, selected_type)
+        worker.loaded.connect(
+            lambda releases, rid=request_id: self._on_add_device_releases(rid, releases)
+        )
+        # Keep every running worker referenced until it finishes, so replacing
+        # one with a newer selection never destroys a live QThread.
+        for old in list(self._add_device_workers):
+            old.requestInterruption()
+            old.wait(100)
+        self._add_device_workers.append(worker)
+        worker.finished.connect(lambda w=worker: self._add_device_workers.remove(w) if w in self._add_device_workers else None)
+        worker.start()
+
+    def _on_add_device_releases(self, request_id, releases):
+        if request_id is not getattr(self, "_add_device_request", None):
+            return  # a newer selection has replaced this request
+        self._add_device_version.clear()
+        self._add_device_status.setText("")
+        for rel in releases:
+            label = catalog.parse_clean_release_tag_label(rel, version_only=True)
+            self._add_device_version.addItem(label, rel)
+        if not releases:
+            self._add_device_status.setText(tr("settings_add_device_no_versions"))
+
+    def _save_add_device(self):
+        package = self._add_device_package()
+        index = self._add_device_version.currentIndex()
+        rel = self._add_device_version.itemData(index) if index >= 0 else None
+        if package is None or not rel:
+            self._add_device_status.setText(tr("settings_add_device_pick_version"))
+            return
+        model = self._add_device_model.currentText().strip()
+        tag_name = rel.get("tag_name", "")
+        if not tag_name:
+            self._add_device_status.setText(tr("settings_add_device_pick_version"))
+            return
+        device_tracking.record_device_install(
+            model=model,
+            software_name=package.name,
+            tag_name=tag_name,
+            release_label=catalog.parse_clean_release_tag_label(rel, version_only=True),
+            package_slug=package.slug,
+            published_at=rel.get("published_at", "") or "",
+            settings=QSettings("innioasis", "updater"),
+        )
+        self._hide_add_device_panel()
+        self._sync_add_device_button_visibility()
+
+    def _sync_add_device_button_visibility(self):
+        """Hide Add device once a firmware install has completed on this run."""
+        self._add_device_button.setVisible(
+            not getattr(self, "_firmware_installed_this_session", False)
+        )
+
+    def mark_firmware_installed(self):
+        """Called after a firmware install completes: Add device is no longer needed."""
+        self._firmware_installed_this_session = True
+        self._sync_add_device_button_visibility()
+
     def refresh_settings(self):
         """Reload and update all controls to reflect current settings."""
         self.refresh_shortcut_state()

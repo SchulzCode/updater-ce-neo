@@ -29,13 +29,12 @@ from .catalog import FirmwarePackage
 from .config import (
     CATALOG_CACHE_DIR_NAME,
     CATALOG_MANIFEST_URLS,
-    RELEASE_CACHE_TTL_SECONDS,
     resolve_firmware_repo,
 )
 
 logger = logging.getLogger(__name__)
 
-MANIFEST_CACHE_TTL_SECONDS = RELEASE_CACHE_TTL_SECONDS  # 24 h
+MANIFEST_CACHE_TTL_SECONDS = 5 * 60  # 5 min, same cadence as online_data
 SKIPPED_UPDATE_REPO = "Please-Click/Updates-Available"
 REQUEST_TIMEOUT = 12
 
@@ -94,11 +93,13 @@ def parse_manifest_xml(xml_text: str):
             icon_dark = (node.get("icon_dark") or node.get("image_dark") or "").strip()
             min_version = (node.get("min_version") or node.get("min_app_version") or "").strip()
             pkg_name = (node.get("package_name") or node.get("package") or "").strip()
-            y2linux_attr = (node.get("y2linux_fw") or node.get("y2reborn_fw") or "").strip().lower()
-            is_y2linux = y2linux_attr == "true" or any(k in name.lower() for k in ("y2linux", "y2reborn"))
             post_install = (node.get("post_install") or "").strip()
-            post_install_2 = (node.get("post_install_2") or "").strip()
+            post_install_2 = (
+                node.get("post_install2") or node.get("post_install_2") or ""
+            ).strip()
             derivative = (node.get("derivative") or "").strip()
+            info_repo = (node.get("info_repo") or "").strip()
+            apk_repo = (node.get("apk_repo") or "").strip()
         except Exception:
             continue
         if not name or not repo or device not in ("Y1", "Y2", "A5"):
@@ -129,10 +130,11 @@ def parse_manifest_xml(xml_text: str):
                 icon=icon,
                 icon_dark=icon_dark,
                 image=image,
-                is_y2linux=is_y2linux,
                 post_install=post_install,
                 post_install_2=post_install_2,
                 derivative=resolve_firmware_repo(derivative) if derivative else "",
+                info_repo=resolve_firmware_repo(info_repo) if info_repo else "",
+                apk_repo=apk_repo,
             )
         )
     return entries
@@ -196,10 +198,11 @@ def cache_manifest(entries):
              "icon": getattr(e, "icon", "") or "",
              "icon_dark": getattr(e, "icon_dark", "") or "",
              "image": getattr(e, "image", "") or "",
-             "is_y2linux": bool(getattr(e, "is_y2linux", False)),
              "post_install": getattr(e, "post_install", "") or "",
              "post_install_2": getattr(e, "post_install_2", "") or "",
-             "derivative": getattr(e, "derivative", "") or ""}
+             "derivative": getattr(e, "derivative", "") or "",
+             "info_repo": getattr(e, "info_repo", "") or "",
+             "apk_repo": getattr(e, "apk_repo", "") or ""}
             for e in entries
         ]
         _cache_root().joinpath("packages.json").write_text(
@@ -226,10 +229,11 @@ def load_cached_manifest():
                 icon=e.get("icon", "") or "",
                 icon_dark=e.get("icon_dark", "") or "",
                 image=e.get("image", "") or "",
-                is_y2linux=bool(e.get("is_y2linux", False)),
                 post_install=e.get("post_install", "") or "",
                 post_install_2=e.get("post_install_2", "") or "",
                 derivative=e.get("derivative", "") or "",
+                info_repo=e.get("info_repo", "") or "",
+                apk_repo=e.get("apk_repo", "") or "",
             )
             for e in data
             if e.get("name") and e.get("repo")
@@ -260,21 +264,19 @@ def load_snapshot_manifest():
 
 
 def refresh_catalog(force_refresh=False):
-    """Best-effort live manifest refresh: cache-first, then network (network-first when force_refresh=True).
+    """Best-effort live manifest refresh: network-first, cache when offline.
 
-    Installs entries into ``catalog.LIVE_CATALOG`` (static table remains the
-    fallback when this yields nothing). Returns the entry list (possibly []).
+    The live slidia_manifest.xml is always preferred. The cached copy is used
+    only when the fetch fails, then the build-time snapshot. Installs entries
+    into ``catalog.LIVE_CATALOG`` (static table remains the fallback when this
+    yields nothing). Returns the entry list (possibly []).
     """
     from . import catalog
 
-    entries = None
-    if not force_refresh:
-        entries = load_cached_manifest()
-    if not entries:
-        entries = fetch_manifest()
-        if entries:
-            cache_manifest(entries)
-    if not entries and force_refresh:
+    entries = fetch_manifest()
+    if entries:
+        cache_manifest(entries)
+    else:
         entries = load_cached_manifest()
     if not entries:
         # Baked in at build time: no connection, no cache, still a catalogue.

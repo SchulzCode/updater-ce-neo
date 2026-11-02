@@ -47,7 +47,11 @@ logger = logging.getLogger(__name__)
 BUNDLE_SUBDIR = "online"
 CACHE_SUBDIR = "online"
 #: A day old is stale, matching the catalogue's own 24 h cache.
-DEFAULT_TTL_SECONDS = RELEASE_CACHE_TTL_SECONDS
+#: How long a downloaded copy is trusted before the next refresh. Short on
+#: purpose: a new firmware or notice reaches users within minutes. Each file is
+#: one small request, so this stays cheap.
+ONLINE_TTL_SECONDS = 5 * 60
+DEFAULT_TTL_SECONDS = ONLINE_TTL_SECONDS
 USER_AGENT = "InnioasisUpdater/3.0 (+https://innioasis.app)"
 REQUEST_TIMEOUT = 8.0
 
@@ -86,7 +90,6 @@ FILES: dict[str, OnlineFile] = {
     "notice.xml": OnlineFile(
         name="notice.xml",
         urls=site_source_urls("notice.xml"),
-        ttl=6 * 60 * 60,  # notices change more often than the catalogue
         kind="xml",
     ),
     "donors.csv": OnlineFile(

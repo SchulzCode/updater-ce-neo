@@ -8,6 +8,8 @@ Exits non-zero if any Mach-O is missing an x86_64 or arm64 slice, or declares
 a minimum macOS version newer than --max-minos (default 12.0 = Monterey).
 """
 
+from __future__ import annotations
+
 import argparse
 import re
 import subprocess

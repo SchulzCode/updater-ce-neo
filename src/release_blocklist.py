@@ -182,9 +182,11 @@ def _fetch_blocklist_from(url: str) -> Optional[str]:
 
 def fetch_blocklist_text() -> Optional[str]:
     """Download the CSV, falling back to the website's GitHub copy. None when neither is usable."""
-    from .config import github_fallback_url
+    from .config import site_source_urls
 
-    for url in (BLOCKLIST_URL, github_fallback_url(BLOCKLIST_URL)):
+    # Raw GitHub first: it reflects a committed change immediately, while the
+    # innioasis.app Pages copy can trail it. The maintainer fork is last.
+    for url in site_source_urls(CACHE_FILE_NAME):
         try:
             text = _fetch_blocklist_from(url)
             if text is not None:

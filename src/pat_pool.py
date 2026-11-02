@@ -22,12 +22,13 @@ import urllib.request
 from pathlib import Path
 from typing import List, Optional, Set
 
+from .config import site_source_urls
 from .paths import app_cache_dir
 
 logger = logging.getLogger(__name__)
 
 CONFIG_INI_URL = "https://innioasis.app/config.ini"
-CONFIG_CACHE_TTL_SECONDS = 3600  # 1 hour
+CONFIG_CACHE_TTL_SECONDS = 5 * 60  # 5 minutes, same cadence as the online files
 
 # Hardcoded initial fallback tokens parsed from config.ini to guarantee
 # immediate availability even before the first network fetch succeeds.
@@ -94,30 +95,32 @@ class PatPoolManager:
         if not force and (now - self._last_fetch_ts) < CONFIG_CACHE_TTL_SECONDS:
             return False
 
-        try:
-            req = urllib.request.Request(
-                CONFIG_INI_URL,
-                headers={"User-Agent": "Mozilla/5.0 (compatible; InnioasisUpdater/3.0)"},
-            )
-            with urllib.request.urlopen(req, timeout=5.0) as resp:
-                text = resp.read().decode("utf-8", errors="replace")
+        # Raw GitHub first, then innioasis.app, then the maintainer fork.
+        for url in site_source_urls("config.ini"):
+            try:
+                req = urllib.request.Request(
+                    url,
+                    headers={"User-Agent": "Mozilla/5.0 (compatible; InnioasisUpdater/3.0)"},
+                )
+                with urllib.request.urlopen(req, timeout=5.0) as resp:
+                    text = resp.read().decode("utf-8", errors="replace")
 
-            parser = configparser.ConfigParser(interpolation=None)
-            parser.read_string(text)
-            if "api_keys" in parser:
-                parsed_tokens = []
-                for _, val in parser["api_keys"].items():
-                    tok = normalize_pat(val)
-                    if tok and len(tok) > 20 and tok not in parsed_tokens:
-                        parsed_tokens.append(tok)
-                if parsed_tokens:
-                    self._tokens = parsed_tokens
-                    self._last_fetch_ts = now
-                    self._save_cached_tokens()
-                    logger.info("Loaded %d PATs from %s", len(parsed_tokens), CONFIG_INI_URL)
-                    return True
-        except Exception as e:
-            logger.debug("Could not refresh PAT pool from network: %s", e)
+                parser = configparser.ConfigParser(interpolation=None)
+                parser.read_string(text)
+                if "api_keys" in parser:
+                    parsed_tokens = []
+                    for _, val in parser["api_keys"].items():
+                        tok = normalize_pat(val)
+                        if tok and len(tok) > 20 and tok not in parsed_tokens:
+                            parsed_tokens.append(tok)
+                    if parsed_tokens:
+                        self._tokens = parsed_tokens
+                        self._last_fetch_ts = now
+                        self._save_cached_tokens()
+                        logger.info("Loaded %d PATs from %s", len(parsed_tokens), url)
+                        return True
+            except Exception as e:
+                logger.debug("Could not refresh PAT pool from %s: %s", url, e)
         return False
 
     def report_token_status(self, token: str, status_code: int) -> None:

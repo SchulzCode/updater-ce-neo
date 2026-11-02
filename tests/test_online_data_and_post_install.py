@@ -84,6 +84,22 @@ def _scatter_file(tmp_path: Path) -> Path:
 # ── online data: cache-first, bundled fallback, lazy refresh ────────────────
 
 
+def test_online_sources_try_github_main_before_the_pages_site():
+    from src.config import (
+        INNIOASIS_RAW_FALLBACK_PREFIX,
+        INNIOASIS_RAW_PREFIX,
+        INNIOASIS_SITE_PREFIX,
+        site_source_urls,
+    )
+
+    urls = site_source_urls("notice.xml")
+    assert urls[0] == INNIOASIS_RAW_PREFIX + "notice.xml"
+    assert urls[1] == INNIOASIS_SITE_PREFIX + "notice.xml"
+    assert urls[2] == INNIOASIS_RAW_FALLBACK_PREFIX + "notice.xml"
+    assert "y1-community/innioasis-updater/refs/heads/main" in urls[0]
+    assert online_data.FILES["notice.xml"].alternate_urls()[0] == urls[0]
+
+
 def test_read_text_prefers_cache_then_bundle(online_dirs):
     bundle, cache = online_dirs
     (bundle / "notice.xml").write_text("<notices><notice id='a'/></notices>", encoding="utf-8")
@@ -175,6 +191,69 @@ def test_manifest_falls_back_to_the_bundled_snapshot(monkeypatch):
     assert entries[0].post_install_2 == "https://example.test/after-support"
     assert installed["entries"] == entries
 
+
+def test_manifest_accepts_post_install2_spelling():
+    xml = MANIFEST_XML.replace("post_install_2=", "post_install2=")
+
+    entries = manifest.parse_manifest_xml(xml)
+
+    assert entries[0].post_install_2 == "https://example.test/after-support"
+
+
+def test_manifest_parses_info_and_apk_repo_attributes():
+    xml = MANIFEST_XML.replace(
+        'post_install_2="https://example.test/after-support"',
+        'post_install_2="https://example.test/after-support" '
+        'info_repo="jarvissax/rondo" apk_repo="author/app"',
+    )
+
+    entries = manifest.parse_manifest_xml(xml)
+
+    assert entries[0].info_repo == "jarvissax/rondo"
+    assert entries[0].apk_repo == "author/app"
+
+
+def test_info_repo_lists_only_apk_releases_with_firmware_from_repo(monkeypatch):
+    pkg = catalog.FirmwarePackage(
+        slug="rondo", name="Rondo", model="Y1", repo="y1-community/y1-ata-rom",
+        package_name="", info_repo="jarvissax/rondo",
+        post_install="https://example.test/rondo",
+    )
+    apk_releases = [
+        {"tag_name": "v2", "assets": [{"name": "rondo.apk", "browser_download_url": "u", "size": 1}]},
+        {"tag_name": "v1", "assets": [{"name": "notes.txt", "browser_download_url": "u", "size": 1}]},
+    ]
+    firmware = {"tag_name": "fw-1", "download_url": "fw-url", "asset_name": "rom.zip"}
+    real = catalog.ReleasesClient.releases_for_package
+
+    def releases_for_package(self, p, model, **kwargs):
+        if p.info_repo or p.apk_repo:
+            return real(self, p, model, **kwargs)
+        return [firmware]
+
+    client = catalog.ReleasesClient.__new__(catalog.ReleasesClient)
+    monkeypatch.setattr(catalog.ReleasesClient, "releases_for_package", releases_for_package)
+    monkeypatch.setattr(client, "get_all_update_releases", lambda repo, force_refresh=False: apk_releases)
+
+    out = client.releases_for_package(pkg, "Y1")
+
+    assert [r["tag_name"] for r in out] == ["v2"]
+    assert out[0]["source_repo"] == "jarvissax/rondo"
+    assert out[0]["download_url"] == "fw-url"
+    assert out[0]["firmware_tag_name"] == "fw-1"
+
+
+def test_info_repo_without_post_install_lists_nothing(monkeypatch):
+    pkg = catalog.FirmwarePackage(
+        slug="rondo", name="Rondo", model="Y1", repo="y1-community/y1-ata-rom",
+        package_name="", info_repo="jarvissax/rondo",
+    )
+    client = catalog.ReleasesClient.__new__(catalog.ReleasesClient)
+    monkeypatch.setattr(client, "get_all_update_releases", lambda repo, force_refresh=False: [
+        {"tag_name": "v2", "assets": [{"name": "rondo.apk", "browser_download_url": "u", "size": 1}]},
+    ])
+
+    assert client.releases_for_package(pkg, "Y1") == []
 
 def test_post_install_urls_take_the_first_non_empty_pair():
     local = catalog.FirmwarePackage(
@@ -311,15 +390,26 @@ def test_keep_data_checkbox_follows_userdata_detection(qapp):
         page.set_has_userdata(False)
         assert page._keep_data_cb.isHidden()
 
-        # A package with a preserve-data scatter ticks it by default…
+        # Detection alone is not the power-off prompt; the tick stays hidden.
         page.set_has_userdata(True, preserve_data_default=True)
-        assert not page._keep_data_cb.isHidden()
+        assert page._keep_data_cb.isHidden()
         assert page._keep_data_cb.isChecked()
 
-        # …and a later package re-shows it, unticked.
+        page.show_power_off_prompt()
+        assert not page._keep_data_cb.isHidden()
+
+        # A later package re-shows it at the prompt, unticked.
         page.set_has_userdata(True)
         assert not page._keep_data_cb.isHidden()
         assert not page._keep_data_cb.isChecked()
+
+        # Not the connect screen, and not while flashing.
+        page.set_waiting_device()
+        assert page._keep_data_cb.isHidden()
+        page.show_power_off_prompt()
+        assert not page._keep_data_cb.isHidden()
+        page.show_flashing()
+        assert page._keep_data_cb.isHidden()
     finally:
         page.deleteLater()
 
@@ -407,22 +497,26 @@ def test_post_install_completion_uses_a_globe_and_view_guide(qapp, monkeypatch):
         assert page._done_mark._symbol == "complete"
         assert page._post_install_hint.isHidden()
         assert not page._view_guide_btn.isHidden()
-        page._open_post_install_guide()
+        page._open_view_guide()
         page._open_coffee_page()
         assert opened == ["https://example.test/guide", "https://example.test/guide"]
 
-        # Without a second URL the coffee button is the usual ko-fi page.
+        # Without a second URL View Guide falls back to post_install and the
+        # coffee button is the usual ko-fi page.
         opened.clear()
         page.set_post_install_urls("https://example.test/steps")
         page.set_device_done(donations_shown=True)
+        assert not page._view_guide_btn.isHidden()
+        page._open_view_guide()
         page._open_coffee_page()
-        assert opened == [DONATION_LINKS["kofi"]]
+        assert opened == ["https://example.test/steps", DONATION_LINKS["kofi"]]
     finally:
         page.deleteLater()
 
 
 def test_sp_flash_tool_console_arguments_are_always_download_only():
     args = sp_flash_tool_console_args("scatter.txt", "DA.bin")
+    # The scatter here names no chip, so the plain Download Only command line is used.
     assert args[:2] == ["-c", "download"]
     assert "format" not in " ".join(args).lower()
 
@@ -443,3 +537,94 @@ def test_sp_auth_config_uses_download_only_never_format_download(tmp_path, monke
     assert "format-download" not in config
     assert f"<scatter>{scatter}</scatter>" in config
     assert f"<authentication>{auth}</authentication>" in config
+
+
+def test_apk_repo_without_post_install_lists_releases_and_records_apk_url(monkeypatch):
+    pkg = catalog.FirmwarePackage(
+        slug="app-pkg", name="AppPkg", model="Y1", repo="y1-community/y1-ata-rom",
+        package_name="", apk_repo="author/app",
+    )
+    apk_releases = [
+        {"tag_name": "1.2.0", "assets": [{"name": "app.apk", "browser_download_url": "https://example.test/app.apk", "size": 500}]},
+    ]
+    firmware = {"tag_name": "fw-1", "download_url": "fw-url", "asset_name": "rom.zip"}
+    real = catalog.ReleasesClient.releases_for_package
+
+    def releases_for_package(self, p, model, **kwargs):
+        if p.info_repo or p.apk_repo:
+            return real(self, p, model, **kwargs)
+        if p.repo == "author/app":
+            return []
+        return [firmware]
+
+    client = catalog.ReleasesClient.__new__(catalog.ReleasesClient)
+    monkeypatch.setattr(catalog.ReleasesClient, "releases_for_package", releases_for_package)
+    monkeypatch.setattr(client, "get_all_update_releases", lambda repo, force_refresh=False: apk_releases)
+
+    out = client.releases_for_package(pkg, "Y1")
+
+    assert len(out) == 1
+    assert out[0]["tag_name"] == "1.2.0"
+    assert out[0]["apk_repo"] == "author/app"
+    assert out[0]["apk_url"] == "https://example.test/app.apk"
+    assert out[0]["download_url"] == "fw-url"
+    assert catalog.post_install_urls_for(pkg) == ("", "")
+
+
+def test_info_or_apk_repo_with_firmware_zips_is_treated_as_repo(monkeypatch):
+    pkg = catalog.FirmwarePackage(
+        slug="rondo", name="Rondo", model="Y1", repo="y1-community/y1-ata-rom",
+        package_name="", info_repo="jarvissax/rondo",
+    )
+    direct = {"tag_name": "2.0.0", "download_url": "https://example.test/rom.zip", "asset_name": "rom.zip"}
+    real = catalog.ReleasesClient.releases_for_package
+
+    def releases_for_package(self, p, model, **kwargs):
+        if p.info_repo or p.apk_repo:
+            return real(self, p, model, **kwargs)
+        if p.repo == "jarvissax/rondo":
+            return [direct]
+        return []
+
+    client = catalog.ReleasesClient.__new__(catalog.ReleasesClient)
+    monkeypatch.setattr(catalog.ReleasesClient, "releases_for_package", releases_for_package)
+    monkeypatch.setattr(
+        client,
+        "get_all_update_releases",
+        lambda repo, force_refresh=False: [
+            {"tag_name": "2.0.0", "assets": [{"name": "rom.zip", "browser_download_url": "https://example.test/rom.zip", "size": 100}]}
+        ],
+    )
+
+    out = client.releases_for_package(pkg, "Y1")
+
+    assert [r["tag_name"] for r in out] == ["2.0.0"]
+    assert out[0]["download_url"] == "https://example.test/rom.zip"
+
+
+def test_adb_apk_install_worker_and_themes_journey_apk_stage(tmp_path, monkeypatch):
+    from src import adb
+    from src.theme_pack import AdbApkInstallWorker
+    from src.themes_journey import ThemesJourney
+
+    journey = ThemesJourney()
+    apk_file = tmp_path / "test_app.apk"
+    apk_file.write_bytes(b"fake-apk")
+    journey.set_apk(str(apk_file), "https://example.test/test_app.apk")
+    assert journey.is_apk_stage
+    assert journey.should_start(automatic=True, settings=None) == (True, "")
+
+    installed = []
+    monkeypatch.setattr(
+        adb,
+        "adb_install_apk",
+        lambda adb_bin, serial, path, timeout=180: (installed.append((adb_bin, serial, str(path))) or True, "Success"),
+    )
+    worker = AdbApkInstallWorker("/usr/bin/adb", "0123456789ABCDEF", apk_path=apk_file)
+    results = []
+    worker.finished.connect(lambda ok, msg: results.append((ok, msg)))
+    worker.run()
+    assert installed == [("/usr/bin/adb", "0123456789ABCDEF", str(apk_file))]
+    assert results == [(True, "Success")]
+    journey.mark_completion_shown()
+    assert not journey.is_apk_stage

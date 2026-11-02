@@ -52,7 +52,7 @@ from ..diagnostics import (
     log_time_range,
     reveal_in_file_manager,
 )
-from ..i18n import tr, tr_brand
+from ..i18n import is_english_language, tr, tr_brand, translator
 from ..updates import asset_hint, pick_platform_asset
 from .dark import T
 from .glass import apply_dialog_theme
@@ -1074,9 +1074,15 @@ class DiagnosticsView(QWidget):
 
     def _on_save_file(self):
         from pathlib import Path
+
+        from ..downloads import default_picker_dir
+
         cat = self.current_category()
         default_name = f"updater_ce_{cat}_log.txt"
-        default_path = str(Path.home() / default_name)
+        # Starting a native save panel in the home folder makes macOS enumerate
+        # Documents and request access to it. Keep the default in Downloads (or
+        # the app's own download folder) instead.
+        default_path = str(Path(default_picker_dir()) / default_name)
 
         path, _ = QFileDialog.getSaveFileName(
             self,
@@ -1197,8 +1203,9 @@ class UpdateAvailableDialog(QDialog):
         # Shown inline on the window's glass. Paint the same rounded bento
         # pane as the Settings and release-notes cards, instead of letting the
         # dialog's own opaque plate cover the page.
+        self.setProperty("cssClass", "card")
         self.setAutoFillBackground(False)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
 
         self.setWindowTitle(tr("update_available"))
@@ -1259,8 +1266,8 @@ class UpdateAvailableDialog(QDialog):
 
         title_col = QVBoxLayout()
         title_col.setSpacing(2)
-        self._title_label = QLabel(f"<h2 style='margin:0; padding:0; color:{t.fg};'>{tr('update_available')}</h2>")
-        self._title_label.setTextFormat(Qt.RichText)
+        self._title_label = QLabel(tr("update_available"))
+        self._title_label.setProperty("cssClass", "pageTitle")
         self._title_label.setWordWrap(True)
         title_col.addWidget(self._title_label)
 
@@ -1270,8 +1277,7 @@ class UpdateAvailableDialog(QDialog):
             current=current_version,
         )
         self._subtitle_label = QLabel(ver_str)
-        self._subtitle_label.setTextFormat(Qt.RichText)
-        self._subtitle_label.setStyleSheet(f"color: {t.fg_muted}; font-size: 13px;")
+        self._subtitle_label.setProperty("cssClass", "subtitle")
         self._subtitle_label.setWordWrap(True)
         title_col.addWidget(self._subtitle_label)
         header_row.addLayout(title_col, 1)
@@ -1282,8 +1288,8 @@ class UpdateAvailableDialog(QDialog):
         # window: no per-platform hint card above them (the installer knows
         # where its own file came from), and the notes scroll with the host's
         # own scrollbar, exactly like the Settings menu.
-        self._notes_label = QLabel(f"<b>{tr('update_notes')}</b>")
-        self._notes_label.setTextFormat(Qt.RichText)
+        self._notes_label = QLabel(tr("update_notes"))
+        self._notes_label.setProperty("cssClass", "sectionTitle")
         self._main_layout.addWidget(self._notes_label)
 
         self._notes = QTextBrowser()
@@ -1316,7 +1322,15 @@ class UpdateAvailableDialog(QDialog):
         self._translate_label.setOpenExternalLinks(False)
         self._translate_label.setWordWrap(True)
         self._translate_label.linkActivated.connect(self._on_translate_link)
-        self._main_layout.addWidget(self._translate_label)
+        from .widgets import Throbber
+
+        self._translate_throbber = Throbber(self, size=12)
+        self._translate_throbber.setVisible(False)
+        self._translate_row = QHBoxLayout()
+        self._translate_row.setSpacing(6)
+        self._translate_row.addWidget(self._translate_label, 1, Qt.AlignVCenter)
+        self._translate_row.addWidget(self._translate_throbber, 0, Qt.AlignVCenter)
+        self._main_layout.addLayout(self._translate_row)
         self._render_notes()
         self._update_translate_label()
         if self._should_auto_translate():
@@ -1351,7 +1365,7 @@ class UpdateAvailableDialog(QDialog):
 
         self._progress_label = QLabel("")
         self._progress_label.setWordWrap(True)
-        self._progress_label.setStyleSheet(f"font-size: 12px; color: {t.fg_muted};")
+        self._progress_label.setProperty("cssClass", "dimmed")
         self._progress_label.setVisible(False)
         self._main_layout.addWidget(self._progress_label)
 
@@ -1391,6 +1405,126 @@ class UpdateAvailableDialog(QDialog):
         from .widgets import _paint_bento_surface
 
         _paint_bento_surface(self, event)
+
+    def _render_notes(self) -> None:
+        """Show the original notes, or the Google translation when we have one."""
+        from ..translate import strip_changes_header
+
+        body_text = self._info.body.strip() if self._info else ""
+        fg = self.palette().color(QPalette.ColorRole.WindowText).name()
+        if self._translated is not None:
+            name, body = self._translated
+            self._notes.setHtml(
+                format_markdown_release_notes(
+                    strip_changes_header(body), name, text_color=fg
+                )
+            )
+        elif body_text:
+            # No version heading inside the notes: the subtitle above already
+            # says which release this is.
+            self._notes.setHtml(
+                format_markdown_release_notes(body_text, text_color=fg)
+            )
+        else:
+            self._notes.setPlainText(tr("update_no_notes"))
+
+    def refresh_theme(self) -> None:
+        """Re-render notes after the host palette changes."""
+        self._render_notes()
+        self._make_notes_seamless()
+        self._notes.viewport().update()
+        self.update()
+
+    def _should_auto_translate(self) -> bool:
+        return bool(self._info and self._info.body.strip()) and not is_english_language()
+
+    def _update_translate_label(self) -> None:
+        """Translate / translated-with-Google / show-original links, as on Select Software."""
+        if not self._info or not self._info.body.strip() or is_english_language():
+            self._translate_label.setVisible(False)
+            self._translate_throbber.stop()
+            return
+        t = T()
+        lang = (translator().lang or "en").strip()
+        # Open the release page itself in Google's translator (the same host
+        # rewrite the Select Software links use), not the default Y1 repo.
+        page = self._info.html_url or ""
+        url = (
+            page.replace("https://github.com/", "https://github-com.translate.goog/", 1)
+            + f"?_x_tr_sl=auto&_x_tr_tl={lang}&_x_tr_hl={lang}&_x_tr_pto=wapp"
+            if page
+            else ""
+        )
+        open_txt = tr("open_in_google_translate")
+        link_style = f"color:{t.fg}; font-weight:700; text-decoration:none;"
+        open_link = (
+            f'<a href="{url}" style="{link_style}">{open_txt} \u2197</a>' if url else ""
+        )
+        if self._is_translating:
+            try:
+                from .icons import get_symbol_data_uri
+
+                globe_uri = get_symbol_data_uri("translate", 12, match_accent=False)
+                globe_html = f'<img src="{globe_uri}" width="12" height="12" style="vertical-align: -1px;"> '
+            except Exception:
+                globe_html = ""
+            status = globe_html + tr("translating_notes")
+            parts = [status, open_link]
+            self._translate_throbber.start()
+        elif self._translated is not None:
+            badge = tr("translated_with_google")
+            show_orig = tr("show_original")
+            show_link = f'<a href="action:show_original" style="{link_style}">{show_orig}</a>'
+            parts = [badge, show_link, open_link]
+        else:
+            trans_txt = tr("translate_notes")
+            trans_link = f'<a href="action:translate_in_app" style="{link_style}">{trans_txt}</a>'
+            parts = [trans_link, open_link]
+        sep = " &nbsp;\u00b7&nbsp; "
+        text = sep.join(p for p in parts if p)
+        self._translate_label.setText(f'<span style="color:{t.fg};">{text}</span>')
+        self._translate_label.setVisible(True)
+        if not self._is_translating:
+            self._translate_throbber.stop()
+
+    def _start_translation(self) -> None:
+        from ..translate import ReleaseTranslateWorker
+
+        lang = (translator().lang or "en").strip()
+        rel = {"tag_name": self._info.tag, "name": self._info.name, "body": self._info.body}
+        self._is_translating = True
+        self._update_translate_label()
+        self._translate_worker = ReleaseTranslateWorker(rel, lang, self)
+        self._translate_worker.translation_ready.connect(self._on_translation_ready)
+        self._translate_worker.translation_failed.connect(self._on_translation_failed)
+        self._translate_worker.start()
+
+    def _on_translation_ready(self, rel, lang, name, body) -> None:
+        if rel.get("tag_name") != self._info.tag:
+            return
+        self._is_translating = False
+        self._translated = (name, body)
+        self._render_notes()
+        self._update_translate_label()
+
+    def _on_translation_failed(self, rel, lang, error) -> None:
+        if rel.get("tag_name") != self._info.tag:
+            return
+        self._is_translating = False
+        self._update_translate_label()
+
+    def _on_translate_link(self, link: str) -> None:
+        if link == "action:translate_in_app":
+            if self._translated is None:
+                self._start_translation()
+        elif link == "action:show_original":
+            self._translated = None
+            self._render_notes()
+            self._update_translate_label()
+        elif link.startswith(("http://", "https://")):
+            from ..browser import open_browser
+
+            open_browser(link)
 
     def _make_notes_seamless(self) -> None:
         """Let the update card's painted material show through the notes area.
@@ -2045,9 +2179,14 @@ class LinuxSetupDialog(QDialog):
         super().accept()
 
 
-def format_markdown_release_notes(body: str, name: str = "") -> str:
+def format_markdown_release_notes(
+    body: str, name: str = "", *, text_color: str | None = None
+) -> str:
     """Format release notes markdown into clean HTML with native fonts and typography."""
     t = T()
+    # Use the host's live window text colour when the caller supplies one, so
+    # the update card follows the same native palette as the rest of the app.
+    fg = text_color or t.fg
     lines = []
     if name:
         lines.append(f"### {name}")
@@ -2068,7 +2207,7 @@ def format_markdown_release_notes(body: str, name: str = "") -> str:
     # 2. Re-style links with accent color & underline
     html = re.sub(
         r'<a\s+href="([^"]+)">',
-        f'<a href="\\1" style="color: {t.fg}; font-weight: 700; text-decoration: none;">',
+        f'<a href="\\1" style="color: {fg}; font-weight: 700; text-decoration: none;">',
         html,
     )
 
@@ -2076,25 +2215,31 @@ def format_markdown_release_notes(body: str, name: str = "") -> str:
     css = f"""
     <style type="text/css">
     body {{
-        color: {t.fg};
+        color: {fg};
         font-size: 13px;
         line-height: 1.45;
         background: transparent;
         margin: 0;
         padding: 0;
+        word-break: break-word;
+        overflow-wrap: anywhere;
     }}
     h1, h2, h3, h4 {{
-        color: {t.fg};
+        color: {fg};
         margin-top: 10px;
         margin-bottom: 6px;
         font-weight: 700;
+        word-break: break-word;
+        overflow-wrap: anywhere;
     }}
     p {{
         margin-top: 4px;
         margin-bottom: 8px;
-        color: {t.fg};
+        color: {fg};
         white-space: normal;
         word-wrap: break-word;
+        word-break: break-word;
+        overflow-wrap: anywhere;
     }}
     ul, ol {{
         margin-left: 18px;
@@ -2103,13 +2248,17 @@ def format_markdown_release_notes(body: str, name: str = "") -> str:
     }}
     li {{
         margin-bottom: 3px;
-        color: {t.fg};
+        color: {fg};
         white-space: normal;
+        word-wrap: break-word;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+    }}
         word-wrap: break-word;
     }}
     code {{
         background-color: {t.bg_input};
-        color: {t.fg};
+        color: {fg};
         padding: 2px 4px;
         border-radius: 3px;
     }}
