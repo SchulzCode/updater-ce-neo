@@ -187,3 +187,59 @@ type = Type A
 2. **Directory Isolation Staging**: Before SP Flash Tool or MTKClient executes, Updater CE stages the scatter file and only the declared partition images into an isolated cache working directory (`stage_firmware_for_flashing`). This protects the application's executable, `_internal/` runtime libraries, and scripts from being overwritten, polluted with temporary logs, or modified during flashing.
 3. **Archive Pruning**: When extracting a portable zip archive, Updater CE automatically retains only the scatter file, the partition images declared in the scatter, `fw_package.ini`, any `*.auth` file, and `updater.png`, purging unnecessary archive overhead.
 
+---
+
+## 6. macOS Firmware Folder (`Firmware/`)
+
+Windows and Linux packs put the ROM files inside a copy of the SP Flash Tool
+directory. macOS ships no SP Flash Tool, so a firmware pack instead carries one
+folder named `Firmware` next to the `.app`:
+
+```text
+MyCustomFirmware/
+├── Updater CE.app
+└── Firmware/
+    ├── fw_package.ini             # optional manifest
+    ├── updater.png                # optional header icon (also .jpg / .jpeg)
+    ├── MT6572_Android_scatter.txt # the scatter (exactly one)
+    ├── preloader.bin              # every file the scatter lists...
+    ├── boot.img
+    └── system.img
+```
+
+On launch the app finds `Firmware/`, fills the software name, version, model,
+type and header icon from `fw_package.ini` when it is present, stages the scatter
+and the ROM files into its working directory, and opens the Install Software
+screen — no manual firmware selection. The folder is detected with or without
+`fw_package.ini`.
+
+Only the scatter and the partition images it lists are required. Anything else a
+release carries (SP Flash Tool executables and DLLs, readmes, archives, logs) is
+ignored and can be left out of the pack. A second scatter whose name contains
+`preserve` is a data-preserving variant of the release, so it is not treated as
+the package's scatter and does not need to be packed.
+
+### Portable completion and cleanup
+
+A run started from a bundled `Firmware/` folder (or from a pack whose scatter
+sits beside SP Flash Tool) is a portable run. Its completion card offers
+**Install This App**: on macOS the normal app download opens with that title and
+reveals the disk image so the app can be moved to Applications; on Windows it
+opens `https://innioasis.app/guide.html`. On Linux the button is **Keep App** and
+downloads the matching AppImage (`UpdaterCE.appimage` or
+`UpdaterCE-arm64.appimage`) from `y1-community/updater-ce-neo`.
+
+Closing the app after the install — including the donations appeal's **Not now**
+— shows the same progress card as an install while it removes the staged
+firmware, extracted images, archives and caches the run created, then quits.
+Files that were already in those folders are left alone. Because a portable run
+stores nothing on the machine, the appeal's "Don't ask me again" setting is
+dimmed and explains on hover/click that it will ask again next time; Buy a
+coffee and Not now remain available.
+
+Text links to a release's original ROM zip — release notes, notices and guides —
+resolve to the mirror's portable package for the reader's OS and architecture
+where one exists. PowerPC and 32-bit Intel Macs have no macOS package and keep
+the plain zip. These mirror packages are a background detail and are never
+listed among a release's ROM files.
+

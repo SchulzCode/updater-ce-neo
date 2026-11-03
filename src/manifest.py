@@ -11,6 +11,11 @@ Manifest format (attributes on ``<package/>`` elements):
     <package name="Original Software" repo="y1-community/y1-stock-rom"
              device="Y1" url="..." type="img" handler="Custom Firmware" />
 
+``portable_zips`` (or the legacy ``portable_zip``) names one or more
+Portable Flashing Zip Packager mirrors for the release, comma separated. The
+catalogue then downloads the portable package a mirror built for the current
+platform instead of the plain firmware zip (see ``portable.py``).
+
 Only ``type="img"`` / ``handler="Custom Firmware"`` packages for Y1/Y2 are
 turned into firmware entries; the app-update placeholder package is skipped
 (our own update checker handles app updates).
@@ -27,6 +32,7 @@ from PySide6.QtCore import QThread, Signal
 from .network import requests_module
 
 from .catalog import FirmwarePackage
+from .portable import parse_mirror_repos
 from .config import (
     CATALOG_CACHE_DIR_NAME,
     CATALOG_MANIFEST_URLS,
@@ -141,6 +147,11 @@ def parse_manifest_xml(xml_text: str):
             post_install_2 = (
                 node.get("post_install2") or node.get("post_install_2") or ""
             ).strip()
+            portable_zips = ", ".join(
+                parse_mirror_repos(
+                    node.get("portable_zips") or node.get("portable_zip") or ""
+                )
+            )
             derivative = (node.get("derivative") or "").strip()
             info_repo = (node.get("info_repo") or "").strip()
             apk_repo = (node.get("apk_repo") or "").strip()
@@ -181,6 +192,7 @@ def parse_manifest_xml(xml_text: str):
                 info_repo=resolve_firmware_repo(info_repo) if info_repo else "",
                 apk_repo=apk_repo,
                 do_not_keep_data=do_not_keep_data,
+                portable_zips=portable_zips,
             )
         )
     return entries
@@ -241,6 +253,7 @@ def cache_manifest(entries):
         data = [
             {"name": e.name, "repo": e.repo, "device": e.model,
              "package_name": e.package_name, "slug": e.slug,
+             "portable_zips": getattr(e, "portable_zips", "") or "",
              "icon": getattr(e, "icon", "") or "",
              "icon_dark": getattr(e, "icon_dark", "") or "",
              "image": getattr(e, "image", "") or "",
@@ -273,6 +286,7 @@ def load_cached_manifest():
                 slug=e.get("slug", ""), name=e.get("name", ""),
                 model=e.get("device", ""), repo=e.get("repo", ""),
                 package_name=e.get("package_name", "rom.zip"),
+                portable_zips=e.get("portable_zips", "") or "",
                 icon=e.get("icon", "") or "",
                 icon_dark=e.get("icon_dark", "") or "",
                 image=e.get("image", "") or "",

@@ -7,7 +7,7 @@ import sys
 
 logger = logging.getLogger(__name__)
 
-from PySide6.QtCore import QEvent, QEventLoop, QRect, QSize, Qt, QTimer
+from PySide6.QtCore import QEvent, QEventLoop, QRect, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPalette, QPen, QPixmap
 from PySide6.QtWidgets import (
     QBoxLayout,
@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 from .. import paths
 from ..themes_journey import ThemesJourney
 from .tab_focus import TabFocusManager
+from .markdown_doc import MarkdownDocView
 from ..flash_service import (
     METHOD_MTK,
     METHOD_SP,
@@ -1055,6 +1056,25 @@ class _RoundNextButton(QPushButton):
         self._native = chip
         self.update()
 
+    def detach_native(self) -> None:
+        """Hand the AppKit overlay back before this widget goes away.
+
+        The AppKit button is a subview of the *window*, not part of Qt's widget
+        tree, so destroying the widget does not remove it. A chip thrown away
+        that way kept its button painted at the last frame it had — the notices
+        list rebuilds its cards on every refresh, which left a stray ✕ over
+        whatever replaced them.
+        """
+        native = getattr(self, "_native", None)
+        if native is not None:
+            try:
+                native.detach()
+            except Exception:
+                logger.debug("could not detach the native chip", exc_info=True)
+            self._native = None
+        # A reused widget may attach again the next time it is shown.
+        self._native_attempted = False
+
     def _native_chip_clicked(self) -> None:
         """A real AppKit press, delivered as the button's Qt signal."""
         self._keyboard_focused = False
@@ -1483,6 +1503,10 @@ class FlashPage(QWidget):
     # Bumped whenever the card changes stage or structure; MainWindow fits the
     # window to it. A guide that appears or disappears counts as a change.
     view_generation = 0
+    # Emitted from the download thread with (raw Markdown URL, document text).
+    post_install_doc_ready = Signal(str, str)
+    # The portable run's completion card offers to install this app properly.
+    install_app_requested = Signal()
 
     def __init__(self, parent=None, journey=None):
         super().__init__(parent)
@@ -1506,6 +1530,10 @@ class FlashPage(QWidget):
         self._guide_step = 0
         self._failed = False
         self._complete = False
+        # A bundled-firmware run is a portable run: it stores nothing beyond
+        # the install and cleans its working files up before quitting.
+        self._portable_run = False
+        self._cleanup_mode = False
         self._prompt_only = False
         self._wait_copy = ""
         # True while the card is asking the user to bring a player that just
@@ -1926,6 +1954,16 @@ class FlashPage(QWidget):
         w_layout = QVBoxLayout(warning_container)
         w_layout.setContentsMargins(0, 0, 0, 0)
 
+        # A portable run finishes by offering the real install: the app is
+        # still a folder or zip, not something the machine keeps.
+        self._install_app_btn = QPushButton(tr("portable_install_app"))
+        self._install_app_btn.setObjectName("portableInstallAppButton")
+        self._install_app_btn.setCursor(Qt.PointingHandCursor)
+        self._install_app_btn.setStyleSheet("")
+        self._install_app_btn.setVisible(False)
+        self._install_app_btn.clicked.connect(self.install_app_requested.emit)
+        w_layout.addWidget(self._install_app_btn, 0, Qt.AlignCenter)
+
         self._warning = QLabel(tr("flash_warning"))
         self._warning.setWordWrap(True)
         self._warning.setAlignment(Qt.AlignCenter)
@@ -2025,6 +2063,29 @@ class FlashPage(QWidget):
         self._appeal.setVisible(False)
         self._appeal_callback = None
         w_layout.addWidget(self._appeal)
+
+        # The firmware's own setup steps. Many projects write them as a
+        # Markdown file in their repository (Rondo's docs/install.md, say);
+        # where that file can be read we show it here, under the completion
+        # note or the donations appeal, so finishing an install never sends
+        # the reader out to a bare GitHub blob page.
+        self._post_install_doc_status = QLabel("")
+        self._post_install_doc_status.setWordWrap(True)
+        self._post_install_doc_status.setAlignment(Qt.AlignCenter)
+        self._post_install_doc_status.setProperty("cssClass", "dimmed")
+        self._post_install_doc_status.setVisible(False)
+        w_layout.addWidget(self._post_install_doc_status)
+
+        self._post_install_doc = MarkdownDocView()
+        self._post_install_doc.setObjectName("postInstallDoc")
+        self._post_install_doc.setMinimumHeight(200)
+        self._post_install_doc.setMaximumHeight(460)
+        self._post_install_doc.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
+        self._post_install_doc.setVisible(False)
+        w_layout.addWidget(self._post_install_doc)
+        self.post_install_doc_ready.connect(self._on_post_install_doc_ready)
 
         # Dummy attributes for backward compatibility
         self._flash_img = QLabel()
@@ -2295,6 +2356,7 @@ class FlashPage(QWidget):
         # completion screen reached without one from failing.
         self._post_install_url = ""
         self._post_install_url_2 = ""
+        self._clear_post_install_doc()
 
     def show_preparing(self):
         self._complete = False
@@ -2523,6 +2585,8 @@ class FlashPage(QWidget):
                 btn.setEnabled(True)
 
     def show_flashing(self):
+        self._cleanup_mode = False
+        self.show_install_app(False)
         if hasattr(self, "_complete_note"):
             self._complete_note.setVisible(False)
         if hasattr(self, "_progress_card"):
@@ -2575,6 +2639,9 @@ class FlashPage(QWidget):
         if hasattr(self, "_flash_head"):
             self._flash_head._sync_to_band()
         self._apply_stop_hold()
+        # Reaching this screen resets the guide's visibility with the rest of
+        # the completion state.
+        self._apply_post_install_state()
 
     def _open_mediatek_drivers(self) -> None:
         from ..browser import open_browser
@@ -3851,6 +3918,26 @@ class FlashPage(QWidget):
     def set_bundled_run(self, enabled: bool) -> None:
         """Record that this run installs the firmware bundled next to the app."""
         self._bundled_run = bool(enabled)
+        self.set_portable_run(bool(enabled))
+
+    def set_portable_run(self, enabled: bool) -> None:
+        """Mark this as a portable run (nothing is stored on this computer)."""
+        self._portable_run = bool(enabled)
+        if hasattr(self, "_appeal_dont"):
+            self._appeal_dont.setText(self._dont_ask_html())
+            self._appeal_dont.setToolTip(
+                tr("portable_dont_ask_hint") if self._portable_run else ""
+            )
+
+    def show_install_app(self, visible: bool, label: str = "") -> None:
+        """Show the completion card's Install This App / Keep App button."""
+        button = getattr(self, "_install_app_btn", None)
+        if button is None:
+            return
+        if label:
+            button.setText(label)
+            button.setToolTip(label)
+        button.setVisible(bool(visible))
 
     def set_rockbox_site_themes(self, enabled: bool) -> None:
         """Record that this run installs a Rockbox build whose themes live on themes.rockbox.org."""
@@ -3899,14 +3986,29 @@ class FlashPage(QWidget):
         self._update_paperclip_hint()
         if hasattr(self, "_post_install_hint"):
             self._post_install_hint.setText(self._post_install_hint_html())
+        self._render_post_install_doc()
         if hasattr(self, "_appeal_dont"):
             self._appeal_dont.setText(self._dont_ask_html())
+            self._appeal_dont.setToolTip(
+                tr("portable_dont_ask_hint") if getattr(self, "_portable_run", False) else ""
+            )
         if hasattr(self, "_theme_recover_link"):
             self._theme_recover_link.setText(
                 _themed_link("recover", tr("rockbox_recover_troubleshoot"))
             )
 
     def _dont_ask_html(self) -> str:
+        if getattr(self, "_portable_run", False):
+            # Dimmed, not removed: the coffee and Not now buttons stay. The
+            # setting cannot be kept because a portable run stores nothing.
+            from html import escape
+
+            muted = getattr(T(), "fg_muted", "") or ""
+            color = f"color:{muted}; " if muted else ""
+            return (
+                f'<a href="portable-dont-ask" style="{color}text-decoration:none;">'
+                f'{escape(tr("donate_dont_ask_link"))}</a>'
+            )
         return _themed_link("dont-ask", tr("donate_dont_ask_link"))
 
     def set_post_install_urls(self, post_install: str = "", post_install_2: str = "") -> None:
@@ -3918,6 +4020,7 @@ class FlashPage(QWidget):
         """
         self._post_install_url = str(post_install or "").strip()
         self._post_install_url_2 = str(post_install_2 or "").strip()
+        self._load_post_install_doc(self._post_install_url)
         self._apply_post_install_state()
 
     def _post_install_hint_html(self) -> str:
@@ -3937,12 +4040,27 @@ class FlashPage(QWidget):
         post_install = getattr(self, "_post_install_url", "")
         post_install_2 = getattr(self, "_post_install_url_2", "")
         is_complete = getattr(self, "_complete", False)
+        # A guide we can read as Markdown is shown in the card itself; the
+        # globe sentence only exists for guides that open elsewhere.
+        doc_ready = bool(getattr(self, "_doc_text", ""))
+        doc_pending = bool(getattr(self, "_doc_source", "")) and not doc_ready
         if hasattr(self, "_done_mark"):
             globe = bool(post_install) and not donations_shown
             self._done_mark.set_symbol("www" if globe else "complete")
             self._done_mark.setToolTip(tr("post_install_globe_tooltip") if globe else "")
         if hasattr(self, "_post_install_hint"):
-            self._post_install_hint.setVisible(bool(post_install) and not donations_shown and is_complete)
+            self._post_install_hint.setVisible(
+                bool(post_install) and not donations_shown and is_complete and not doc_ready
+            )
+        if hasattr(self, "_post_install_doc"):
+            self._post_install_doc.setVisible(is_complete and doc_ready)
+        if hasattr(self, "_post_install_doc_status"):
+            if doc_pending and is_complete:
+                fetching = bool(getattr(self, "_doc_fetching", ""))
+                self._post_install_doc_status.setText(
+                    tr("post_install_doc_loading") if fetching else tr("post_install_doc_unavailable")
+                )
+            self._post_install_doc_status.setVisible(is_complete and doc_pending)
         if hasattr(self, "_view_guide_btn"):
             if post_install and (not post_install_2 or post_install != post_install_2):
                 self._view_guide_btn.setText(tr("post_install_view_guide_btn"))
@@ -3955,13 +4073,147 @@ class FlashPage(QWidget):
             else:
                 self._coffee_btn.setText(tr("donate_completion_coffee"))
 
+    # -- post-install guide -------------------------------------------------
+
+    def _clear_post_install_doc(self) -> None:
+        """Forget the guide shown for the previous firmware."""
+        self._doc_source = ""
+        self._doc_anchor = ""
+        self._doc_base = ""
+        self._doc_text = ""
+        self._doc_fetching = ""
+        if hasattr(self, "_post_install_doc"):
+            self._post_install_doc.clear_document()
+            self._post_install_doc.setVisible(False)
+        if hasattr(self, "_post_install_doc_status"):
+            self._post_install_doc_status.setText("")
+            self._post_install_doc_status.setVisible(False)
+
+    def _load_post_install_doc(self, url: str) -> None:
+        """Read the firmware's post-install guide when it is a Markdown file.
+
+        A cached copy paints immediately; anything else is fetched off the UI
+        thread so a completion screen never waits on a download. A link to any
+        other kind of page is left to the browser, as before.
+        """
+        from .. import docs_source
+
+        self._clear_post_install_doc()
+        source = docs_source.markdown_source(url)
+        if not source:
+            return
+        self._doc_source = source
+        self._doc_anchor = docs_source.markdown_anchor(url)
+        self._doc_base = docs_source.base_url_for(source)
+        cached = docs_source.cached_markdown(source)
+        if cached:
+            self._show_post_install_doc(source, cached)
+        else:
+            self._fetch_post_install_doc(source)
+
+    def _fetch_post_install_doc(self, source: str) -> None:
+        if getattr(self, "_doc_fetching", "") == source:
+            return
+        self._doc_fetching = source
+        import threading
+
+        from .. import docs_source
+
+        def work():
+            try:
+                text = docs_source.fetch_markdown(source)
+            except Exception:
+                logger.debug("Could not read the post-install guide", exc_info=True)
+                text = ""
+            try:
+                self.post_install_doc_ready.emit(source, text or "")
+            except RuntimeError:
+                # The page was closed while the download was in flight.
+                pass
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_post_install_doc_ready(self, source: str, text: str) -> None:
+        # A different firmware was selected while this one was downloading.
+        if source != getattr(self, "_doc_source", ""):
+            return
+        self._doc_fetching = ""
+        if text:
+            self._show_post_install_doc(source, text)
+        else:
+            self._apply_post_install_state()
+            self._notify_geometry_change()
+
+    def _size_post_install_doc(self) -> None:
+        """Give the guide a readable window: enough lines to follow, never the page.
+
+        The height comes from the screen, not the window. The window is fitted to
+        this screen's content, so measuring against the window would make the two
+        chase each other on every relayout.
+        """
+        view = getattr(self, "_post_install_doc", None)
+        if view is None:
+            return
+        available = 0
+        try:
+            screen = self.screen()
+            if screen is not None:
+                available = int(screen.availableGeometry().height())
+        except Exception:
+            available = 0
+        if available <= 0:
+            available = 900
+        height = max(240, min(460, int(available * 0.42)))
+        view.setMinimumHeight(height)
+        view.setMaximumHeight(height)
+
+    def _show_post_install_doc(self, source: str, text: str) -> None:
+        if source != getattr(self, "_doc_source", ""):
+            return
+        self._doc_text = text
+        self._size_post_install_doc()
+        self._render_post_install_doc()
+        self._apply_post_install_state()
+        self._relayout_for_text()
+
+    def _render_post_install_doc(self) -> None:
+        view = getattr(self, "_post_install_doc", None)
+        if view is None or not getattr(self, "_doc_text", ""):
+            return
+        t = T()
+        view.set_markdown(
+            self._doc_text,
+            text_color=t.fg,
+            code_background=t.bg_input,
+            muted_color=t.fg_muted,
+            border_color=t.border,
+            base_url=getattr(self, "_doc_base", ""),
+            anchor=getattr(self, "_doc_anchor", ""),
+        )
+
+    def _post_install_open_url(self, url: str) -> str:
+        """Where a guide link should open in a browser.
+
+        A Markdown guide opens on the site's own reader page, which renders the
+        same file with the site's styling; anything else keeps its own page.
+        """
+        from .. import docs_source
+
+        page = docs_source.post_install_page_url(
+            url,
+            repo=docs_source.repo_from_url(url),
+            software=getattr(self, "_package_name", "") or "",
+            model=getattr(self, "_model", "") or "",
+        )
+        return page or url
+
     def _open_post_install_guide(self) -> None:
-        """Globe and inline hint: the firmware's setup page (``post_install``)."""
+        """Globe: the firmware's setup steps, in the browser."""
         from ..browser import open_browser, _with_donation_preference
 
         url = getattr(self, "_post_install_url", "") or getattr(self, "_post_install_url_2", "")
         if url:
-            open_browser(_with_donation_preference(url))
+            open_browser(_with_donation_preference(self._post_install_open_url(url)))
 
     def _open_view_guide(self) -> None:
         """View Guide: opens post_install link."""
@@ -3969,7 +4221,7 @@ class FlashPage(QWidget):
 
         url = getattr(self, "_post_install_url", "") or getattr(self, "_post_install_url_2", "")
         if url:
-            open_browser(_with_donation_preference(url))
+            open_browser(_with_donation_preference(self._post_install_open_url(url)))
 
     def _open_coffee_page(self) -> None:
         from ..browser import open_browser, _with_donation_preference
@@ -4115,11 +4367,91 @@ class FlashPage(QWidget):
 
     def _on_appeal_dont_ask(self) -> None:
         """Turn donations off. The caller returns to the compact completion screen."""
+        if getattr(self, "_portable_run", False):
+            # A portable run cannot persist the choice, so the link explains
+            # that instead of pretending to save it. Shown like the Type tip.
+            from PySide6.QtGui import QToolTip
+
+            label = getattr(self, "_appeal_dont", None)
+            tip = tr("portable_dont_ask_hint")
+            if label is not None:
+                label.setToolTip(tip)
+                QToolTip.showText(
+                    label.mapToGlobal(label.rect().bottomLeft()),
+                    tip,
+                    label,
+                    label.rect(),
+                    12000,
+                )
+            return
         self.view_generation = getattr(self, "view_generation", 0) + 1
         self._notify_geometry_change()
         callback = getattr(self, "_appeal_callback", None)
         if callable(callback):
             callback()
+
+    def show_cleanup(self) -> None:
+        """Show the portable run's cleanup on the install progress card.
+
+        The same card, progress band and status line as a firmware install or
+        the Rockbox themes stage: quitting is another task with visible work,
+        not a window that vanishes.
+        """
+        self.dismiss_prompt_stop()
+        self._cleanup_mode = True
+        self._complete = False
+        self._failed = False
+        self.show_install_app(False)
+        if hasattr(self, "_complete_note"):
+            self._complete_note.setVisible(False)
+        if hasattr(self, "_appeal"):
+            self._appeal.setVisible(False)
+        if hasattr(self, "_warning"):
+            self._warning.setVisible(False)
+        if hasattr(self, "_progress_card"):
+            self._progress_card.setVisible(True)
+        for attr in (
+            "_cancel_btn",
+            "_flash_retry_btn",
+            "_done_mark",
+            "_theme_back_btn",
+            "_theme_step1_next_btn",
+            "_theme_fallback_next_btn",
+            "_theme_trouble_recover_btn",
+            "_driver_action_row",
+            "_post_install_hint",
+            "_post_install_doc",
+            "_post_install_doc_status",
+        ):
+            widget = getattr(self, attr, None)
+            if widget is not None:
+                widget.setVisible(False)
+        if hasattr(self, "_flash_pkg_label"):
+            self._flash_pkg_label.setText(tr("portable_cleanup_heading"))
+        if hasattr(self, "_step_label"):
+            self._step_label.setText(tr("portable_cleanup_downloads"))
+        if hasattr(self, "_eta_label"):
+            self._eta_label.setText("")
+        if hasattr(self, "_partition_progress_label"):
+            self._partition_progress_label.setVisible(False)
+        self._set_determinate(self._progress_bar, 0)
+        self._switch_view(self._flashing_view)
+        self.view_generation = getattr(self, "view_generation", 0) + 1
+        self._notify_geometry_change()
+
+    def set_cleanup_progress(self, percent, text: str) -> None:
+        """Advance the cleanup pass shown on the progress card."""
+        if hasattr(self, "_progress_bar"):
+            self._set_determinate(self._progress_bar, percent)
+        if hasattr(self, "_step_label"):
+            self._step_label.setText(text or "")
+
+    def finish_cleanup(self) -> None:
+        """Leave the cleanup card complete while the app closes."""
+        if hasattr(self, "_progress_bar"):
+            self._set_determinate(self._progress_bar, 100)
+        if hasattr(self, "_step_label"):
+            self._step_label.setText(tr("portable_cleanup_done"))
 
     def set_release_icon(self, pixmap, complete: bool = False):
         """Show the release squircle on every install card. ``complete`` adds the check badge.
@@ -4785,33 +5117,72 @@ class FlashPage(QWidget):
             warn_h = 0
             if hasattr(self, "_warning") and self._warning.isVisible():
                 warn_h = max(self._warning.sizeHint().height(), self._warning.heightForWidth(self.text_column_width())) + 8
+            # The appeal and the completion note sit below the card at the
+            # full content width, not in the card's fixed wrap column. They
+            # must be measured at the width they are actually laid out at:
+            # measuring them at INSTALL_TEXT_WIDTH wrapped the copy into
+            # roughly twice the lines it draws and left an empty band under a
+            # finished install.
+            page_measure_w = int(self.width()) - 32
+            if page_measure_w <= 0:
+                page_measure_w = max(1, int(view_w) - install_horizontal_chrome(0))
             appeal_h = 0
             if hasattr(self, "_appeal") and self._appeal.isVisible():
                 appeal_layout = self._appeal.layout()
+                appeal_w = int(self._appeal.width()) or page_measure_w
                 wrapped_h = (
-                    appeal_layout.totalHeightForWidth(max(1, int(self.text_column_width())))
+                    appeal_layout.totalHeightForWidth(max(1, appeal_w))
                     if appeal_layout is not None
                     else 0
                 )
                 appeal_h = max(self._appeal.sizeHint().height(), wrapped_h) + 8
             complete_note_h = 0
             if hasattr(self, "_complete_note") and self._complete_note.isVisible():
-                complete_note_h = max(self._complete_note.sizeHint().height(), self._complete_note.heightForWidth(self.text_column_width())) + 8
-            h = card_h + warn_h + appeal_h + complete_note_h
+                note_w = int(self._complete_note.width()) or page_measure_w
+                complete_note_h = max(
+                    self._complete_note.sizeHint().height(),
+                    self._complete_note.heightForWidth(max(1, note_w)),
+                ) + 8
+            # The guide is a scrollable view of its own, so only the height it
+            # is actually given belongs in the page's measurement — never the
+            # length of the document inside it.
+            doc_h = 0
+            doc_view = getattr(self, "_post_install_doc", None)
+            if doc_view is not None and doc_view.isVisible():
+                doc_h = max(240, int(doc_view.height())) + 8
+            status_h = 0
+            doc_status = getattr(self, "_post_install_doc_status", None)
+            if doc_status is not None and doc_status.isVisible():
+                status_h = max(
+                    doc_status.sizeHint().height(),
+                    doc_status.heightForWidth(max(1, page_measure_w)),
+                ) + 8
+            h = card_h + warn_h + appeal_h + complete_note_h + doc_h + status_h
         elif cur_view is self._waiting_view:
             card_h = self._wait_card.sizeHint().height()
             head_h = self._wait_head.sizeHint().height() if hasattr(self, "_wait_head") else 48
             wait_col = getattr(self, "_wait_col", None)
             if wait_col is not None:
-                body_w = self.text_column_width() if hasattr(self, "text_column_width") else 260
+                # Measure each line at the width it is actually drawn at. The
+                # fixed wrap column is only the minimum these labels are held
+                # to; on a wider card they draw in fewer lines than that
+                # column would need, and the old measurement left the waiting
+                # screen taller than its words.
+                body_w = wait_col.geometry().width()
+                if body_w <= 0:
+                    body_w = self.text_column_width() if hasattr(self, "text_column_width") else 260
                 copy_h = 0
                 for i in range(wait_col.count()):
                     item = wait_col.itemAt(i)
                     if item is not None and item.widget() is not None and item.widget().isVisible():
                         w = item.widget()
-                        wh = w.sizeHint().height()
                         if w.hasHeightForWidth():
-                            wh = max(wh, w.heightForWidth(int(body_w)))
+                            # A label wraps at its own width, which the layout
+                            # may size wider than the column's minimum.
+                            label_w = int(w.width()) or int(body_w)
+                            wh = w.heightForWidth(max(1, label_w))
+                        else:
+                            wh = w.sizeHint().height()
                         copy_h += wh + wait_col.spacing()
                 card_h = max(card_h, head_h + copy_h + 36)
             hint_h = 0

@@ -49,3 +49,5 @@ vendor/.DS_Store
 # Remote rescue and debug flags documentation
 docs/REMOTE_RESCUE_FLAGS.md
 
+_dot_probe.png
+_dot_probe_cocoa.png

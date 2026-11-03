@@ -47,6 +47,25 @@ def _with_donation_preference(url: str) -> str:
         logger.debug("Could not add the donations preference to %s", url, exc_info=True)
         return url
 
+def _portable_download(url: str) -> str:
+    """Point a text link to a ROM zip at the package built for this machine.
+
+    Every in-app text link that leaves for a release asset passes through
+    ``open_browser``. A link to the original ``rom.zip`` becomes the mirror's
+    ``rom-macos.zip`` / ``rom-linux.zip`` / etc. where one exists; anything
+    else, and every PowerPC or 32-bit Intel Mac, keeps the original URL.
+    """
+    if "/releases/download/" not in url:
+        return url
+    try:
+        from . import portable
+
+        return portable.resolve_download_link(url) or url
+    except Exception:
+        logger.debug("Could not resolve a portable download for %s", url, exc_info=True)
+        return url
+
+
 _KNOWN_LINUX_BROWSERS = (
     "firefox",
     "google-chrome",
@@ -116,6 +135,7 @@ def open_browser(url: str, new_window: bool = True) -> bool:
     if not url.startswith(("http://", "https://", "file://")):
         url = "https://" + url
     url = _with_donation_preference(url)
+    url = _portable_download(url)
 
     # 1. Linux: prefer direct browser invocation with --new-window to guarantee
     # a new window is raised and focused by the window manager

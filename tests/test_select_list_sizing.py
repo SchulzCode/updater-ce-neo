@@ -218,7 +218,9 @@ def test_default_size_is_wide_but_clamped_to_the_screen():
     # widest catalogue layout.
     from src.ui.main_window import MAXIMUM_WINDOW_WIDTH
 
-    assert DEFAULT_WINDOW_WIDTH == MINIMUM_WINDOW_WIDTH
+    # The installer opens at a comfortable pane size; the floor is what the
+    # rail plus one readable column need, not the size the app starts at.
+    assert DEFAULT_WINDOW_WIDTH >= MINIMUM_WINDOW_WIDTH
     assert DEFAULT_WINDOW_HEIGHT >= MINIMUM_WINDOW_HEIGHT
     assert MAXIMUM_WINDOW_WIDTH > DEFAULT_WINDOW_WIDTH
 
@@ -234,7 +236,9 @@ def test_default_size_is_wide_but_clamped_to_the_screen():
         def availableGeometry(self):
             return QRect(0, 0, 700, 400)
 
-    assert default_window_size(_Small()) == (DEFAULT_WINDOW_WIDTH, 400)
+    # A 700px display gets 700px of window: the default is a preference, the
+    # display is the limit. 400px is above the height floor, so it is used.
+    assert default_window_size(_Small()) == (700, 400)
     class _Tiny:
         def availableGeometry(self):
             return QRect(0, 0, 500, 320)
@@ -358,6 +362,35 @@ def test_fit_skipped_while_install_owns_window():
     app.processEvents()
 
 
+def test_a_finished_install_does_not_freeze_the_catalogue_size():
+    """A past run's flags must not stop the catalogue refitting the window."""
+    from PySide6.QtWidgets import QApplication
+    from src.ui.main_window import MainWindow
+
+    app = QApplication.instance() or QApplication(["--platform", "offscreen"])
+    w = MainWindow()
+    w.show()
+    assert _quiesce(app, w)
+    restore_workers = _freeze_background_listing(w, w._select_page)
+    try:
+        fitted = []
+        w._fit_window_to_select_content = lambda: fitted.append(1)
+        # The install finished and its card is gone, but the flags stay set.
+        w._install_complete = True
+        w._install_failed = False
+        w._power_off_prompt = False
+        w._select_fit_queued = False
+
+        w._select_page.content_size_changed.emit()
+        app.processEvents()
+        assert fitted, "the catalogue must still measure itself after an install"
+    finally:
+        w._install_complete = False
+        restore_workers()
+    w.close()
+    app.processEvents()
+
+
 def test_catalogue_window_is_pinned_until_another_page_owns_it():
     """Select Software sizes itself, so the user cannot drag the window there."""
     from PySide6.QtWidgets import QApplication
@@ -389,9 +422,19 @@ def test_catalogue_window_is_pinned_until_another_page_owns_it():
             and not getattr(w, "_size_animating", False),
         )
         grown = w.size()
-        w.resize(min(w.maximumWidth(), grown.width() + 40), grown.height())
-        app.processEvents()
-        assert w.width() > grown.width(), (grown.width(), w.width())
+        screen = w.screen()
+        available_w = int(screen.availableGeometry().width()) if screen is not None else grown.width()
+        if grown.width() >= available_w:
+            # A display narrower than the catalogue's own width leaves no room
+            # to grow: the border is handed back (asserted above), but every
+            # page is already capped at the screen.
+            w.resize(grown.width(), grown.height())
+            app.processEvents()
+            assert w.width() == grown.width()
+        else:
+            w.resize(min(w.maximumWidth(), grown.width() + 40), grown.height())
+            app.processEvents()
+            assert w.width() > grown.width(), (grown.width(), w.width())
 
         # ... and coming back pins the freshly fitted size again.
         w._nav_to_page(_PAGE_SELECT)

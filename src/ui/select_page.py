@@ -12,6 +12,7 @@ from PySide6.QtGui import QPixmap, QTextDocument
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QScrollArea,
     QDialog,
     QFileDialog,
     QFrame,
@@ -613,7 +614,19 @@ class SelectPackagePage(QWidget):
 
     def _build_ui(self):
         t = T()
-        layout = QVBoxLayout(self)
+        # The catalogue scrolls as a page. The release list and the notes each
+        # scroll inside their own cards, but a model with a long list, a long
+        # release note, or a short display can still add up to more than the
+        # window is allowed to show — and the Install / Restore button and the
+        # file link were then painted below the window's edge, out of reach.
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QFrame.NoFrame)
+        self._scroll_content = QWidget()
+        layout = QVBoxLayout(self._scroll_content)
         layout.setContentsMargins(*page_margins())
         layout.setSpacing(8)
 
@@ -662,6 +675,25 @@ class SelectPackagePage(QWidget):
         self._views.addWidget(self._online_tab)
         self._views.addWidget(self._local_tab)
         layout.addWidget(self._views, 1)
+
+        self._scroll.setWidget(self._scroll_content)
+        # Transparent *after* the content widget is in place: QScrollArea turns
+        # that widget's auto-fill back on inside setWidget(), and the solid
+        # Base it then painted showed as a band behind the cards.
+        #
+        # No visible bars either: the window is fitted to the cards (see
+        # ``content_width_hint`` and ``content_height_hint``), so a bar would
+        # only sit in front of the layout it does not need to reveal. Wheel and
+        # trackpad scrolling still work — the scroll area moves its viewport
+        # whether or not a bar is drawn — which is what keeps a page taller
+        # than a small display reachable.
+        configure_scroll_area(
+            self._scroll,
+            horizontal=Qt.ScrollBarAlwaysOff,
+            vertical=Qt.ScrollBarAlwaysOff,
+            transparent=True,
+        )
+        root.addWidget(self._scroll, 1)
 
     def _link_html(self, key: str, *, bold: bool = True) -> str:
         t = T()
@@ -916,7 +948,11 @@ class SelectPackagePage(QWidget):
         self._release_list.itemClicked.connect(self._on_release_clicked)
         self._release_list.itemActivated.connect(self._on_install)
         self._release_list.itemDoubleClicked.connect(self._on_release_double_clicked)
-        pkg_layout.addWidget(self._release_list)
+        # The list takes the card's spare room first, up to the row cap set by
+        # ``_fit_release_list_height``. The plain stretch below still keeps the
+        # slack off the link (see above), but with equal shares a card with
+        # room for seven rows only ever showed half of them.
+        pkg_layout.addWidget(self._release_list, 10)
         self._fit_release_list_height()
 
         # Slim progress bar, only visible while downloading / preparing.
@@ -2209,18 +2245,41 @@ class SelectPackagePage(QWidget):
         else:
             rows = EMPTY_RELEASE_LIST_ROWS
             height = rows * self._release_row_height()
-        height += 2 * self._release_list.frameWidth() + 2
-        self._release_list.setMinimumHeight(height)
+        frame = 2 * self._release_list.frameWidth() + 2
+        height += frame
+        # The list may shrink to two rows — the floor ``minimum_install_height``
+        # promises, which keeps Install / Restore and the file link on screen —
+        # and scroll inside itself for the rest. Pinning min = max forced the
+        # page to the tallest list, so a window that could not take that height
+        # clipped the card instead of giving the rows a scrollbar.
+        floor_rows = min(rows, 2)
+        if count:
+            floor_h = sum(
+                max(1, self._release_list.sizeHintForRow(i)) for i in range(floor_rows)
+            )
+        else:
+            floor_h = floor_rows * self._release_row_height()
+        self._release_list.setMinimumHeight(max(1, floor_h + frame))
         self._release_list.setMaximumHeight(height)
         self._release_list.updateGeometry()
 
     def content_height_hint(self) -> int:
-        """Height the page needs to show its contents without compression or text clipping."""
-        page_layout = self.layout()
+        """Height the page needs to show its contents without compression or text clipping.
+
+        The page itself is a scroll area, so its own hint only describes the
+        viewport. The window sizes itself from the *content* inside it, and the
+        scroll area only comes into play when that content is taller than the
+        window may grow.
+        """
+        content = getattr(self, "_scroll_content", None)
+        page_layout = content.layout() if content is not None else self.layout()
         if page_layout is not None:
             self._invalidate_layout_tree(page_layout)
             page_layout.activate()
-        hint_h = max(self.sizeHint().height(), self.minimumSizeHint().height())
+        if content is not None:
+            hint_h = max(content.sizeHint().height(), content.minimumSizeHint().height())
+        else:
+            hint_h = max(self.sizeHint().height(), self.minimumSizeHint().height())
 
         # Ensure release notes card fits header + body + translate notes + see more without overlap
         if hasattr(self, "_notes_group") and self._notes_group.isVisible():
@@ -2241,8 +2300,39 @@ class SelectPackagePage(QWidget):
                 if page_layout is not None:
                     self._invalidate_layout_tree(page_layout)
                     page_layout.activate()
-                hint_h = max(hint_h, max(self.sizeHint().height(), self.minimumSizeHint().height()), notes_needed + 140)
+                hint_h = max(hint_h, notes_needed + 140)
         return hint_h
+
+    def content_width_hint(self) -> int:
+        """Width the two cards need side by side, so neither is cut off.
+
+        The page is a scroll area, so its own hint describes the *viewport*
+        rather than the cards inside it. Without this the window kept a width
+        narrower than the split needs: the notes card ran past the right edge
+        and a horizontal bar appeared under the cards.
+
+        The preferred width is asked for, not the minimum: at the minimum the
+        two columns are squeezed until the release note wraps in a sliver. A
+        note reports an ideal width that grows with its text, so it is capped
+        — past that the note wraps instead of widening the window.
+        """
+        content = getattr(self, "_scroll_content", None)
+        if content is None:
+            return int(self.minimumSizeHint().width())
+        layout = content.layout()
+        if layout is not None:
+            self._invalidate_layout_tree(layout)
+            layout.activate()
+        margins = layout.contentsMargins() if layout is not None else None
+        padding = (margins.left() + margins.right()) if margins is not None else 0
+        frame = 2 * int(self._scroll.frameWidth()) if hasattr(self, "_scroll") else 0
+        preferred = max(
+            int(content.sizeHint().width()), int(content.minimumSizeHint().width())
+        )
+        return min(preferred, self.CONTENT_WIDTH_CAP) + padding + frame
+
+    #: Widest the catalogue asks the window to be for its cards.
+    CONTENT_WIDTH_CAP = 900
 
     @staticmethod
     def _invalidate_layout_tree(layout) -> None:
@@ -2551,6 +2641,17 @@ class SelectPackagePage(QWidget):
             html = f"<html><head>{css}</head><body>{html}</body></html>"
         return html
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        # The page content sits in a scroll area, so its children only get real
+        # geometry once that content widget has been sized. A page that was
+        # built while another stage was showing comes back with placeholder
+        # geometry until the first layout pass; force it before painting.
+        content = getattr(self, "_scroll_content", None)
+        layout = content.layout() if content is not None else None
+        if layout is not None:
+            layout.activate()
+
     def _update_see_more_link(self):
         rel = self._current_selected_rel
         url = str((rel or {}).get("html_url") or "") if rel else ""
@@ -2558,11 +2659,27 @@ class SelectPackagePage(QWidget):
             self._see_more_label.setVisible(False)
             self._see_more_label.setText("")
             return
+        # See More belongs on our own release-notes page: it reads this
+        # release's title and notes from GitHub and shows them with the site's
+        # styling and its own Get it in Updater / Download Portable Zip
+        # buttons. github.com is only the fallback for a release the site
+        # cannot name.
+        from .. import docs_source
+
+        repo = str((rel or {}).get("source_repo") or "") or docs_source.repo_from_url(url)
+        tag = str((rel or {}).get("tag_name") or "")
+        model = self.current_model() if hasattr(self, "current_model") else ""
+        target = (
+            docs_source.release_notes_url(
+                repo, tag, name=str((rel or {}).get("name") or ""), model=model
+            )
+            or url
+        )
         t = T()
-        # The GitHub page is untranslated, but this link label belongs to the
-        # app UI and must follow the selected language.
+        # The release page's own words are not translated, but this link label
+        # belongs to the app UI and must follow the selected language.
         self._see_more_label.setText(
-            f'<a href="{url}" style="color:{t.fg}; text-decoration:none; font-weight:700;">{tr("notices_see_more")}</a>'
+            f'<a href="{target}" style="color:{t.fg}; text-decoration:none; font-weight:700;">{tr("notices_see_more")}</a>'
         )
         self._see_more_label.setVisible(True)
 
@@ -2716,7 +2833,7 @@ class SelectPackagePage(QWidget):
             self._set_notes_content(self._render_release_notes(self._current_selected_rel, as_html=True))
         self._update_translate_link()
 
-    def _trigger_release_install(self, rel, package=None):
+    def _trigger_release_install(self, rel, package=None, *, prompt=True):
         if not rel or not rel.get("download_url"):
             return
         pkg = package or self.current_package()
@@ -2731,7 +2848,7 @@ class SelectPackagePage(QWidget):
         eff_type = det_t or self._selected_type
 
         # Pre-install disconnect / power-off confirmation popup (skipped for SP Flash Tool on Linux):
-        if self._should_prompt_pre_install():
+        if prompt and self._should_prompt_pre_install():
             if not self._prompt_pre_install(eff_model, eff_type):
                 return
 
@@ -2802,13 +2919,63 @@ class SelectPackagePage(QWidget):
         self._download_worker.finished.connect(self._on_download_done)
         self._download_worker.start()
 
-    def retry_missing_cached_firmware(self):
-        """Retry the selected release after its archive or extracted cache vanished."""
+    def _release_cache_paths(self, rel, package=None):
+        """The archive and extracted folder one release is installed from."""
+        if not rel:
+            return None, None
+        pkg = package or getattr(self, "_details_package", None) or self.current_package()
+        if pkg is None:
+            return None, None
+        fname = Path(str(rel.get("asset_name") or "rom.zip")).name
+        dest = downloads.downloads_dir() / (
+            f"{pkg.slug}_{rel.get('tag_name', 'latest')}_{fname}"
+        )
+        return dest, compute_extract_dir(dest)
+
+    def purge_release_cache(self, rel=None, package=None) -> list:
+        """Delete one release's archive and extracted folder.
+
+        Used before a recovery download. A folder whose marker says extraction
+        finished can still be missing an image the scatter needs, and reusing
+        it fails the same way again — which is how one cache error turned into
+        a loop that could never recover.
+        """
+        import shutil
+
+        rel = rel if rel is not None else getattr(self, "_current_selected_rel", None)
+        dest, extract_dir = self._release_cache_paths(rel, package)
+        removed = []
+        for path in (dest, Path(f"{dest}.part") if dest else None, extract_dir):
+            if path is None or not path.exists():
+                continue
+            try:
+                if path.is_dir():
+                    shutil.rmtree(path, ignore_errors=True)
+                else:
+                    path.unlink()
+                removed.append(str(path))
+            except OSError as error:
+                logger.debug("Could not purge cached firmware %s: %s", path, error)
+        return removed
+
+    def retry_missing_cached_firmware(self, *, prompt: bool = True):
+        """Retry the selected release after its archive or extracted cache vanished.
+
+        The cached files are purged first: a retry that kept them would reuse
+        the same broken extract and fail again.
+        """
         rel = getattr(self, "_current_selected_rel", None)
         if rel is None:
             self._say(tr("sel_cache_retry_select_release"), 12000)
             return
-        self._trigger_release_install(rel, package=getattr(self, "_details_package", None))
+        removed = self.purge_release_cache(rel)
+        if removed:
+            logger.info("Purged cached firmware before retrying: %s", ", ".join(removed))
+        self._trigger_release_install(
+            rel,
+            package=getattr(self, "_details_package", None),
+            prompt=prompt,
+        )
 
     def cancel_download(self):
         worker = self._download_worker

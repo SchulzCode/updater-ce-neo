@@ -1,0 +1,5 @@
+.state/
+build/
+dist/
+*.spec
+*.log

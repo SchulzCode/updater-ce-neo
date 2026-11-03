@@ -1622,8 +1622,11 @@ def content_top_margin() -> int:
 # One set of page margins for every page, so the content column is identical
 # from screen to screen regardless of which page is showing (and regardless of
 # whether a scrollbar is currently visible on the host).
-PAGE_SIDE_MARGIN = 24
-PAGE_BOTTOM_MARGIN = 20
+# Installer panes breathe less than document pages: the cards already carry
+# their own padding, so a tighter page margin keeps the window's content from
+# drifting inwards as the window grows.
+PAGE_SIDE_MARGIN = 20
+PAGE_BOTTOM_MARGIN = 16
 
 
 def page_top_margin() -> int:

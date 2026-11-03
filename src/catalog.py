@@ -36,6 +36,8 @@ from .config import (
 
 from .network import requests_module  # noqa: E402  (kept below the config import)
 
+from . import portable
+
 logger = logging.getLogger(__name__)
 
 REQUEST_TIMEOUT = 12
@@ -78,6 +80,10 @@ class FirmwarePackage:
     type_b_asset: str = ""
     # Custom asset filename/glob pattern for firmware zips (e.g. '*.zip')
     asset_pattern: str = ""
+    # Portable Flashing Zip Packager mirror repositories for this release
+    # (``portable_zips`` in slidia_manifest.xml, comma separated). The row's
+    # download is then the package a mirror built for this platform.
+    portable_zips: str = ""
 
 
 def post_install_urls_for(*packages) -> tuple[str, str]:
@@ -314,6 +320,40 @@ def _is_source_archive_name(name):
     return "source" in lower or "legal-info" in lower
 
 
+#: Asset names a Portable Flashing Zip Packager mirror adds next to the
+#: original firmware zip: the source name plus one suffix per platform.
+PORTABLE_BUNDLE_SUFFIXES = (
+    "-windows.zip",
+    "-windows-arm64.zip",
+    "-linux.zip",
+    "-linux-arm64.zip",
+    "-macos.zip",
+)
+
+
+def _is_portable_bundle_name(name):
+    """True for ``rom-windows.zip``-style portable mirror packages."""
+    lower = (name or "").lower()
+    return any(lower.endswith(suffix) for suffix in PORTABLE_BUNDLE_SUFFIXES)
+
+
+def _without_portable_bundles(assets):
+    """Drop portable mirror packages when the release also carries the plain zip.
+
+    A mirror release republishes the original asset next to one ready-to-run
+    zip per platform. Only the original is a firmware archive for this app, so
+    listing ``rom-windows.zip`` as a ROM variant would hand a Windows bundle to
+    a Linux or macOS user. A mirror configured without the original asset
+    (``copy_original_assets: false``) still works: its bundles are kept when
+    they are all it has.
+    """
+    assets = list(assets or [])
+    if not any(_is_portable_bundle_name(a.get("name")) for a in assets):
+        return assets
+    plain = [a for a in assets if not _is_portable_bundle_name(a.get("name"))]
+    return plain or assets
+
+
 def _release_rom_variants(assets, tag_name, repo, repo_has_rom=False, package=None):
     """Variants a release offers: its rom*.zip assets, else its candidate firmware zips.
 
@@ -321,10 +361,15 @@ def _release_rom_variants(assets, tag_name, repo, repo_has_rom=False, package=No
     those assets are offered and the other zips are ignored. Other zips are
     offered when the repository has no rom*.zip releases, or when an explicit
     asset_pattern is declared in slidia_manifest.xml.
+
+    A portable mirror release also carries ``rom-windows.zip``-style bundles
+    beside the original asset; those are not firmware archives here (see
+    :func:`_without_portable_bundles`).
     """
     assets = [
         a for a in (assets or []) if not _is_source_archive_name(a.get("name"))
     ]
+    assets = _without_portable_bundles(assets)
     # Check if package specifies an asset_pattern shim
     pat = (getattr(package, "asset_pattern", "") or "").lower() if package else ""
     if pat:
@@ -522,6 +567,46 @@ def _release_matches_model(model, release, package=None, selected_type=None):
     if selected_type:
         filtered = [v for v in filtered if v.get("type") == selected_type]
     return bool(filtered)
+
+
+def _with_portable_packages(package, rows, platform=None):
+    """Point each row at the portable package built for this machine, if any.
+
+    ``portable_zips`` in slidia_manifest.xml names Portable Flashing Zip
+    Packager mirrors: repositories that republish each release under the same
+    tag with a ready-to-run zip per platform. Resolving a row's own tag and
+    source asset against the mirror's index keeps the release list, notes and
+    version labels exactly as the source published them, while the download is
+    the package built for this machine.
+
+    ``asset_name`` deliberately stays the source asset name: it identifies the
+    release, model/type detection reads it, and the saved file keeps a name the
+    app understands. Rows with no match (no mirror, tag not mirrored yet, no
+    build for this platform, index unreachable) keep the original URL.
+    """
+    mirrors = portable.parse_mirror_repos(getattr(package, "portable_zips", ""))
+    if not mirrors or not rows:
+        return rows
+    key = platform or portable.platform_key()
+    if not key:
+        return rows
+    out = []
+    for row in rows:
+        match = portable.resolve(
+            mirrors,
+            str(row.get("tag_name") or ""),
+            str(row.get("asset_name") or ""),
+            platform=key,
+        )
+        if match:
+            row = dict(row)
+            row["download_url"] = match["url"]
+            row["asset_size"] = int(match.get("size") or 0) or row.get("asset_size") or 0
+            row["portable_repo"] = match["repo"]
+            row["portable_platform"] = match["platform"]
+            row["portable_asset"] = match["name"]
+        out.append(row)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -1929,7 +2014,9 @@ class ReleasesClient:
                 rel["selected_resolution"] = preferred.get("resolution")
                 rel["prefer_240p"] = prefer_240p
             out.append(rel)
-        return sorted(out, key=release_sort_key, reverse=True)
+        return sorted(
+            _with_portable_packages(package, out), key=release_sort_key, reverse=True
+        )
 
     def _apk_repo_releases(self, package, model, apk_source, force_refresh=False, **filters):
         """Version rows for a package whose ``info_repo`` or ``apk_repo`` names
@@ -1986,7 +2073,16 @@ class ReleasesClient:
             row["apk_url"] = str(apk_asset.get("browser_download_url") or "")
             row["apk_name"] = str(apk_asset.get("name") or "")
             row["apk_size"] = int(apk_asset.get("size") or 0)
-            for key in ("download_url", "asset_name", "asset_size", "selected_resolution", "prefer_240p"):
+            for key in (
+                "download_url",
+                "asset_name",
+                "asset_size",
+                "selected_resolution",
+                "prefer_240p",
+                "portable_repo",
+                "portable_platform",
+                "portable_asset",
+            ):
                 if key in latest:
                     row[key] = latest[key]
             row["firmware_tag_name"] = latest.get("tag_name", "")

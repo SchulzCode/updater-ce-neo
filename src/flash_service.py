@@ -1755,14 +1755,39 @@ def completed_extract_dir(package_path):
 
 
 def _is_extract_complete(extract_dir):
+    """True when the extracted firmware on disk can still be flashed.
+
+    A folder only counts as a usable cache while the images its scatter
+    declares are actually in it. The completion marker alone is not enough:
+    files can disappear after it is written (a prune, a cleanup, a crash
+    part-way through a copy), and reusing that folder fails on the player with
+    CACHE_FILE_MISSING. Asking for the images makes the caller re-extract from
+    the archive, or fetch the release again, instead of retrying a cache that
+    cannot work.
+    """
     d = Path(extract_dir)
     if not d.exists() or not d.is_dir():
         return False
     if not d.name.endswith("_extracted"):
         return True
-    if (d / EXTRACT_COMPLETE_MARKER).exists():
+    scatter = _find_scatter(d, allow_raise=False)
+    if scatter is None:
+        return False
+    if not (d / EXTRACT_COMPLETE_MARKER).exists():
+        return False
+    try:
+        missing = _missing_images(scatter)
+    except Exception:
+        logger.debug("Could not verify the cached firmware's images", exc_info=True)
         return True
-    return _find_scatter(d, allow_raise=False) is not None
+    if missing:
+        logger.info(
+            "Cached firmware %s is missing %d image file(s); it will be fetched again",
+            d.name,
+            len(missing),
+        )
+        return False
+    return True
 
 
 def _mark_extract_complete(extract_dir):
@@ -1901,6 +1926,12 @@ class ExtractWorker(QThread):
                 clear_firmware_cache(exclude={package_path, extract_dir})
         except Exception:
             pass
+        # The archive is deleted once it has been extracted, so an incomplete
+        # cache with no archive left cannot be rebuilt here. Report it as the
+        # cache failure it is — the caller then downloads the release again —
+        # rather than failing inside the unzipper with a bare errno.
+        if not p.is_file():
+            raise RuntimeError("CACHE_FILE_MISSING")
         suffix = Path(package_path).suffix.lower()
         if suffix == ".zip":
             self._extract_zip(package_path, extract_dir)

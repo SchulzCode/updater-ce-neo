@@ -413,71 +413,20 @@ def format_notice_markdown(body: str, *, text_color: str | None = None) -> str:
     return f"<html><head>{css}</head><body>{html}</body></html>"
 
 
-class _NoticeMarkdownView(QTextBrowser):
-    """Markdown view that opens links externally and loads remote images."""
+from .markdown_doc import MarkdownDocView
 
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setOpenLinks(False)
-        self.setOpenExternalLinks(False)
-        self.setReadOnly(True)
-        self.setFrameShape(QFrame.NoFrame)
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.viewport().setAutoFillBackground(False)
-        self._images: dict = {}
-        self._image_replies: dict = {}
-        self._network = None
-        self.anchorClicked.connect(self._open_link)
+
+class _NoticeMarkdownView(MarkdownDocView):
+    """The notice body: the notice renderer, links out, remote images.
+
+    The widget (link handling, image loading, palette refreshes) is shared with
+    the post-install guide view; notices keep their own, older renderer.
+    """
 
     def set_markdown(self, body: str, *, text_color: str | None = None) -> None:
         self.setHtml(format_notice_markdown(body, text_color=text_color))
         self.document().setDocumentMargin(0)
         self.verticalScrollBar().setValue(0)
-
-    def _open_link(self, url) -> None:
-        text = url.toString() if hasattr(url, "toString") else str(url)
-        if text.startswith(("http://", "https://")):
-            from ..browser import open_browser
-
-            open_browser(text)
-
-    def loadResource(self, resource_type, name):  # noqa: N802 (Qt naming)
-        if resource_type == QTextDocument.ResourceType.ImageResource:
-            key = name.toString() if hasattr(name, "toString") else str(name)
-            if key in self._images:
-                return self._images[key]
-            if key.startswith(("http://", "https://")) and key not in self._image_replies:
-                self._fetch_image(key)
-        return super().loadResource(resource_type, name)
-
-    def _fetch_image(self, url: str) -> None:
-        from PySide6.QtCore import QUrl
-        from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest
-
-        if self._network is None:
-            self._network = QNetworkAccessManager(self)
-        reply = self._network.get(QNetworkRequest(QUrl(url)))
-        self._image_replies[url] = reply
-        reply.finished.connect(lambda u=url, r=reply: self._image_finished(u, r))
-
-    def _image_finished(self, url: str, reply) -> None:
-        from PySide6.QtCore import QUrl
-        from PySide6.QtGui import QImage
-        from PySide6.QtNetwork import QNetworkReply
-
-        try:
-            if reply.error() == QNetworkReply.NetworkError.NoError:
-                image = QImage.fromData(reply.readAll().data())
-                if not image.isNull():
-                    self._images[url] = image
-                    self.document().addResource(
-                        QTextDocument.ResourceType.ImageResource, QUrl(url), image
-                    )
-                    self.document().markContentsDirty(0, self.document().characterCount())
-                    self.viewport().update()
-        finally:
-            self._image_replies.pop(url, None)
-            reply.deleteLater()
 
 
 class _NoticePanel(QFrame):
@@ -760,6 +709,12 @@ class NoticesPage(QWidget):
             item = self._body_layout.takeAt(0)
             child = item.widget()
             if child is not None:
+                # The card's dismiss chip is drawn by AppKit in the window, not
+                # in the widget tree: it has to be handed back or it stays
+                # painted where the old card was.
+                release = getattr(child, "release_native", None)
+                if callable(release):
+                    release()
                 child.setParent(None)
                 child.deleteLater()
         notices = list(notices or [])
@@ -931,6 +886,17 @@ class _NoticeRow(QFrame):
         if has_more or not self._open_page.isHidden():
             col.addLayout(footer)
         self._fit_body()
+
+    def release_native(self) -> None:
+        """Hand back the AppKit buttons this card owns, before it is replaced.
+
+        ``NoticesPage`` rebuilds its cards on every refresh. The dismiss chip's
+        AppKit button lives in the window's view rather than in this widget, so
+        it survives the card and keeps painting at its old frame.
+        """
+        chip = getattr(self, "_dismiss", None)
+        if chip is not None and hasattr(chip, "detach_native"):
+            chip.detach_native()
 
     def _on_dismiss_clicked(self) -> None:
         try:
@@ -1646,12 +1612,29 @@ class UpdateAvailableDialog(QDialog):
     host window keeps its own glass and the cards keep their material.
     """
 
-    def __init__(self, parent=None, info=None, current_version="", on_skip=None):
+    def __init__(
+        self,
+        parent=None,
+        info=None,
+        current_version="",
+        on_skip=None,
+        *,
+        install_mode: bool = False,
+        install_label: str = "",
+        install_body: str = "",
+        on_finished=None,
+    ):
         super().__init__(parent)
         self._info = info
         self._on_skip = on_skip
         self._worker = None
         self._dest_path = None
+        # A portable run offers the same download as "Install This App" (or
+        # "Keep App" on Linux), not as an update to an installed build.
+        self._install_mode = bool(install_mode)
+        self._install_label = install_label or tr("portable_install_app")
+        self._install_body = install_body or tr("portable_install_app_fmt")
+        self._on_finished = on_finished
         t = T()
 
         # Shown inline on the window's glass. Paint the same rounded bento
@@ -1662,7 +1645,9 @@ class UpdateAvailableDialog(QDialog):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
 
-        self.setWindowTitle(tr("update_available"))
+        self.setWindowTitle(
+            self._install_label if self._install_mode else tr("update_available")
+        )
         # Inline in the host window: take the host's width and never ask for
         # a wider one. Text and buttons wrap to whatever width is available.
         self.setMinimumWidth(0)
@@ -1672,7 +1657,7 @@ class UpdateAvailableDialog(QDialog):
         from ..updates import asset_hint, pick_platform_asset
         from ..store_package import is_packaged
 
-        self._asset = pick_platform_asset(self._info.assets) if self._info else None
+        self._asset = self._pick_asset(self._info.assets) if self._info else None
         # A Store build is updated by the Store. Its release only offers that
         # route when the release itself says the version is on the Store
         # (msstore.txt), so a direct-download build is never sent there for a
@@ -1720,16 +1705,24 @@ class UpdateAvailableDialog(QDialog):
 
         title_col = QVBoxLayout()
         title_col.setSpacing(2)
-        self._title_label = QLabel(tr("update_available"))
+        self._title_label = QLabel(
+            self._install_label if self._install_mode else tr("update_available")
+        )
         self._title_label.setProperty("cssClass", "pageTitle")
         self._title_label.setWordWrap(True)
         title_col.addWidget(self._title_label)
 
-        ver_key = "update_store_available_fmt" if self._store else "update_available_fmt"
-        ver_str = tr(ver_key).format(
-            new=self._info.version if self._info else "",
-            current=current_version,
-        )
+        if self._install_mode:
+            ver_str = self._install_body.format(
+                new=self._info.version if self._info else "",
+                current=current_version,
+            )
+        else:
+            ver_key = "update_store_available_fmt" if self._store else "update_available_fmt"
+            ver_str = tr(ver_key).format(
+                new=self._info.version if self._info else "",
+                current=current_version,
+            )
         self._subtitle_label = QLabel(ver_str)
         self._subtitle_label.setProperty("cssClass", "subtitle")
         self._subtitle_label.setWordWrap(True)
@@ -1840,9 +1833,13 @@ class UpdateAvailableDialog(QDialog):
         # Older callers and the update wiring tests address the primary chip as
         # the download button; it is the same widget.
         self._download_btn = self._action_btn
-        action_key = "update_btn_store" if self._store else "update_btn_download"
-        self._action_btn.setText(tr(action_key))
-        self._action_btn.setToolTip(tr(action_key))
+        if self._install_mode:
+            self._action_btn.setText(self._install_label)
+            self._action_btn.setToolTip(self._install_label)
+        else:
+            action_key = "update_btn_store" if self._store else "update_btn_download"
+            self._action_btn.setText(tr(action_key))
+            self._action_btn.setToolTip(tr(action_key))
         self._action_btn.clicked.connect(self._on_action_clicked)
         self._btn_row.addWidget(self._action_btn, 0, Qt.AlignVCenter)
 
@@ -2030,6 +2027,15 @@ class UpdateAvailableDialog(QDialog):
         except Exception:
             pass
 
+    def _pick_asset(self, assets):
+        """The download for this dialog: Keep App takes the Linux AppImage."""
+        from ..updates import pick_platform_asset, pick_portable_appimage
+
+        asset = pick_platform_asset(assets)
+        if self._install_mode and sys.platform.startswith("linux"):
+            asset = pick_portable_appimage(assets) or asset
+        return asset
+
     def _on_cancel_clicked(self):
         if self._worker is not None and self._worker.isRunning():
             self._worker.terminate()
@@ -2088,14 +2094,14 @@ class UpdateAvailableDialog(QDialog):
             latest = UpdateChecker(UPDATE_REPO).simulate_latest(force=True)
             if latest and latest.tag and latest.assets:
                 self._info = latest
-                self._asset = pick_platform_asset(latest.assets)
+                self._asset = self._pick_asset(latest.assets)
         except Exception as e:
             logger.debug("Could not refresh the latest update before download: %s", e)
 
         # Identify platform download asset
         target_asset = self._asset
         if not target_asset and self._info:
-            target_asset = pick_platform_asset(self._info.assets)
+            target_asset = self._pick_asset(self._info.assets)
 
         # Linux: AppImages and portable tar.gz / zip packages are downloaded.
         # Fall back to the guide only when no suitable asset exists.
@@ -2176,7 +2182,7 @@ class UpdateAvailableDialog(QDialog):
                         subprocess.Popen(["open", "-R", str(self._dest_path)])
                     except Exception as e:
                         logger.debug("Failed to reveal dmg in finder: %s", e)
-                    QApplication.quit()
+                    self._quit_after_download()
                     return
 
                 if sys.platform.startswith("linux"):
@@ -2187,7 +2193,7 @@ class UpdateAvailableDialog(QDialog):
                             reveal_in_file_manager(self._dest_path)
                         except Exception as e:
                             logger.debug("Failed to reveal download in file manager: %s", e)
-                        QApplication.quit()
+                        self._quit_after_download()
                         return
 
                 # Windows and Linux AppImage: ready to install
@@ -2211,6 +2217,21 @@ class UpdateAvailableDialog(QDialog):
         worker.status.connect(on_status)
         worker.finished.connect(on_done)
         worker.start()
+
+    def _quit_after_download(self):
+        """Leave after the package is on disk.
+
+        A portable run must clean up first, so it supplies its own exit; an
+        ordinary update keeps quitting the whole app once the installer or
+        disk image is ready.
+        """
+        callback = getattr(self, "_on_finished", None)
+        if callable(callback):
+            callback()
+            return
+        from PySide6.QtWidgets import QApplication
+
+        QApplication.quit()
 
     def _launch_installer(self):
         import os

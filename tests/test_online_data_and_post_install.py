@@ -406,6 +406,59 @@ def test_notices_page_opens_a_notice_and_returns_to_the_list(qapp):
         page.deleteLater()
 
 
+def test_dismiss_chip_hands_its_appkit_button_back(qapp):
+    from src.ui.flash_page import _RoundNextButton
+
+    chip = _RoundNextButton(symbol="cancel", accent=False)
+    try:
+        chip._native_attempted = True
+        chip.detach_native()
+        assert chip._native is None
+        # A reused widget may attach again the next time it is shown.
+        assert chip._native_attempted is False
+    finally:
+        chip.deleteLater()
+
+
+def test_rebuilding_notice_cards_hands_back_their_appkit_chips(qapp):
+    """A replaced card must release the AppKit ✕ it owns.
+
+    The dismiss chip is drawn by AppKit in the window, not in the widget tree,
+    so a card thrown away while its chip still owns a button leaves the old ✕
+    painted where the card used to be. The notices list rebuilds on every
+    refresh, which put a stray cross above the first card.
+    """
+    from src.ui.dialogs import NoticesPage
+
+    page = NoticesPage()
+    try:
+        first = Notice(id="a", title="First", content="Body.", full_content="Body.")
+        second = Notice(id="b", title="Second", content="Body.", full_content="Body.")
+        page.set_notices([first, second])
+        qapp.processEvents()
+        rows = [
+            page._body_layout.itemAt(i).widget()
+            for i in range(page._body_layout.count())
+        ]
+        rows = [row for row in rows if row is not None and row.objectName() == "noticeRow"]
+        assert [row._notice.id for row in rows] == ["a", "b"]
+
+        released = []
+        original = rows[0].release_native
+
+        def spy():
+            released.append(rows[0]._notice.id)
+            original()
+
+        rows[0].release_native = spy
+        page.set_notices([second])
+        qapp.processEvents()
+        assert released == ["a"], "the replaced card must hand its chip back"
+        assert rows[0]._dismiss._native is None
+    finally:
+        page.deleteLater()
+
+
 def test_window_auto_fit_never_grows_past_the_height_ceiling(qapp):
     """Tall page content scrolls; it never stretches the window past 600 px."""
     from PySide6.QtWidgets import QWidget
@@ -869,12 +922,23 @@ def test_select_page_release_notes_layout_no_overlap(qapp):
         page = win._select_page
         if page._release_list.count() > 0:
             page._release_list.setCurrentRow(0)
-            page._is_translated = True
-            page._update_translate_link()
+        # Row 0 can already be current (an earlier test selected it), and then
+        # setCurrentRow() emits nothing and no release is recorded as selected.
+        # Both links under test only exist for a selected release, so state one.
+        page._current_selected_rel = page._current_selected_rel or {
+            "tag_name": "v1.0.0",
+            "body": "Release notes for the layout check.",
+            "html_url": "https://github.com/example/release",
+        }
+        page._is_translated = True
+        page._update_translate_link()
         qapp.processEvents()
         win._fit_window_to_select_content()
         qapp.processEvents()
-        page.layout().activate()
+        # The page's own layout holds the scroll area; the notes card and its
+        # links live in the scroll content's layout, so that is the one whose
+        # geometry has to be resolved before reading it.
+        page._scroll_content.layout().activate()
         page._notes_group.layout().activate()
         qapp.processEvents()
 

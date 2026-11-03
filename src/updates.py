@@ -219,6 +219,28 @@ def pick_platform_asset(assets, platform=None):
     return scored[0][2]
 
 
+def pick_portable_appimage(assets, platform=None):
+    """The AppImage for this Linux architecture (the portable run's Keep App).
+
+    A portable run keeps the app as one file, so Linux takes the AppImage even
+    when the release also carries a tar.gz or zip portable package. Only the
+    build for this machine's architecture is accepted: an arm64 host never
+    receives ``UpdaterCE.appimage`` and an x86-64 host never receives
+    ``UpdaterCE-arm64.appimage``.
+    """
+    if (platform or sys.platform) != "linux":
+        return None
+    wanted = (
+        "UpdaterCE-arm64.appimage"
+        if _host_is_arm64()
+        else "UpdaterCE.appimage"
+    )
+    for asset in assets or []:
+        if (asset.get("name") or "").lower() == wanted.lower():
+            return asset
+    return None
+
+
 def asset_hint(platform=None) -> str:
     """Human label for the expected asset on this platform (for guidance)."""
     platform = platform or sys.platform

@@ -151,21 +151,29 @@ _PAGE_NOTICE = 6
 _PAGE_SUPPORT = 7
 _PAGE_NOTICES = 8
 
-# Choose Software, and the app's starting size: the compact window the app has
-# always fitted on small screens. It is also the floor, and the ceiling is the
-# widest catalogue layout — the window grows to the content in between, so a
-# page that needs room takes it and a short one gives it back.
-DEFAULT_WINDOW_WIDTH = 640
-DEFAULT_WINDOW_HEIGHT = 440
+# Sizing policy: one installer window rather than a document window that keeps
+# growing with its contents. Every page is laid out in the same band, and only
+# the page's own height moves the window inside it.
+#
+# 760x520 is the size of an installer pane once the rail is included (the
+# macOS Installer's own panes are a little smaller and have no rail): wide
+# enough for the catalogue's two cards, short enough to sit beside the
+# instructions the reader is following, and the same on every desktop.
+DEFAULT_WINDOW_WIDTH = 760
+DEFAULT_WINDOW_HEIGHT = 520
+# The floor is what the rail plus one readable page column need — the same
+# floor the app always had, so a small display still gets a usable window. The
+# ceiling is the catalogue's own preferred layout, so no page can turn the
+# window into a wide desktop app.
 MINIMUM_WINDOW_WIDTH = 640
 MINIMUM_WINDOW_HEIGHT = 340
-MAXIMUM_WINDOW_WIDTH = 1240
+MAXIMUM_WINDOW_WIDTH = 920
 # The tallest the app may size itself to. A page with more content than this
 # (the Notices list, a long support appeal) scrolls inside the window instead
 # of stretching it: a taller window covers the instructions the user is
 # following and can hang off a small display. The diagnostics log is the one
 # page allowed past it, because there the log is the window.
-MAXIMUM_AUTO_FIT_HEIGHT = 600
+MAXIMUM_AUTO_FIT_HEIGHT = 620
 
 # Slack added to a page's own content height when the window hugs it, so the
 # last card's shadow and the status bar are never clipped.
@@ -185,6 +193,10 @@ def default_window_size(screen=None) -> tuple[int, int]:
             screen = QGuiApplication.primaryScreen()
         if screen is not None:
             available = screen.availableGeometry()
+            # The floor and the display are both limits, and the floor wins on
+            # a display too small to hold it: below the floor the rail and the
+            # page column cannot be drawn at all, so a window that technically
+            # fits would be less usable than one that overhangs.
             width = max(MINIMUM_WINDOW_WIDTH, min(width, int(available.width())))
             height = max(MINIMUM_WINDOW_HEIGHT, min(height, int(available.height())))
     except Exception:
@@ -681,6 +693,27 @@ def _completion_notification_message(software: str, model: str) -> str:
     return message
 
 
+class _PortableCleanupWorker(QThread):
+    """Remove a portable run's working files off the UI thread."""
+
+    progress = Signal(int, str)
+    finished = Signal(list, str)
+
+    def __init__(self, session, parent=None):
+        super().__init__(parent)
+        self._session = session
+
+    def run(self):
+        try:
+            removed = self._session.cleanup(
+                lambda percent, key: self.progress.emit(int(percent), str(key))
+            )
+            self.finished.emit(removed, "")
+        except Exception as exc:
+            logger.exception("Portable cleanup failed")
+            self.finished.emit([], str(exc))
+
+
 class MainWindow(QMainWindow):
     # Report from a background flash-tool sweep; ``list`` of what it stopped.
     sweep_report = Signal(list)
@@ -743,6 +776,12 @@ class MainWindow(QMainWindow):
         self._package_path = ""
         self._package_name = ""
         self._package_model = ""
+        # A bundled-firmware (portable) run leaves only temporary working files;
+        # closing it runs the cleanup pass and quits.
+        self._bundled_firmware_run = False
+        self._portable_session = None
+        self._portable_cleanup_started = False
+        self._portable_cleanup_done = False
         # Workers whose cancellation is still being observed, so Qt cannot
         # destroy a running QThread when the window goes away (see
         # _retire_worker).
@@ -2115,6 +2154,7 @@ class MainWindow(QMainWindow):
         self._flash_page.on_power_off_continue(self._on_power_off_continue)
         self._flash_page.on_try_anyway(self._on_keep_data_try_anyway)
         self._flash_page.on_install_done(self._on_install_done)
+        self._flash_page.install_app_requested.connect(self._install_portable_app)
         self._error_page.on_retry(self._on_progress_retry)
         self._error_page.on_reconnect(self._on_reconnect)
         self._error_page.on_reselect(lambda: self._nav_to_page(_PAGE_SELECT))
@@ -3428,8 +3468,12 @@ class MainWindow(QMainWindow):
             and self._settings_page.focused_card() is not None
         )
         is_support = bool(stack.currentIndex() == _PAGE_SUPPORT)
+        # One installer window: the support page and a solo settings card keep
+        # the window's own floor instead of hugging their card down to a strip.
+        # Only a running install may take a shorter frame, because it is the
+        # one screen that owns the whole window while the run is under way.
         floor_h = (
-            COMPACT_INSTALL_MIN_HEIGHT_NO_DONATIONS
+            MINIMUM_WINDOW_HEIGHT
             if (solo_settings_card or is_support)
             else self._content_floor_height()
         )
@@ -3741,10 +3785,11 @@ class MainWindow(QMainWindow):
                 or self.isFullScreen()
                 or bool(self.windowState() & (Qt.WindowMaximized | Qt.WindowFullScreen))
                 or self._install_run_active()
-                or getattr(self, "_install_complete", False)
-                or getattr(self, "_install_failed", False)
-                or getattr(self, "_power_off_prompt", False)
             ):
+                # Only a *running* install owns the frame. The finished/failed/
+                # power-off flags outlive their card, and honouring them here
+                # is why a large window stayed large long after the install
+                # page (and its card) had been left behind.
                 return
             stack = getattr(self, "_stack", None)
             page = getattr(self, "_select_page", None)
@@ -3776,10 +3821,11 @@ class MainWindow(QMainWindow):
                 or self.isFullScreen()
                 or bool(self.windowState() & (Qt.WindowMaximized | Qt.WindowFullScreen))
                 or self._install_run_active()
-                or getattr(self, "_install_complete", False)
-                or getattr(self, "_install_failed", False)
-                or getattr(self, "_power_off_prompt", False)
             ):
+                # Only a *running* install owns the frame. The finished/failed/
+                # power-off flags outlive their card, and honouring them here
+                # is why a large window stayed large long after the install
+                # page (and its card) had been left behind.
                 return
             stack = getattr(self, "_stack", None)
             page = getattr(self, "_select_page", None)
@@ -3788,16 +3834,12 @@ class MainWindow(QMainWindow):
             if not self.isVisible() or stack.height() <= 0:
                 self._pending_select_fit = True
                 return
-            # The relayout cascade crosses several nesting levels (and a
-            # stacked widget), so one pass is not enough: flush posted events
-            # until the measured height settles, with a small cap.
-            need = -1
-            for _ in range(5):
-                QApplication.sendPostedEvents()
-                settled = page.content_height_hint()
-                if settled == need:
-                    break
-                need = settled
+            # One measurement after the deferred tick: the refill has already
+            # asked the layout to re-run. Flushing posted events here ran the
+            # whole page relayout synchronously — up to five nested passes —
+            # inside the click that changed the selection, which is what made
+            # picking a release feel like the app had stalled.
+            need = page.content_height_hint()
             stack.updateGeometry()
             self._fit_window_to_page()
         except Exception:
@@ -3857,8 +3899,13 @@ class MainWindow(QMainWindow):
                 min(self.minimumWidth(), floor[0], width),
                 min(self.minimumHeight(), floor[1], height),
             )
+        # A large change is a different window, not a nudge: easing 200px of
+        # travel read as the old, larger window refusing to go away for the
+        # whole animation. Snap those and keep the easing for small fits.
+        jump = abs(self.width() - width) > 240 or abs(self.height() - height) > 240
         if (
             prefers_reduced_motion()
+            or jump
             or self.isMaximized()
             or self.isFullScreen()
             or (self.width() == width and self.height() == height)
@@ -3869,7 +3916,9 @@ class MainWindow(QMainWindow):
             return
         self._size_animating = True
         anim = QPropertyAnimation(self, b"size", self)
-        anim.setDuration(200)
+        # Giving room back should not feel slower than taking it.
+        shrinking = width < self.width() or height < self.height()
+        anim.setDuration(150 if shrinking else 200)
         anim.setStartValue(self.size())
         anim.setEndValue(QSize(width, height))
         anim.setEasingCurve(QEasingCurve.Type.OutCubic)
@@ -3889,6 +3938,10 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_schedule_caption_button_refresh"):
             self._schedule_caption_button_refresh()
         self._hold_select_window_size()
+        # The stage change hides sidebar entries while the window is still
+        # resizing, so a focused entry can lose its widget after the UI state
+        # was applied. Re-check once the new size has settled.
+        QTimer.singleShot(0, self._drop_stale_focus_frames)
 
     def _handoff_chrome(self) -> bool:
         """The disconnect hint and the download that leads to it."""
@@ -3909,6 +3962,7 @@ class MainWindow(QMainWindow):
         if getattr(self, "_install_ui_key", None) == key:
             if not active and not linux_setup:
                 self._reveal_sp_gui_button()
+            self._drop_stale_focus_frames()
             return
         self._install_ui_key = key
         self._install_ui_active = active
@@ -4031,7 +4085,26 @@ class MainWindow(QMainWindow):
         nav = getattr(self, "_nav_panel", None)
         if nav is not None:
             nav.update()
+        self._drop_stale_focus_frames()
         self._adjust_window_geometry()
+
+    def _drop_stale_focus_frames(self) -> None:
+        """Hide Qt's focus frame once the widget it follows is no longer shown.
+
+        A sidebar entry that disappears while an install owns the window can
+        still hold keyboard focus, and Qt keeps that widget's ``QFocusFrame``
+        visible after the widget itself is hidden. The frame then paints its
+        accent-blue outline at the last position it had — on top of otherwise
+        empty space — which read as a stray blue dot on the install and
+        completion screens. A frame with no visible widget under it indicates
+        nothing, so it is hidden until focus moves somewhere real again.
+        """
+        from PySide6.QtWidgets import QFocusFrame
+
+        for frame in self.findChildren(QFocusFrame):
+            tracked = frame.widget()
+            if tracked is None or not tracked.isVisibleTo(self):
+                frame.hide()
 
     def _sync_install_nav_entry(self) -> bool:
         """Rename the first sidebar entry while an install is running.
@@ -5252,20 +5325,79 @@ class MainWindow(QMainWindow):
                 tr("retry_guidance_detail_errno").format(code=text.strip())
             )
 
-    def _set_cache_recovery_package(self, detail=""):
-        """Keep the selected release and route the user to local cache recovery."""
+    def _recover_missing_firmware(self, detail="") -> bool:
+        """Fetch and extract the package again before reporting a cache failure.
+
+        A file missing from the extracted package is nearly always a cache
+        problem, and the archive is deleted once it has been extracted — so the
+        way back is a fresh download of the same release, which is what the
+        Retry button does by hand. Doing it here means CACHE_FILE_MISSING only
+        reaches the user when the re-download itself fails, or when the
+        firmware came from a local file that cannot be fetched again.
+
+        Once per package: a second failure after a fresh download is real.
+        """
+        package = str(getattr(self, "_package_path", "") or "")
+        if not package or getattr(self, "_cache_recovered_package", "") == package:
+            return False
+        page = getattr(self, "_select_page", None)
+        rel = getattr(page, "_current_selected_rel", None) if page is not None else None
+        if not rel or not rel.get("download_url"):
+            return False
+        # The release has to be the one whose archive this run is using: a
+        # local-file install can leave a catalogue selection behind, and
+        # fetching that instead would replace the wrong firmware.
+        asset = Path(str(rel.get("asset_name") or "")).name
+        if asset and asset not in Path(package).name:
+            return False
+        retry = getattr(page, "retry_missing_cached_firmware", None)
+        if not callable(retry):
+            return False
+        self._cache_recovered_package = package
+        self._cache_recovery_needed = True
+        self._append_log(
+            "Firmware files were missing from the cache; downloading the package "
+            "again before reporting a failure."
+        )
+        if detail:
+            self._append_log(f"  ({detail})")
+        # The retry path owns the reset (cancel the backend, clear the failure
+        # card). ``prompt=False``: the run is already past the pre-install step,
+        # so the power-off confirmation must not interrupt the recovery.
+        self._on_progress_retry(prompt=False)
+        return True
+
+    def _set_cache_recovery_package(self, detail="") -> bool:
+        """Recover a cache failure, or keep the release for a manual retry.
+
+        Returns True when a recovery download was started, so the caller does
+        not paint the failure card on top of it.
+        """
+        if self._recover_missing_firmware(detail):
+            return True
         package = Path(getattr(self, "_package_path", "") or "")
         first_report = not getattr(self, "_cache_recovery_needed", False)
         self._cache_recovery_needed = True
         if first_report:
-            # Clear the firmware cache now, so the next install re-downloads and
-            # re-extracts the package instead of reusing the broken cache.
+            # Clear this release's cached files so Retry downloads and extracts
+            # it again — only this release's: the other cached firmware is not
+            # the one that failed.
+            removed = []
             try:
-                from .. import downloads
-                count, _freed = downloads.clear_firmware_cache()
-                self._append_log(f"Cleared firmware cache ({count} item(s)) so the next install re-downloads the firmware.")
+                purge = getattr(getattr(self, "_select_page", None), "purge_release_cache", None)
+                if callable(purge):
+                    removed = purge()
+                else:
+                    from .. import downloads
+                    count, _freed = downloads.clear_firmware_cache()
+                    removed = [f"{count} cached item(s)"]
             except Exception:
-                logger.warning("Could not clear firmware cache after a missing-file error", exc_info=True)
+                logger.warning("Could not clear the cached firmware", exc_info=True)
+            if removed:
+                self._append_log(
+                    "Cleared the cached firmware files so the next install downloads "
+                    "and extracts them again."
+                )
         if package.is_dir():
             self._append_log(
                 "Selected local firmware directory is incomplete; choose Select Software and "
@@ -5274,14 +5406,15 @@ class MainWindow(QMainWindow):
         else:
             self._append_log("Cached firmware archive is missing; download the firmware again from Select Software.")
         if self._stack.currentIndex() == _PAGE_FLASH:
-            self._install_failed = True
-            self._power_off_prompt = False
-            self._install_complete = False
-            from ..flash_service import parse_flash_error
-            title, explanation = parse_flash_error("CACHE_FILE_MISSING", self._package_model)
-            self._failure_title = title
-            self._flash_page.show_install_failure("CACHE_FILE_MISSING", explanation, self._last_progress or 0)
-            self._nav_to_page(_PAGE_FLASH)
+                self._install_failed = True
+                self._power_off_prompt = False
+                self._install_complete = False
+                from ..flash_service import parse_flash_error
+                title, explanation = parse_flash_error("CACHE_FILE_MISSING", self._package_model)
+                self._failure_title = title
+                self._flash_page.show_install_failure("CACHE_FILE_MISSING", explanation, self._last_progress or 0)
+                self._nav_to_page(_PAGE_FLASH)
+        return False
 
     def _show_connect_guide_stage_one(self):
         """Return the UI to "power off the device and connect USB".
@@ -5636,6 +5769,7 @@ class MainWindow(QMainWindow):
             )
             self._apply_release_icon(complete=donation_disabled)
             self._nav_to_page(_PAGE_FLASH)
+            self._sync_install_app_button()
             if not donation_disabled:
                 self._flash_page.show_completion_appeal(
                     True, self._on_completion_dont_ask, self._on_completion_not_now,
@@ -5792,6 +5926,7 @@ class MainWindow(QMainWindow):
             donation_disabled or themes_failed, software=software, model=model,
             themes_installed=themes_installed and not was_apk_stage,
         )
+        self._sync_install_app_button()
         self._adjust_window_geometry()
         self._sync_sp_history()
         if themes_failed:
@@ -5904,7 +6039,11 @@ class MainWindow(QMainWindow):
         raw = str(message or "")
         low = raw.lower()
         if message == "CACHE_FILE_MISSING" or any(marker in low for marker in _CACHE_MISSING_MARKERS):
-            self._set_cache_recovery_package(raw)
+            # A missing cached file is recovered by downloading the package
+            # again. Only when that is impossible, or has already been tried,
+            # does the failure reach the user.
+            if self._set_cache_recovery_package(raw):
+                return
             message = "CACHE_FILE_MISSING"
         self._install_failed = True
         self._power_off_prompt = False
@@ -5947,7 +6086,20 @@ class MainWindow(QMainWindow):
             dd = downloads_dir()
             free_bytes = shutil.disk_usage(dd).free if dd.is_dir() else 100 * 1024 * 1024
             if free_bytes < 50 * 1024 * 1024:
-                _cnt, _freed = clear_firmware_cache()
+                # Free the *other* cached firmwares, never the one this run is
+                # flashing: deleting it here guaranteed the next retry had to
+                # download the whole package again.
+                keep = set()
+                current = str(getattr(self, "_package_path", "") or "")
+                if current:
+                    keep.add(current)
+                    try:
+                        from ..flash_service import compute_extract_dir
+
+                        keep.add(str(compute_extract_dir(current)))
+                    except Exception:
+                        pass
+                _cnt, _freed = clear_firmware_cache(exclude=keep)
                 free_bytes = shutil.disk_usage(dd).free if dd.is_dir() else 100 * 1024 * 1024
                 if free_bytes < 50 * 1024 * 1024:
                     self._append_log(f"Flash failed due to critically low host storage ({free_bytes} bytes free; original error: {error_code}).")
@@ -5958,6 +6110,9 @@ class MainWindow(QMainWindow):
         cache_failure = bool(getattr(self, "_cache_recovery_needed", False)) or any(
             marker in str(error_code or "").lower() for marker in _CACHE_MISSING_MARKERS
         ) or str(error_code or "") == "CACHE_FILE_MISSING"
+        if cache_failure and self._recover_missing_firmware(error_code):
+            # A download is running in place of the failure card.
+            return
         is_sp_tool_error = str(error_code or "").startswith("SP_") or "S_" in str(error_code or "")
         if not cache_failure and not is_sp_tool_error and (
             error_code == "USB_DISCONNECTED"
@@ -6115,8 +6270,12 @@ class MainWindow(QMainWindow):
         )
         return True
 
-    def _on_progress_retry(self):
-        """Retry an install failure, using firmware recovery rather than USB reset when needed."""
+    def _on_progress_retry(self, *, prompt: bool = True):
+        """Retry an install failure, using firmware recovery rather than USB reset when needed.
+
+        ``prompt`` keeps the pre-install power-off confirmation for a retry the
+        user asked for; an automatic recovery passes False.
+        """
         if getattr(self, "_cache_recovery_needed", False):
             self.service.cancel_flash()
             self.service.stop_device_monitor()
@@ -6137,7 +6296,7 @@ class MainWindow(QMainWindow):
             if getattr(self._select_page, "_current_selected_rel", None) is None:
                 self._return_to_select_software()
             else:
-                self._select_page.retry_missing_cached_firmware()
+                self._select_page.retry_missing_cached_firmware(prompt=prompt)
             return
         self.service.cancel_flash()
         self.service.stop_device_monitor()
@@ -6478,7 +6637,15 @@ class MainWindow(QMainWindow):
             self._returning_to_select = False
 
     def _quit_after_bundled_run(self) -> None:
-        """Stop the ROM-bundled run and close the app. The stop prompt has already been answered."""
+        """Stop the ROM-bundled run, clean its files up, then close the app.
+
+        The stop prompt has already been answered. A portable run must not
+        leave staged firmware, extractions or caches behind, so quitting shows
+        the same progress card as the install while that work is done.
+        """
+        if self._portable_cleanup_required():
+            self._start_portable_cleanup()
+            return
         self._stop_running_install()
         self._force_quit = True
         self.close()
@@ -6492,11 +6659,22 @@ class MainWindow(QMainWindow):
         self._return_to_select_software()
 
     def _on_completion_not_now(self):
-        """Dismiss the appeal and return to Select Software. Donations stay on."""
+        """Dismiss the appeal. In a portable run this is the quit gesture.
+
+        The machine keeps nothing from the run, so Not now starts the cleanup
+        pass and leaves; a catalogue install still returns to Select Software.
+        """
+        if getattr(self, "_bundled_firmware_run", False):
+            self._start_portable_cleanup()
+            return
         self._on_install_done()
 
     def _on_completion_dont_ask(self):
         """Hide donations, then the compact completion screen without the appeal."""
+        if getattr(self, "_bundled_firmware_run", False):
+            # The card already explains why a portable run cannot keep this
+            # preference; nothing may be written for a one-off run.
+            return
         device_tracking.set_donation_ui_disabled(True, self.settings)
         device_tracking.set_donation_install_prompt_disabled(True, self.settings)
         self._flash_page.show_completion_appeal(False)
@@ -6509,6 +6687,133 @@ class MainWindow(QMainWindow):
             self._settings_page.refresh_settings()
         self._apply_donation_visibility(True)
         self._adjust_window_geometry()
+
+    def _sync_install_app_button(self) -> None:
+        """Offer the real install on a portable run's completion card."""
+        page = getattr(self, "_flash_page", None)
+        if page is None or not hasattr(page, "show_install_app"):
+            return
+        available = bool(getattr(self, "_bundled_firmware_run", False)) and bool(
+            getattr(self, "_install_complete", False)
+        )
+        if not available:
+            page.show_install_app(False)
+            return
+        page.show_install_app(
+            True, tr("portable_keep_app") if paths.IS_LINUX else tr("portable_install_app")
+        )
+
+    def _install_portable_app(self) -> None:
+        """Install or keep the app from a portable run's completion card.
+
+        Windows only has the guide to point at. macOS and Linux reuse the
+        normal update download: macOS reveals the disk image so the app can be
+        dragged into Applications, Linux keeps the matching AppImage.
+        """
+        if not getattr(self, "_bundled_firmware_run", False):
+            return
+        if paths.IS_WINDOWS:
+            from ..browser import open_browser
+
+            open_browser("https://innioasis.app/guide.html")
+            return
+
+        from .dialogs import UpdateAvailableDialog
+        from ..updates import UpdateChecker
+
+        info = getattr(self, "_pending_app_update", None)
+        if info is None or not str(getattr(info, "tag", "") or ""):
+            try:
+                info = UpdateChecker(UPDATE_REPO).simulate_latest(force=True)
+            except Exception:
+                logger.debug("Could not look up the app build to install", exc_info=True)
+                info = None
+        if info is None or not str(getattr(info, "tag", "") or ""):
+            from ..browser import open_browser
+
+            open_browser(f"https://github.com/{UPDATE_REPO}/releases")
+            return
+
+        label = tr("portable_keep_app") if paths.IS_LINUX else tr("portable_install_app")
+        if paths.IS_MAC:
+            body = tr("portable_install_app_mac_fmt")
+        elif paths.IS_LINUX:
+            body = tr("portable_keep_app_fmt")
+        else:
+            body = tr("portable_install_app_fmt")
+        dialog = UpdateAvailableDialog(
+            self,
+            info=info,
+            current_version=APP_VERSION,
+            on_skip=lambda v: self.settings.setValue("update_skipped_version", v),
+            install_mode=True,
+            install_label=label,
+            install_body=body,
+            on_finished=self._quit_after_portable_app,
+        )
+        self._present_inline(dialog, label)
+
+    def _quit_after_portable_app(self) -> None:
+        """The install package is on disk: clean the portable run up and leave."""
+        if self._portable_cleanup_required():
+            self._start_portable_cleanup()
+            return
+        self._force_quit = True
+        self.close()
+
+    def _portable_cleanup_required(self) -> bool:
+        return bool(
+            getattr(self, "_bundled_firmware_run", False)
+            and getattr(self, "_portable_session", None) is not None
+            and not getattr(self, "_portable_cleanup_done", False)
+        )
+
+    def _start_portable_cleanup(self) -> None:
+        """Stop the run, show the cleanup card, then quit when it is empty."""
+        if getattr(self, "_portable_cleanup_started", False) or getattr(
+            self, "_portable_cleanup_done", False
+        ):
+            return
+        session = getattr(self, "_portable_session", None)
+        if session is None:
+            self._portable_cleanup_done = True
+            self._force_quit = True
+            self.close()
+            return
+        self._portable_cleanup_started = True
+        self._stop_running_install()
+        try:
+            self.service.stop_device_monitor()
+        except Exception:
+            pass
+        page = getattr(self, "_flash_page", None)
+        if page is not None and hasattr(page, "show_cleanup"):
+            page.show_cleanup()
+        self._nav_to_page(_PAGE_FLASH)
+        self._adjust_window_geometry()
+        worker = _PortableCleanupWorker(session, self)
+        self._portable_cleanup_worker = worker
+        worker.progress.connect(self._on_portable_cleanup_progress)
+        worker.finished.connect(self._on_portable_cleanup_finished)
+        worker.start()
+
+    def _on_portable_cleanup_progress(self, percent, key) -> None:
+        page = getattr(self, "_flash_page", None)
+        if page is not None and hasattr(page, "set_cleanup_progress"):
+            page.set_cleanup_progress(int(percent), tr(str(key)))
+
+    def _on_portable_cleanup_finished(self, removed, error) -> None:
+        if error:
+            logger.warning("Portable cleanup did not finish cleanly: %s", error)
+        self._portable_cleanup_done = True
+        page = getattr(self, "_flash_page", None)
+        if page is not None and hasattr(page, "finish_cleanup"):
+            page.finish_cleanup()
+        QTimer.singleShot(650, self._quit_after_portable_cleanup)
+
+    def _quit_after_portable_cleanup(self) -> None:
+        self._force_quit = True
+        self.close()
 
     def _apply_release_icon(self, complete: bool = False) -> None:
         """Squircle until a release icon is cached, then that image. The check overlays either."""
@@ -6594,6 +6899,7 @@ class MainWindow(QMainWindow):
         self._flash_method = self._preferred_flash_method()
         self._flash_page.set_method(self._flash_method)
         self._flash_page.set_release_icon(QPixmap(), complete=False)
+        self._flash_page.show_install_app(False)
         self.sm.reset_full()
         self._package_path = ""
         self._package_name = ""
@@ -7211,6 +7517,12 @@ class MainWindow(QMainWindow):
             return
 
         try:
+            # Snapshot the user's folders before this run writes a single file;
+            # cleanup later removes exactly what appeared after this point.
+            from .. import portable_run
+
+            self._portable_session = portable_run.PortableSession()
+            self._bundled_firmware_run = True
             # 1. Parse scatter, stage firmware files into working directory
             staged_scatter = stage_bundled_firmware(pkg)
 
@@ -7576,7 +7888,17 @@ class MainWindow(QMainWindow):
             # If an install/download is currently running, don't interrupt with modal
             # Instead, open release page in browser
             from ..browser import open_browser
-            release_url = getattr(info, "html_url", "") or f"https://github.com/{UPDATE_REPO}/releases"
+            from ..docs_source import release_notes_url
+
+            release_url = (
+                release_notes_url(
+                    UPDATE_REPO,
+                    getattr(info, "tag", "") or getattr(info, "version", ""),
+                    name=getattr(info, "name", "") or "",
+                )
+                or getattr(info, "html_url", "")
+                or f"https://github.com/{UPDATE_REPO}/releases"
+            )
             open_browser(release_url)
             return
 
@@ -8277,6 +8599,13 @@ class MainWindow(QMainWindow):
                 release_sleep_inhibition()
             except Exception:
                 pass
+
+        # A portable run owns files in the user's folders: closing finishes as
+        # a visible cleanup pass, never as a hidden tray session.
+        if self._portable_cleanup_required() and not getattr(self, "_force_quit", False):
+            event.ignore()
+            self._start_portable_cleanup()
+            return
 
         # Opt-in: with "Run in background" on, hide at once. Waiting for
         # worker/process cleanup here made a menu-bar close look like a hang,

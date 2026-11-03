@@ -2,10 +2,18 @@
 
 A firmware folder (or zip) can carry the portable Updater next to its files.
 When a single ``*scatter*.txt`` sits in the ``sp_flash_tool`` directory of the
-application (or in the same folder as the ``.app`` bundle on macOS), the application
-automatically detects the firmware release, parses the scatter, stages the firmware
-files to the normal working directory, and primes the installation flow directly
-into the "Install Software" screen without requiring manual firmware selection.
+application (or in a ``Firmware`` folder beside the ``.app`` bundle on macOS), the
+application automatically detects the firmware release, parses the scatter, stages
+the firmware files to the normal working directory, and primes the installation flow
+directly into the "Install Software" screen without requiring manual firmware
+selection.
+
+Such a folder only needs the optional ``fw_package.ini``, the optional
+``updater.png`` / ``updater.jpg`` / ``updater.jpeg`` icon, the scatter and every file
+the scatter lists. Anything else a firmware release carries (the SP Flash Tool
+executables a Windows/Linux pack puts around the ROM files, readmes, archives) is
+ignored and does not need to be packed. A scatter whose name contains ``preserve`` is
+a data-preserving variant of the release, not the package's own scatter.
 
 If the folder contains a ``*rockbox*.txt`` file, Rockbox themes and fontpacks are
 automatically marked for installation with the firmware.
@@ -41,6 +49,8 @@ from .paths import INSTALL_DIR, IS_MAC, IS_WINDOWS, REPO_ROOT, find_sp_flash_too
 
 FW_PACKAGE_INI = "fw_package.ini"
 PACKAGE_ICON_NAMES = ("updater.png", "updater.jpg", "updater.jpeg")
+#: Folder beside the macOS ``.app`` that holds a portable firmware release.
+MACOS_FIRMWARE_FOLDER = "Firmware"
 logger = logging.getLogger(__name__)
 
 
@@ -205,7 +215,9 @@ def pick_scatter(folder: Union[str, Path]) -> Optional[Path]:
 
     Selection rules:
     1. Collect all *.txt files with "scatter" in the name.
-    2. Preference non-preserve_data scatters when present.
+    2. Drop *preserve* scatters (e.g. ``MT6582_Android_scatter_preserve_data.txt``)
+       when another scatter is present: they are a data-preserving variant of the
+       release, not the package's own scatter.
     3. Preference *ndroid_scatter*.txt over generic *scatter*.txt.
     4. If exactly one scatter matches the preferred criteria, return it.
     """
@@ -223,8 +235,10 @@ def pick_scatter(folder: Union[str, Path]) -> Optional[Path]:
     if len(matches) == 1:
         return matches[0]
 
-    # Preference non-preserve_data scatters when present
-    non_preserve = [p for p in matches if "preserve_data" not in p.name.lower()]
+    # A preserve scatter is only a variant: it never names the package while a
+    # real scatter is there. Keep it as the sole match so a release that ships
+    # nothing else can still be opened.
+    non_preserve = [p for p in matches if "preserve" not in p.name.lower()]
     candidates = non_preserve if non_preserve else matches
 
     # Preference *ndroid_scatter*.txt over generic *scatter*.txt
@@ -562,7 +576,7 @@ def find_bundled_firmware(app_dir=None) -> Optional[FwPackage]:
     """Locate an automated portable firmware package packaged with the application.
 
     Locations searched:
-    - macOS: Same folder as the .app bundle.
+    - macOS: A ``Firmware`` folder beside the .app bundle, then the bundle's folder.
     - Windows & Linux: In the sp_flash_tool directory of the application
       (e.g. tools/SP_Flash_Tool, INSTALL_DIR/SP_Flash_Tool, or next to binary).
       Release details come from ``fw_package.ini`` beside the application executable,
@@ -575,13 +589,19 @@ def find_bundled_firmware(app_dir=None) -> Optional[FwPackage]:
     base = Path(app_dir).resolve() if app_dir is not None else Path(INSTALL_DIR).resolve()
 
     if IS_MAC:
-        # macOS: Search the folder containing the .app bundle
+        # macOS: a Firmware folder beside the .app is the portable layout (the
+        # macOS equivalent of Windows/Linux putting ROM files in a copy of the SP
+        # Flash Tool directory). Older packs put the firmware beside the bundle
+        # directly, and a dev checkout runs from the repo root.
         app_parent = _macos_app_parent(Path(sys.executable))
         if app_parent and app_parent.is_dir():
+            candidates.append(app_parent / MACOS_FIRMWARE_FOLDER)
             candidates.append(app_parent)
         base_app_parent = _macos_app_parent(base)
         if base_app_parent and base_app_parent.is_dir():
+            candidates.append(base_app_parent / MACOS_FIRMWARE_FOLDER)
             candidates.append(base_app_parent)
+        candidates.append(base / MACOS_FIRMWARE_FOLDER)
     else:
         # Windows & Linux: Search sp_flash_tool directory candidates
         sp_found = find_sp_flash_tool()
@@ -748,9 +768,19 @@ def prune_to_firmware_package(extract_dir: Union[str, Path]) -> list[str]:
         if da_p.is_file():
             keep.add(da_p.resolve())
 
+    # A scatter may name a file in a different case than the package stores it
+    # (the player's storage is case-insensitive; a Linux host is not). Deleting
+    # that file here is what later surfaced as CACHE_FILE_MISSING mid-flash.
+    keep_names = {path.name.lower() for _name, path in _list_expected_images(scatter)}
+    keep_names.add(scatter.name.lower())
+
     removed: list[str] = []
     for f in root.rglob("*"):
-        if f.is_file() and f.resolve() not in keep:
+        if (
+            f.is_file()
+            and f.resolve() not in keep
+            and f.name.lower() not in keep_names
+        ):
             try:
                 f.unlink()
                 removed.append(str(f))

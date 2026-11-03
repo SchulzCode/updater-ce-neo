@@ -122,6 +122,24 @@ def test_read_package_rejects_two_scatters(tmp_path):
     assert read_package(fw) is None
 
 
+def test_preserve_scatter_is_a_variant_not_the_package_scatter(tmp_path):
+    fw = _firmware(tmp_path / "fw")
+    (fw / "MT6572_Android_scatter_preserve.txt").write_text(SCATTER, encoding="utf-8")
+    pkg = read_package(fw, require_ini=False)
+    assert pkg is not None
+    assert pkg.scatter.name == "MT6572_Android_scatter.txt"
+
+
+def test_preserve_data_scatter_alone_still_opens_the_package(tmp_path):
+    fw = _firmware(tmp_path / "fw")
+    (fw / "MT6572_Android_scatter.txt").unlink()
+    (fw / "MT6572_Android_scatter_preserve_data.txt").write_text(SCATTER, encoding="utf-8")
+    pkg = read_package(fw, require_ini=False)
+    assert pkg is not None
+    assert pkg.scatter.name == "MT6572_Android_scatter_preserve_data.txt"
+    assert pkg.has_preserve_data_scatter is True
+
+
 def test_read_package_takes_release_info_from_app_folder_ini(tmp_path):
     app = tmp_path / "InnioasisUpdater"
     app.mkdir()
@@ -350,8 +368,11 @@ def test_cached_extract_is_never_deleted_and_is_restored_in_place(tmp_path, monk
     # The archive is removed right after extraction; the cached folder is what remains.
     assert not archive.exists()
 
-    # A normal install attempt never removes or re-extracts a cached folder.
-    ExtractWorker._extract(stub, str(archive))
+    # A cached folder that is missing a declared image cannot be flashed, and
+    # the archive is gone: the attempt reports the cache as missing so the
+    # caller downloads the release again. It does not delete what is left.
+    with pytest.raises(RuntimeError, match="CACHE_FILE_MISSING"):
+        ExtractWorker._extract(stub, str(archive))
     assert not (extract_dir / "boot.img").exists()
     assert (extract_dir / "keep.txt").exists()
 
@@ -453,6 +474,32 @@ def test_find_bundled_firmware_macos_app_folder(tmp_path, monkeypatch):
     assert pkg.model == "Y2"
 
 
+def test_find_bundled_firmware_macos_firmware_folder(tmp_path, monkeypatch):
+    monkeypatch.setattr(fw_package, "IS_MAC", True)
+    root = tmp_path / "macos_bundle"
+    root.mkdir()
+    fw = _firmware(
+        root / fw_package.MACOS_FIRMWARE_FOLDER,
+        ini="[Firmware]\nsoftware_name = Solar\nversion = 1.0\ntarget_model = Y2\n",
+    )
+    _png(fw / "updater.png")
+    # Leftover SP Flash Tool files around the ROM files are ignored, not required.
+    (fw / "flash_tool_x64.exe").write_bytes(b"x")
+    (fw / "DA_SWSEC.bin").write_bytes(b"x")
+
+    app_dir = root / "Updater CE.app" / "Contents" / "MacOS"
+    app_dir.mkdir(parents=True)
+    exe = app_dir / "Updater CE"
+    exe.write_bytes(b"dummy")
+
+    monkeypatch.setattr(fw_package.sys, "executable", str(exe))
+    pkg = fw_package.find_bundled_firmware(app_dir=app_dir)
+    assert pkg is not None
+    assert pkg.folder == fw.resolve()
+    assert pkg.display_name == "Solar 1.0"
+    assert pkg.image == (fw / "updater.png").resolve()
+
+
 def test_find_bundled_firmware_rejects_multiple_scatters(tmp_path, monkeypatch):
     sp_dir = tmp_path / "tools" / "SP_Flash_Tool"
     _firmware(sp_dir)
@@ -521,7 +568,8 @@ def test_auto_start_bundled_firmware_navigates_to_flash_page(tmp_path, monkeypat
         app.processEvents()
 
 
-def test_cache_missing_failure_clears_firmware_cache(tmp_path, monkeypatch):
+def test_cache_missing_failure_leaves_the_cache_to_the_recovery(tmp_path, monkeypatch):
+    """Without a release to fetch again, nothing is purged and the card shows."""
     from src import downloads
     from src.ui.main_window import MainWindow
 
@@ -539,14 +587,15 @@ def test_cache_missing_failure_clears_firmware_cache(tmp_path, monkeypatch):
     try:
         w._show_install_failure("CACHE_FILE_MISSING")
         app.processEvents()
-        assert not extract.exists()
-        assert not archive.exists()
+        # No release is selected, so there is nothing to download again: the
+        # failure is reported and the cache is left as it is.
+        assert extract.exists()
+        assert archive.exists()
         assert w._cache_recovery_needed is True
 
-        # A repeat report during the same run does not clear again.
-        (dl / ".Y1_extracted").mkdir()
+        # A repeat report during the same run changes nothing either.
         w._handle_backend_line("FileNotFoundError: [Errno 2] No such file or directory")
-        assert (dl / ".Y1_extracted").exists()
+        assert extract.exists()
     finally:
         w.close()
         app.processEvents()
