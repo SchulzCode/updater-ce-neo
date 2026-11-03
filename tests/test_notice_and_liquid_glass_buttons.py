@@ -129,6 +129,63 @@ def test_a_changed_notice_reappears_after_dismissal(tmp_path):
     assert service.active_notices == []
 
 
+def test_notice_service_shows_all_models_and_resets_dismiss_state(tmp_path, monkeypatch):
+    service = NoticeService()
+    service._cache_file = tmp_path / "notice.xml"
+    service._cache_dir = tmp_path
+
+    stored = {}
+
+    class FakeSettings:
+        def __init__(self, *args):
+            pass
+
+        def value(self, key, default=None):
+            return stored.get(key, default)
+
+        def setValue(self, key, val):
+            stored[key] = val
+
+        def remove(self, key):
+            stored.pop(key, None)
+
+        def sync(self):
+            pass
+
+    import src.notice_service as ns
+
+    monkeypatch.setattr(ns, "QSettings", FakeSettings)
+
+    n_y1 = Notice(id="notice-y1", title="Y1 PSA", content="Y1 info", models=("Y1",))
+    n_y2 = Notice(id="notice-y2", title="Y2 PSA", content="Y2 info", models=("Y2",))
+    service._active_notices = [n_y1, n_y2]
+
+    # Active notices across the application includes notices for all models
+    service.set_model("Y1")
+    assert [n.id for n in service.active_notices] == ["notice-y1", "notice-y2"]
+
+    # Banner selects the notice matching model Y1
+    banners = []
+    service.notice_ready.connect(lambda b: banners.append(b.id if b else None))
+    service.set_model("Y1")
+    assert banners[-1] == "notice-y1"
+
+    # Switching model to Y2 updates banner to Y2 notice
+    service.set_model("Y2")
+    assert banners[-1] == "notice-y2"
+
+    # Dismissing both notices clears active notices
+    service.dismiss_notice(n_y1)
+    service.dismiss_notice(n_y2)
+    assert service.active_notices == []
+
+    # Resetting read state restores both notices
+    monkeypatch.setattr(service, "_snapshot_text", lambda: "")
+    service._active_notices = [n_y1, n_y2]
+    service.reset_all_read_state()
+    assert [n.id for n in service.active_notices] == ["notice-y1", "notice-y2"]
+
+
 def test_action_buttons_cursor_is_arrow_cursor():
     app = QApplication.instance() or QApplication(sys.argv)
     btn = _RoundNextButton(symbol="next", accent=True)

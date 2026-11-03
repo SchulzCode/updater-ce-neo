@@ -151,6 +151,10 @@ def test_update_test_shortcut_presents_the_latest_release_even_when_older(monkey
         shortcut = window._update_test_shortcut
         assert shortcut.key().toString() == "Ctrl+U"
         assert shortcut.isEnabled()
+
+        shortcut_w = window._update_test_shortcut_w
+        assert shortcut_w.key().toString() == "Ctrl+W"
+        assert shortcut_w.isEnabled()
         # Headless is not Cocoa, so only the Qt shortcut is installed here.
         assert getattr(window, "_update_key_monitor", None) is None
 

@@ -1912,6 +1912,22 @@ _STRINGS: dict = {
         "es": "Solo podemos conservar tus ajustes y archivos si el reproductor ya ejecuta este software o una versión compatible.",
         "ja": "プレーヤーですでにこのソフトウェアまたは互換バージョンが動作している場合にのみ、設定とメディアを保持できます。",
     },
+    "keep_data_only_compatible_hint_y1": {
+        "en": "We can only keep your settings when the player is already running this software or a compatible version.",
+        "zh-CN": "只有当播放器已经运行此软件或兼容版本时，才能保留您的设置。",
+        "de": "Wir können deine Einstellungen nur behalten, wenn auf dem Player bereits diese Software oder eine kompatible Version läuft.",
+        "fr": "Nous ne pouvons conserver vos réglages que si le lecteur exécute déjà ce logiciel ou une version compatible.",
+        "es": "Solo podemos conservar tus ajustes si el reproductor ya ejecuta este software o una versión compatible.",
+        "ja": "プレーヤーですでにこのソフトウェアまたは互換バージョンが動作している場合にのみ、設定を保持できます。",
+    },
+    "keep_data_only_compatible_hint_other": {
+        "en": "We can only keep your settings and media when the player is already running this software or a compatible version.",
+        "zh-CN": "只有当播放器已经运行此软件或兼容版本时，才能保留您的设置和媒体。",
+        "de": "Wir können deine Einstellungen und Medien nur behalten, wenn auf dem Player bereits diese Software oder eine kompatible Version läuft.",
+        "fr": "Nous ne pouvons conserver vos réglages et vos médias que si le lecteur exécute déjà ce logiciel ou une version compatible.",
+        "es": "Solo podemos conservar tus ajustes y archivos si el reproductor ya ejecuta este software o una versión compatible.",
+        "ja": "プレーヤーですでにこのソフトウェアまたは互換バージョンが動作している場合にのみ、設定とメディアを保持できます。",
+    },
     "settings_allow_keep_data_any": {
         "en": "Always offer to keep my settings and media",
         "zh-CN": "始终提供保留我的设置和媒体选项",

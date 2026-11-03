@@ -334,27 +334,20 @@ def test_notices_dialog_cards_show_full_body_and_page_button(qapp, monkeypatch):
     try:
         assert len(dialog._rows) == 2
         first = dialog._rows[0]
-        # Cards carry the complete body, not just the short <content> preview.
-        assert first._body.toPlainText().strip() == notices[0].full_content
-        assert notices[0].content not in first._body.toPlainText()
+        # In Updater CE 2.5.2, cards display the <content> attribute/element preview.
+        assert first._body.toPlainText().strip() == notices[0].content
         assert not first._more.isHidden()
-        assert not first._open_page.isHidden()
-        assert first._open_page.toolTip() == tr("notices_open_page")
-        assert not first._open_page.icon().isNull()
-
-        # A notice with no full body and no specific page has no extra actions.
-        second = dialog._rows[1]
-        assert second._more.isHidden()
-        assert second._open_page.isHidden()
 
         opened = []
         monkeypatch.setattr("src.browser.open_browser", lambda url: opened.append(url))
         first._open_page.click()
         assert opened == [notice_see_more_url(notices[0].url)]
 
+        opened.clear()
         first._more.click()
-        assert dialog._stack.currentWidget() is dialog._detail
-        assert notices[0].full_content.split(".")[0] in dialog._detail._body.toPlainText()
+        from src.ui.dialogs import notice_read_more_url
+        assert opened == [notice_see_more_url(notice_read_more_url(notices[0]))]
+        assert opened == [notice_see_more_url(notices[0].url)]
     finally:
         dialog.deleteLater()
 
@@ -370,7 +363,7 @@ def test_notice_cards_render_markdown_images_and_inner_scroll(qapp):
     notice = Notice(
         id="markdown-card",
         title="Markdown notice",
-        content="Short preview",
+        content=long_body,
         full_content=long_body,
     )
     row = _NoticeRow(notice)
@@ -465,8 +458,9 @@ def test_notice_detail_renders_markdown_and_ignores_bare_site_url(qapp):
         assert "Bold" in html
         assert "example.test/guide" in html
         assert "shot.png" in html
-        # A bare site root is not a notice-specific page.
-        assert detail._open_page.isHidden()
+        # A bare site root forms the canonical notice page on innioasis.app
+        assert not detail._open_page.isHidden()
+        assert "notices.html?notice=markdown" in detail._page_url
         assert "<img" in format_notice_markdown(notice.full_content)
     finally:
         detail.deleteLater()
@@ -899,3 +893,92 @@ def test_select_page_release_notes_layout_no_overlap(qapp):
         except Exception:
             pass
         win.close()
+
+
+def test_notice_content_and_read_more_url(qapp, monkeypatch):
+    from src.ui.dialogs import _NoticeRow, notice_read_more_url
+    from src.notice_service import Notice
+    from src.i18n import tr
+
+    notice = Notice(
+        id="2026-10-25-firmware-advisory",
+        title="About Notices in Updater CE",
+        content="You'll get important alerts about device safety issues reported by the community here.",
+        full_content="Long markdown text that should not appear in the card preview.",
+    )
+    row = _NoticeRow(notice)
+    try:
+        # 1. Body shows notice.content, NOT full_content
+        assert row._body.toPlainText().strip() == notice.content
+        assert "Long markdown" not in row._body.toPlainText()
+
+        # 2. notice_read_more_url forms the expected URL with the ID
+        expected_url = "https://innioasis.app/notices.html?notice=2026-10-25-firmware-advisory"
+        assert notice_read_more_url(notice) == expected_url
+
+        # 3. Read more button opens the URL in the browser
+        from src.ui.dialogs import notice_see_more_url
+        opened = []
+        monkeypatch.setattr("src.browser.open_browser", lambda url: opened.append(url))
+        row._more.click()
+        assert opened == [notice_see_more_url(expected_url)]
+    finally:
+        row.deleteLater()
+
+
+def test_keep_data_compatibility_copy_y1_vs_other():
+    from src.i18n import tr
+
+    hint_y1 = tr("keep_data_only_compatible_hint_y1")
+    hint_other = tr("keep_data_only_compatible_hint_other")
+
+    # Y1 copy states "only keep your settings" (no media mentioned since microSD stores media)
+    assert "settings and media" not in hint_y1
+    assert "only keep your settings" in hint_y1
+
+    # Other models say "settings and media"
+    assert "settings and media" in hint_other
+
+
+def test_online_notices_url_formation():
+    from src.notice_service import parse_notice_xml
+    from src.ui.dialogs import notice_read_more_url
+
+    xml = """<notices>
+  <notice id="2026-11-03-rockbox-y2-warn" persistent="false" severity="warning" from="2026-11-03" until="2026-12-31" models="Y2">
+    <title>Users having issues with Rockbox for Y2.</title>
+    <content>Rockbox 360p themes not working and music not reading from MicroSD.</content>
+    <url>https://innioasis.app</url>
+  </notice>
+  <notice id="2026-10-25-firmware-advisory" persistent="false" severity="info" from="2026-10-25" until="2026-12-31" models="Y1,Y2">
+    <title>About Notices in Updater CE</title>
+    <content>You'll get important alerts about device safety issues reported by the community here.</content>
+    <link>https://innioasis.app</link>
+  </notice>
+</notices>"""
+    n1, n2 = parse_notice_xml(xml)
+    assert notice_read_more_url(n1) == "https://innioasis.app/notices.html?notice=2026-11-03-rockbox-y2-warn"
+    assert notice_read_more_url(n2) == "https://innioasis.app/notices.html?notice=2026-10-25-firmware-advisory"
+    assert n1.web_url == "https://innioasis.app/notices.html?notice=2026-11-03-rockbox-y2-warn"
+    assert n2.web_url == "https://innioasis.app/notices.html?notice=2026-10-25-firmware-advisory"
+
+
+def test_donation_preference_in_browser_urls(monkeypatch):
+    from src.browser import _with_donation_preference
+
+    # Case 1: donations disabled -> ?donations=false added
+    monkeypatch.setattr("src.player_update_check.is_donation_ui_disabled", lambda: True)
+    assert _with_donation_preference("https://innioasis.app") == "https://innioasis.app?donations=false"
+    assert _with_donation_preference("https://innioasis.app/guide.html") == "https://innioasis.app/guide.html?donations=false"
+    assert _with_donation_preference("https://innioasis.app/guide.html?foo=bar") == "https://innioasis.app/guide.html?foo=bar&donations=false"
+    assert _with_donation_preference("https://innioasis.app/guide.html?donations=false") == "https://innioasis.app/guide.html?donations=false"
+    assert _with_donation_preference("https://innioasis.app/guide.html?donations=true") == "https://innioasis.app/guide.html?donations=false"
+
+    # Case 2: donations enabled -> no donations parameter provided at all
+    monkeypatch.setattr("src.player_update_check.is_donation_ui_disabled", lambda: False)
+    assert _with_donation_preference("https://innioasis.app") == "https://innioasis.app"
+    assert _with_donation_preference("https://innioasis.app/guide.html") == "https://innioasis.app/guide.html"
+    assert _with_donation_preference("https://innioasis.app/guide.html?donations=false") == "https://innioasis.app/guide.html"
+    assert _with_donation_preference("https://innioasis.app/guide.html?donations=true") == "https://innioasis.app/guide.html"
+    assert _with_donation_preference("https://innioasis.app/guide.html?foo=bar&donations=false") == "https://innioasis.app/guide.html?foo=bar"
+

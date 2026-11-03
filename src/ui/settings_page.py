@@ -1685,6 +1685,14 @@ class SettingsPage(QWidget):
             settings=QSettings("innioasis", "updater"),
             hardware_type=hw_type,
         )
+        # A device added here is logged for update reminders, so notices about
+        # its model, revision and firmware may now be shown on Select Software.
+        try:
+            from ..notice_service import NoticeService
+
+            NoticeService.instance().refresh_context()
+        except Exception:
+            logger.debug("Could not refresh the notice context after adding a device", exc_info=True)
         self._hide_add_device_panel()
         self.refresh_settings()
 

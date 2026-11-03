@@ -4,10 +4,13 @@
 
   Announcements and public service notices shown to users of the app.
 
-  The app shows the newest active notice in the on-screen banner, and the whole
-  active list behind it: clicking the banner (or the Notices link on the Select
-  screen) opens the notices page. Read more there opens a notice's full
-  Markdown body in the page; the banner and cards only use the short <content>.
+  The app shows one notice at a time on the Select Software card, chosen for
+  what the reader is looking at or has logged for update reminders, and cycles
+  through the other applicable notices on that card. Clicking the card (or the
+  Notices entry in the sidebar) opens the notices page, which lists every
+  active notice with no contextual narrowing. Read more there opens a notice's
+  full Markdown body in the page; the card and cards only use the short
+  <content>.
 
   Attributes on <notice>:
     id          required, unique. Give a new id to publish a notice again.
@@ -24,22 +27,48 @@
                 "Posted ...". The notice is shown on or after this time.
     until       optional, ISO date YYYY-MM-DD. Shown on or before this date. Not
                 shown to users.
-    models      optional, comma-separated Y1,Y2,A5. Blank or missing = all models.
+    platform    optional comma-separated platforms: mac,windows,linux. Omitted
+                means every platform.
+
+  Contextual targeting (all optional; each one that is set must match):
+    models            comma-separated Y1,Y2,A5. Blank or missing = all models.
+    device_type       comma-separated hardware revisions: A, B (Y1 has both;
+                      "Type A" is accepted). A revision is never offered for a
+                      model that has no revisions.
+    firmware_repo     repository the notice is about, written as in
+                      slidia_manifest.xml: "rockbox-y1/rockbox". Full GitHub
+                      URLs are accepted, and * wildcards work. Offered when the
+                      reader selects firmware from that repository, or has a
+                      device logged for update reminders that runs it.
+    firmware_version  comma-separated release tag(s): "v3.2.0", "v3.2.*", "*".
+                      "*" means any release of that repository. The leading "v"
+                      is optional. Offered when that tag is selected, or when a
+                      logged device's last recorded install is that tag.
+
+  A notice with none of the targeting attributes is for EVERYONE. It stays on
+  the card's rotation regardless of selection and is always in every list.
+
+  A reader has one context per device: the current Select Software selection,
+  plus each device logged for update reminders (added in Settings or recorded
+  by an install). A notice is offered on the card when it matches any of them,
+  and the card orders notices by how specific the match is: firmware_repo,
+  then firmware_version, then device_type, then models, then everyone. One
+  notice is visible at a time and the applicable ones alternate.
 
   Child elements:
-    <title>         required, short heading (the banner's first line).
-    <content>       required, the short text shown in the banner. Plain text,
+    <title>         required, short heading (the card's first line).
+    <content>       required, the short text shown on the card. Plain text,
                     also accepts <body>.
     <full_content>  optional, the complete text shown after Read more in the
                     app's full notice view, written in Markdown (headings,
                     lists, **bold**, *italic*, `code`, fenced blocks, quotes,
                     horizontal rules, [links](https://...), and images such as
-                    ![screenshot](https://...)). It is not used for the banner
-                    or card preview; those use the short <content>. The app
-                    renders it with Qt's Markdown engine, and the site renders
-                    the same text on the notice's own page. Falls back to
-                    <content> when omitted. May also be a full_content="..."
-                    attribute on <notice>.
+                    ![screenshot](https://...)). It is not used for the card
+                    preview; that uses the short <content>. The app renders it
+                    with Qt's Markdown engine, and the site renders the same
+                    text on the notice's own page. Falls back to <content> when
+                    omitted. May also be a full_content="..." attribute on
+                    <notice>.
     <url>           optional, https:// URL behind the full notice's "Open page"
                     button. When the app is not in English the button opens
                     the page's Google Translate view so the notice reads in the
@@ -54,14 +83,25 @@
   opens the full notice inside the app, filling the notices page; it does not
   send the reader to the bare site root.
 -->
-<notices updated="2026-10-25">
-  <notice id="2026-10-25-example" persistent="false" severity="info" from="2026-10-25T09:00" until="2026-12-31" models="Y1,Y2">
+<notices updated="2026-11-03">
+  <!-- For everyone: no targeting attributes. -->
+  <notice id="2026-10-25-example" persistent="false" severity="info" from="2026-10-25T09:00" until="2026-12-31">
     <title>Welcome to Updater CE</title>
     <content>Firmware is downloaded from the community catalogue. Keep your player charged and plugged in during an install.</content>
     <full_content>Firmware and community software are downloaded from the catalogue and installed with SP Flash Tool or MTKClient. Keep the player charged and plugged in for the whole install, and do not unplug it until the app says the install is complete.</full_content>
     <url>https://innioasis.app</url>
   </notice>
 
+  <!-- Contextual: only for Y1 Type A units running firmware from
+       rockbox-y1/rockbox. Appears when that firmware is selected for the
+       device, or when such a player is logged for update reminders. -->
+  <notice id="2026-11-03-rockbox-y1-typea-example" persistent="false" severity="warning" from="2026-11-03" until="2026-12-31" models="Y1" device_type="A" firmware_repo="rockbox-y1/rockbox" firmware_version="*">
+    <title>Rockbox on Y1 Type A: check your build</title>
+    <content>Builds before 0.5 do not start on Type A units sold after March 2026. Update to 0.5 or later before installing.</content>
+    <full_content>Type A Y1 units sold after March 2026 ship with a bootloader that rejects older Rockbox builds. Install **Rockbox 0.5 or later**, or stay on Original Software.</full_content>
+  </notice>
+
+  <!-- For everyone as well, and persistent: returns on every launch. -->
   <notice id="2026-10-20-psa-usb" persistent="true" severity="warning" from="2026-10-20" until="2026-11-20">
     <title>Use a direct USB port</title>
     <content>Avoid USB hubs during an install. Some hubs drop the connection partway through.</content>

@@ -18,6 +18,8 @@ def _with_donation_preference(url: str) -> str:
 
     The site reads the query flag on every page it serves. GitHub and other
     destinations are untouched.
+    When donations are disabled: sets ?donations=false.
+    When donations are enabled: ensures no donations parameter is present in the URL.
     """
     try:
         from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -27,11 +29,20 @@ def _with_donation_preference(url: str) -> str:
         host = (parts.hostname or "").lower()
         if host != "innioasis.app" and not host.endswith(".innioasis.app"):
             return url
-        if not player_update_check.is_donation_ui_disabled():
-            return url
-        query = dict(parse_qsl(parts.query, keep_blank_values=True))
-        query["donations"] = "false"
-        return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+        # Parse existing query params as a list of pairs so we can cleanly filter
+        query_pairs = [
+            (k, v)
+            for k, v in parse_qsl(parts.query, keep_blank_values=True)
+            if k != "donations"
+        ]
+
+        if player_update_check.is_donation_ui_disabled():
+            query_pairs.append(("donations", "false"))
+
+        new_query = urlencode(query_pairs)
+        return urlunsplit(
+            (parts.scheme, parts.netloc, parts.path, new_query, parts.fragment)
+        )
     except Exception:
         logger.debug("Could not add the donations preference to %s", url, exc_info=True)
         return url

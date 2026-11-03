@@ -4,7 +4,16 @@
   Hosted at: https://innioasis.app/notice.xml
 
   Displays on-screen hint toast announcements to users of the app.
-  
+
+  The app shows ONE notice at a time on the Select Software card: the notice
+  that best matches what the reader is looking at (the selected model, its
+  hardware revision, and the firmware repository and release tag they picked)
+  or a device they logged for update reminders. Several applicable notices
+  take turns on that card, so they can be read without opening the list.
+  The Notices page, the pop-out list and the notification tray always show
+  EVERY active notice (with no contextual narrowing): an announcement for
+  everyone is never hidden by the current selection.
+
   Fields:
   - id: required, unique string identifier for the notice.
   - persistent: boolean ("true" | "false", default: "false").
@@ -24,7 +33,36 @@
       YYYY-MM-DDTHH:MM (also YYYY-MM-DDTHH:MM:SS, or a space instead of the T).
       The app shows this on the notice as "Posted ...". Shown on or after it.
   - until: optional ISO date YYYY-MM-DD. Shown on or before this date. Not shown to users.
-  - models: optional comma-separated list of target models (e.g. "Y1,Y2"). Omit for all models.
+  - platform: optional comma-separated list of platforms ("mac,windows,linux").
+      Omitted means every platform.
+
+  Contextual targeting (all optional; every field that is set must match):
+  - models: comma-separated target models (e.g. "Y1,Y2"). Omit for all models.
+  - device_type: comma-separated hardware revisions, e.g. "A" or "B" (also
+      accepts "Type A"). Only Y1 currently ships more than one revision. A
+      notice with a revision is not offered for a model that has no revisions.
+  - firmware_repo: the GitHub repository the notice is about, written exactly
+      as in slidia_manifest.xml, e.g. "rockbox-y1/rockbox". A full GitHub URL
+      is accepted and compared case-insensitively. Wildcards are allowed
+      ("spycemagic/*"). The notice is offered when the reader has selected a
+      firmware from that repository, or has a device logged for update
+      reminders whose software comes from it.
+  - firmware_version: comma-separated release tag(s) the notice is about,
+      e.g. "v3.2.0", "v3.2.*" or "*". "*" means any release of the named
+      repository. A leading "v" is optional, so "3.2.0" matches a v3.2.0 tag.
+      The notice is offered when the reader has selected that release, or has
+      logged a device whose last recorded install is that release.
+  - A notice with none of these attributes is for EVERYONE: it is always on
+      the card's rotation, whatever the selection, and always in every list.
+
+  How the attributes combine (contextual card only):
+    model AND device_type AND firmware_repo AND firmware_version (when set)
+    must all agree with one reader context. A reader has several contexts:
+    the current Select Software selection, plus one for each device logged for
+    update reminders (Settings -> Player Update Reminders, or an install).
+    A notice is offered if it matches ANY of those contexts. Notices are
+    ordered on the card by specificity: firmware_repo, then
+    firmware_version, then device_type, then models, then everyone.
 
   Child elements:
   - <title>: required, headline of the notice.
@@ -39,19 +77,48 @@
       app opens the full Markdown view locally before offering this page.
   - <link>: accepted as an alias for <url>.
 -->
-<notices updated="2026-10-25">
+<notices updated="2026-11-03">
 
-  <!-- Example 1: Non-persistent advisory (can be dismissed without returning at next app run) -->
-  <notice id="2026-10-25-firmware-advisory" persistent="false" severity="info" from="2026-10-25T09:00" until="2026-12-31" models="Y1,Y2">
-    <title>Original Software 3.2.1 Available</title>
-    <content>An updated firmware release for Y2 players is now available in the community catalogue.</content>
-    <url>https://innioasis.app</url>
-  </notice>
-
-  <!-- Example 2: Persistent warning (returns on every app launch until expired/removed) -->
+  <!-- Everyone: no targeting at all. Always on the card, always in the list. -->
   <notice id="2026-10-20-psa-usb" persistent="true" severity="warning" from="2026-10-20T08:00" until="2026-11-20">
     <title>Use a direct USB port</title>
     <content>Avoid USB hubs during an install. Some hubs drop the connection partway through.</content>
+  </notice>
+
+  <!-- One model, one hardware revision, one repository: a Y1 Type A warning
+       about Rockbox that appears when Rockbox (from rockbox-y1/rockbox) is
+       selected for that device, or when a Y1 Type A player whose last install
+       was Rockbox is logged for update reminders. -->
+  <notice id="2026-11-03-rockbox-y1-typea" persistent="false" severity="warning" from="2026-11-03" until="2026-12-31" models="Y1" device_type="A" firmware_repo="rockbox-y1/rockbox" firmware_version="*">
+    <title>Rockbox on Y1 Type A: check your build</title>
+    <content>Builds before 0.5 do not run on Type A units sold after March 2026. Update to 0.5 or later before installing.</content>
+    <full_content>Type A Y1 units sold after March 2026 ship with a bootloader that rejects older Rockbox builds.
+
+- **Rockbox 0.5 or later** is required on those units.
+- Older builds stop at the boot logo instead of starting.
+
+If the player does not start after an install, restore Original Software with Updater CE and install a current Rockbox build.</full_content>
+    <url>https://innioasis.app/notices.html?notice=2026-11-03-rockbox-y1-typea</url>
+  </notice>
+
+  <!-- One release of one repository: shown when that exact tag is selected, or
+       when a logged device's last install was that tag. -->
+  <notice id="2026-11-04-rockbox-y2-3-2-1" persistent="false" severity="info" from="2026-11-04" until="2026-12-31" models="Y2" firmware_repo="spycemagic/y2-rockbox" firmware_version="v3.2.1">
+    <title>Rockbox 3.2.1 for Y2: known issues</title>
+    <content>360p themes and MicroSD libraries are still being worked on in this release. Original Software remains the safe choice if you rely on a MicroSD library.</content>
+    <full_content>The community has reported two open problems with Rockbox 3.2.1 on Y2:
+
+- **360p themes do not apply.** The player keeps showing the stock artwork.
+- **Music on a MicroSD card is not listed** after the install.
+
+Staying on Original Software avoids both. Restoring is one run of Updater CE; music on the MicroSD card is left alone, but music in the Y2's internal storage is erased.</full_content>
+  </notice>
+
+  <!-- A model the reader may not have selected: still offered when that model is
+       logged for update reminders. -->
+  <notice id="2026-10-25-firmware-advisory" persistent="false" severity="info" from="2026-10-25" until="2026-12-31" models="Y1,Y2">
+    <title>Original Software 3.2.1 Available</title>
+    <content>An updated firmware release for Y1 and Y2 players is now available in the community catalogue.</content>
   </notice>
 
 </notices>

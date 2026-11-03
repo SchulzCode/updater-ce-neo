@@ -1416,12 +1416,14 @@ class NoticeToast(QFrame):
         super().mousePressEvent(event)
 
     def _on_action_clicked(self) -> None:
-        if self._notice and self._notice.url:
-            from PySide6.QtCore import QUrl
-            from PySide6.QtGui import QDesktopServices
+        if self._notice:
+            from .dialogs import notice_read_more_url, notice_see_more_url
+            from ..browser import open_browser
 
-            QDesktopServices.openUrl(QUrl(self._notice.url))
-            self.action_clicked.emit(self._notice.url)
+            target_url = notice_read_more_url(self._notice) or (self._notice.url or "").strip()
+            if target_url:
+                open_browser(notice_see_more_url(target_url))
+                self.action_clicked.emit(target_url)
 
     def _on_dismiss_clicked(self) -> None:
         if self._notice:

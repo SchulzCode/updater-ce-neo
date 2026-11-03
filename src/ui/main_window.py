@@ -2664,12 +2664,11 @@ class MainWindow(QMainWindow):
             from ..notice_service import NoticeService
 
             notices = NoticeService.instance()
-            for key in ("dismissed_notice_ids", "dismissed_notice_fingerprints"):
-                for store in (s, s_caps, s_ref):
-                    store.remove(key)
-            notices._session_dismissed.clear()
-            notices._banner_dismissed.clear()
-            notices._emit_next_notice()
+            notices.reset_all_read_state()
+            self._notices_available = bool(notices.active_notices)
+            if hasattr(self, "_notices_page") and hasattr(self._notices_page, "refresh_from_service"):
+                self._notices_page.refresh_from_service()
+            self._apply_notices_nav_visibility()
         except Exception as e:
             logger.debug("Notice read-state reset failed: %s", e)
 
@@ -2739,6 +2738,19 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.debug("manifest cache clearing error during reset: %s", e)
 
+        # Refresh notices and read-state after cache clearing so the cache is re-seeded.
+        try:
+            from ..notice_service import NoticeService
+
+            notices = NoticeService.instance()
+            notices.reset_all_read_state()
+            self._notices_available = bool(notices.active_notices)
+            if hasattr(self, "_notices_page") and hasattr(self._notices_page, "refresh_from_service"):
+                self._notices_page.refresh_from_service()
+            self._apply_notices_nav_visibility()
+        except Exception as e:
+            logger.debug("Notice read-state reset after cache clear failed: %s", e)
+
         # 6. Reset in-memory reveal and method state as well as its settings.
         # D unlocks diagnostics only for this session; R must close it if it is
         # open, and clear both D and M's persisted advanced-options flag.
@@ -2772,11 +2784,16 @@ class MainWindow(QMainWindow):
         shortcut.activated.connect(self.start_rockbox_themes_manually)
         self._themes_shortcut = shortcut
 
-        # Cmd+U (Ctrl+U elsewhere) opens the App updates card on demand, for testing.
+        # Cmd+U / Cmd+W (Ctrl+U / Ctrl+W elsewhere) opens the App updates card on demand, for testing.
         update_test = QShortcut(QKeySequence("Ctrl+U"), self)
         update_test.setContext(Qt.ShortcutContext.WindowShortcut)
         update_test.activated.connect(self._show_update_test)
         self._update_test_shortcut = update_test
+
+        update_test_w = QShortcut(QKeySequence("Ctrl+W"), self)
+        update_test_w.setContext(Qt.ShortcutContext.WindowShortcut)
+        update_test_w.activated.connect(self._show_update_test)
+        self._update_test_shortcut_w = update_test_w
 
     def _show_update_test(self) -> None:
         """Present the App updates card from the latest release, even if not newer."""
@@ -2800,6 +2817,7 @@ class MainWindow(QMainWindow):
                 tr("update_check_failed"),
             )
             return
+        self._notify_app_update(info, force=True)
         self._offer_app_update(info)
 
     def _manual_themes_model(self) -> str:
@@ -3532,15 +3550,14 @@ class MainWindow(QMainWindow):
             or getattr(self, "_install_failed", False)
             or getattr(self, "_power_off_prompt", False)
             or getattr(self, "_drop_check_active", False)
+            or getattr(self, "_keep_data_confirm_pending", False)
+            or getattr(self, "_keep_data_erase_confirm_pending", False)
         )
         # The flags outlive the card (a failed or finished install keeps its
         # state for when the user comes back), so they only decide the size
         # while the card is the page on screen. Any other page owns the window
-        # and grows it back. The catalogue is the one exception: it is still
-        # showing for a moment after Install starts.
-        hug_install = install_flags and (
-            curr_idx == _PAGE_FLASH or (curr_idx == _PAGE_SELECT and is_install)
-        )
+        # and grows it back.
+        hug_install = install_flags and curr_idx == _PAGE_FLASH
 
         if hug_install:
             # Hug the progress card. The minimum comes from the wrapped copy
@@ -3642,7 +3659,8 @@ class MainWindow(QMainWindow):
             self.setMinimumSize(min_w, min_h)
             # Whatever page is on screen now owns the window size: leaving the
             # install card grows it back, a short page gives the room up.
-            self._fit_window_to_page()
+            if curr_idx != _PAGE_FLASH:
+                self._fit_window_to_page()
 
     def _on_support_content_changed(self) -> None:
         """The appeal rewrapped: give the window the height the card now needs.
@@ -3803,6 +3821,16 @@ class MainWindow(QMainWindow):
         if getattr(self, "_user_dragging", False) or _mouse_button_held():
             # Never move the frame out from under a caption drag, including a
             # native title-bar drag Qt does not report to our header.
+            self._install_fit_generation = None
+            timer = getattr(self, "_drag_geometry_retry", None)
+            if timer is None:
+                timer = QTimer(self)
+                timer.setSingleShot(True)
+                timer.setInterval(250)
+                timer.timeout.connect(self._adjust_window_geometry)
+                self._drag_geometry_retry = timer
+            if not timer.isActive():
+                timer.start()
             return
         self._release_select_window_size()
         width = int(width)
@@ -4167,6 +4195,8 @@ class MainWindow(QMainWindow):
             self._highlight_nav(self._stack.currentIndex(), self._install_run_active())
             return
         self._stack.setCurrentIndex(page_idx)
+        if page_idx == _PAGE_FLASH:
+            self._install_fit_generation = None
         # A row highlights itself when clicked, but navigation started anywhere
         # else -- a notice toast, a shortcut, a hand-off from the flash page --
         # has to move the selection too, or the old row stays lit. This is the
@@ -5502,6 +5532,14 @@ class MainWindow(QMainWindow):
                 catalogue_latest=latest_tag,
                 hardware_type=rel_info.get("hardware_type") or rel_info.get("type_variant") or (self._select_page.current_hardware_type() if hasattr(self, "_select_page") else ""),
             )
+            # The player has just joined the update-reminder list, so its
+            # model, firmware and repository can now bring notices to the card.
+            try:
+                from ..notice_service import NoticeService
+
+                NoticeService.instance().refresh_context()
+            except Exception as e:
+                logger.debug("Could not refresh the notice context after install: %s", e)
         if hasattr(self, "_settings_page"):
             self._settings_page.mark_firmware_installed()
             self._settings_page.refresh_settings()
@@ -6198,7 +6236,11 @@ class MainWindow(QMainWindow):
             )
             choices = ()
         self._keep_data_confirm_pending = True
-        hint = tr("keep_data_only_compatible_hint")
+        y1_like = "Y1" in model.upper() or "A5" in model.upper()
+        if y1_like:
+            hint = tr("keep_data_only_compatible_hint_y1")
+        else:
+            hint = tr("keep_data_only_compatible_hint_other")
         self._flash_page.show_keep_data_confirmation(
             question, hint, choices
         )
@@ -7655,30 +7697,35 @@ class MainWindow(QMainWindow):
             return tray
         return None
 
-    def _notify_app_update(self, info) -> None:
+    def _notify_app_update(self, info, force: bool = False) -> None:
         """Announce a waiting app build natively; clicking opens its update view."""
         import re
 
         from .. import notice_alerts
 
-        if not notice_alerts.app_updates_enabled():
+        if not force and not notice_alerts.app_updates_enabled():
             return
         version = str(getattr(info, "version", "") or "")
         if not version:
             return
-        if getattr(self, "_notified_app_update_version", "") == version:
-            return
-        # Persisted too, so a restart does not announce the same build again.
-        from PySide6.QtCore import QSettings
+        if not force:
+            if getattr(self, "_notified_app_update_version", "") == version:
+                return
+            # Persisted too, so a restart does not announce the same build again.
+            from PySide6.QtCore import QSettings
 
-        settings = QSettings("innioasis", "updater")
-        if settings.value("notified_app_update_version", "", type=str) == version:
-            self._notified_app_update_version = version
-            return
+            settings = QSettings("innioasis", "updater")
+            if settings.value("notified_app_update_version", "", type=str) == version:
+                self._notified_app_update_version = version
+                return
         body = tr("update_available_fmt").format(new=version, current=APP_VERSION)
         body = re.sub(r"<[^>]+>", "", body)
         self._notified_app_update_version = version
-        settings.setValue("notified_app_update_version", version)
+        if not force:
+            from PySide6.QtCore import QSettings
+
+            settings = QSettings("innioasis", "updater")
+            settings.setValue("notified_app_update_version", version)
         notice_alerts.deliver(
             tr("update_available"),
             body,

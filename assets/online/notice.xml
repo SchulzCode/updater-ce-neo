@@ -19,6 +19,25 @@
   - from: optional ISO date YYYY-MM-DD. Shown on or after this date.
   - until: optional ISO date YYYY-MM-DD. Shown on or before this date.
   - models: optional comma-separated list of target models (e.g. "Y1,Y2"). Omit for all models.
+  - platform: optional comma-separated list (mac,windows,linux). Omitted means all.
+
+  Contextual targeting (all optional; every attribute set must match):
+  - device_type: comma-separated hardware revisions, e.g. "A" or "B" ("Type A"
+      is accepted). Y1 is the only model with revisions today.
+  - firmware_repo: the repository the notice is about, written exactly as in
+      slidia_manifest.xml, e.g. "rockbox-y1/rockbox". Full GitHub URLs are
+      accepted and * wildcards work.
+  - firmware_version: comma-separated release tags, e.g. "v3.2.0", "v3.2.*"
+      or "*" for any release of that repository. The leading "v" is optional.
+
+  A notice with none of these is for EVERYONE. On the Select Software card the
+  app shows one notice at a time, ordered by how specific the match is
+  (firmware_repo, firmware_version, device_type, models, everyone) and cycles
+  through the rest of what applies. A reader's contexts are the current
+  selection plus every device logged for update reminders, so a notice for a
+  model the reader owns is offered even when another model is selected. The
+  Notices list, pop-out list and notification tray always show every active
+  notice, with no contextual narrowing.
 
   Child elements:
   - <title>: required, headline of the notice.

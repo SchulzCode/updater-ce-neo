@@ -250,13 +250,8 @@ class PreInstallGuidanceDialog(QDialog):
         layout.addLayout(btn_row)
 
 
-def notice_has_page_url(url: str) -> bool:
-    """Whether a notice's link points at an actual page.
-
-    A notice that only carries the bare site root (https://innioasis.app) has
-    no page of its own to open, so the detail view hides its Open page button
-    instead of sending the reader to the homepage.
-    """
+def notice_has_page_url(url: str, notice_id: str = "") -> bool:
+    """Whether a notice's link points at an actual page."""
     from urllib.parse import urlparse
 
     text = (url or "").strip()
@@ -271,7 +266,11 @@ def notice_has_page_url(url: str) -> bool:
     host = (parsed.hostname or "").lower()
     on_innioasis = host == "innioasis.app" or host.endswith(".innioasis.app")
     has_page = bool(parsed.path.strip("/") or parsed.query or parsed.fragment)
-    return has_page if on_innioasis else True
+    if not on_innioasis:
+        return True
+    if has_page:
+        return True
+    return bool(notice_id and notice_id.strip())
 
 
 def notice_see_more_url(url: str, lang: str | None = None) -> str:
@@ -287,6 +286,37 @@ def notice_see_more_url(url: str, lang: str | None = None) -> str:
         "https://translate.google.com/translate?sl=auto&tl="
         f"{quote(code, safe='')}&u={quote(url, safe='')}"
     )
+
+
+def notice_read_more_url(notice) -> str:
+    """Form the URL for a notice on innioasis.app, taking the reader to the notice in full.
+
+    In Updater CE, notices show the 'content' attribute/element in-app while
+    viewing the full notice in the web browser takes the user to the notice in full on
+    innioasis.app with the notice ID parameter (e.g. notices.html?notice=<id>).
+    """
+    if notice is None:
+        return ""
+    if hasattr(notice, "web_url") and notice.web_url:
+        return notice.web_url
+    url = (getattr(notice, "url", None) or "").strip()
+    notice_id = (getattr(notice, "id", None) or "").strip()
+    if url:
+        from urllib.parse import urlsplit
+
+        parts = urlsplit(url)
+        host = (parts.hostname or "").lower()
+        on_innioasis = host == "innioasis.app" or host.endswith(".innioasis.app")
+        path = parts.path.strip("/")
+        is_bare_root = not path and not parts.query and not parts.fragment
+        is_generic_notices = path == "notices.html" and "notice=" not in parts.query
+        if not on_innioasis or (not is_bare_root and not is_generic_notices):
+            return url
+    if notice_id:
+        from urllib.parse import quote
+
+        return f"https://innioasis.app/notices.html?notice={quote(notice_id)}"
+    return url if (url and notice_has_page_url(url)) else ""
 
 
 def _style_notice_link_button(button) -> None:
@@ -525,8 +555,9 @@ class NoticeDetailView(QWidget):
             or ""
         )
         self._body.set_markdown(body, text_color=T().fg)
-        self._page_url = notice_see_more_url(getattr(notice, "url", ""))
-        self._open_page.setVisible(notice_has_page_url(getattr(notice, "url", "")))
+        target_url = notice_read_more_url(notice)
+        self._page_url = notice_see_more_url(target_url) if target_url else ""
+        self._open_page.setVisible(bool(self._page_url))
 
     def notice(self):
         return self._notice
@@ -855,16 +886,12 @@ class _NoticeRow(QFrame):
                 dates.setStyleSheet(f"font-size: 12px; color: {t.fg_muted};")
                 col.addWidget(dates)
 
-        # The card carries the complete notice body, rendered as Markdown.
-        # _NoticeMarkdownView also fetches remote images and opens links in the
-        # user's browser. A bounded height keeps a long body scrollable inside
-        # the card rather than making one notice dominate the page.
-        full_text = (notice.full_content or "").strip()
-        body_text = full_text or notice.content or ""
-        has_more = bool(
-            (full_text and full_text != (notice.content or "").strip())
-            or notice_has_page_url(notice.url)
-        )
+        # In Updater CE 2.5.2, notices show the short description from <content>
+        # (or content="..." attribute). "Read more" forms a URL to take users
+        # to the notice in full in their browser (innioasis.app/notices.html?notice=<id>).
+        body_text = (notice.content or notice.full_content or "").strip()
+        read_more_url = notice_read_more_url(notice)
+        has_more = bool(read_more_url)
         self._body = _NoticeMarkdownView(self)
         self._body.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._body.setMinimumHeight(40)
@@ -874,8 +901,8 @@ class _NoticeRow(QFrame):
         self._body.document().contentsChanged.connect(self._fit_body)
         col.addWidget(self._body)
 
-        page_url = getattr(notice, "url", "")
-        self._page_url = notice_see_more_url(page_url)
+        target_url = read_more_url
+        self._page_url = notice_see_more_url(target_url) if target_url else ""
         self._open_page = QPushButton(self)
         self._open_page.setObjectName("noticesOpenPage")
         self._open_page.setIcon(get_symbol_icon("globe", 16, color=t.fg))
@@ -889,10 +916,10 @@ class _NoticeRow(QFrame):
             "QPushButton { border: none; background: transparent; padding: 2px; }"
         )
         self._open_page.clicked.connect(self._open_notice_page)
-        self._open_page.setVisible(notice_has_page_url(page_url))
+        self._open_page.setVisible(bool(self._page_url))
 
         self._more = _notice_link_button(tr("notices_read_more"), self)
-        self._more.clicked.connect(self._request_open_notice)
+        self._more.clicked.connect(self._on_read_more_clicked)
         self._more.setVisible(has_more)
 
         footer = QHBoxLayout()
@@ -927,6 +954,15 @@ class _NoticeRow(QFrame):
     def resizeEvent(self, event):  # noqa: N802 (Qt naming)
         super().resizeEvent(event)
         self._fit_body()
+
+    def _on_read_more_clicked(self) -> None:
+        url = notice_read_more_url(self._notice)
+        if url:
+            from ..browser import open_browser
+
+            open_browser(notice_see_more_url(url))
+        else:
+            self._request_open_notice()
 
     def _request_open_notice(self) -> None:
         self.open_notice.emit(self._notice)

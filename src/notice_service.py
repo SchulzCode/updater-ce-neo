@@ -13,14 +13,29 @@ Notices support:
   which notification category a notice belongs to.
 - Dismissals are per notice, not per file: a changed notice.xml shows its new
   notices and keeps the ones the user already dismissed out of the list.
+
+Contextual targeting (Select Software card only; the Notices list, the pop-out
+list and the notification tray always receive every active notice):
+- models: comma-separated target models (``Y1,Y2``).
+- device_type: comma-separated hardware revisions (``A`` / ``B``).
+- firmware_repo: the GitHub repository a notice is about, matching ``repo`` in
+  ``slidia_manifest.xml`` (``rockbox-y1/rockbox``). Wildcards are allowed.
+- firmware_version: release tag(s) the notice is about (``v3.2.0``, ``v3.2.*``),
+  matching the release the reader has selected or the one they last installed.
+A notice with none of them is for everyone. A target only narrows the card:
+notice for a model the reader has no interest in is not offered there, while a
+notice for a model they logged for update reminders (in Settings or by an
+install) is. Several applicable notices alternate on the card, one at a time.
 """
 
 from __future__ import annotations
 
+import fnmatch
 import hashlib
 import json
 import logging
 import os
+import re
 import sys
 import threading
 from dataclasses import dataclass, replace
@@ -36,6 +51,10 @@ from .paths import app_cache_dir
 logger = logging.getLogger(__name__)
 
 NOTICE_URL = "https://innioasis.app/notice.xml"
+# One notice exists on the card at a time; several applicable notices take
+# turns on that card so a reader does not have to open the list to see them.
+NOTICE_ROTATION_MS = 12_000
+_UNSET = object()
 _SETTINGS_DISMISSED_KEY = "dismissed_notice_ids"
 _SETTINGS_DISMISSED_FINGERPRINTS_KEY = "dismissed_notice_fingerprints"
 _SETTINGS_CACHED_HASH_KEY = "notice_xml_content_hash"
@@ -62,21 +81,59 @@ class Notice:
     models: tuple[str, ...] = ()
     # CSV of platforms this notice targets (``mac,windows``); empty means all.
     platforms: tuple[str, ...] = ()
+    # Context targets beyond the model: the hardware revision(s) (``A``/``B``),
+    # the firmware repository the notice is about (the same ``repo`` value
+    # ``slidia_manifest.xml`` uses), and the release tag(s) it applies to.
+    # Empty means "no narrowing on this axis"; all of them empty means the
+    # notice is for everyone.
+    device_types: tuple[str, ...] = ()
+    firmware_repo: str = ""
+    firmware_versions: tuple[str, ...] = ()
     # Digest of the source wording. It survives translation so switching
     # language cannot make a dismissed notice look newly edited.
     source_fingerprint: str = ""
 
-    def is_active_for(self, model: str = "", platform: str = "") -> bool:
-        """Check if notice is within its date window and matches the given model."""
+    @property
+    def is_contextual(self) -> bool:
+        """True when the notice targets anything more specific than everyone."""
+        return bool(
+            self.models
+            or self.device_types
+            or self.firmware_repo
+            or self.firmware_versions
+        )
+
+    @property
+    def web_url(self) -> str:
+        """The canonical URL for viewing this notice in a web browser."""
+        from urllib.parse import quote, urlsplit
+
+        url = (self.url or "").strip()
+        if url:
+            parts = urlsplit(url)
+            host = (parts.hostname or "").lower()
+            on_innioasis = host == "innioasis.app" or host.endswith(".innioasis.app")
+            path = parts.path.strip("/")
+            is_bare_root = not path and not parts.query and not parts.fragment
+            is_generic_notices = path == "notices.html" and "notice=" not in parts.query
+            if not on_innioasis or (not is_bare_root and not is_generic_notices):
+                return url
+        if self.id:
+            return f"https://innioasis.app/notices.html?notice={quote(self.id.strip())}"
+        return url
+
+    def is_live(self, platform: str = "") -> bool:
+        """Whether the notice is published right now for ``platform``.
+
+        This is the only filter the Notices list, the pop-out list and the
+        notification tray apply: they show an announcement for everyone even
+        when its contextual targets do not fit the current selection.
+        """
         today = date.today()
         if self.from_date and today < self.from_date.date():
             return False
         if self.until_date and today > self.until_date:
             return False
-        if self.models and model:
-            target = model.strip().upper()
-            if not any(m.strip().upper() == target for m in self.models):
-                return False
         if self.platforms:
             wanted = {p.strip().lower() for p in self.platforms if p.strip()}
             if "none" in wanted:
@@ -84,6 +141,105 @@ class Notice:
             if platform and platform.strip().lower() not in wanted:
                 return False
         return True
+
+    def is_active_for(
+        self,
+        model: str = "",
+        platform: str = "",
+        device_type: str = "",
+        firmware_repo: str = "",
+        firmware_version: str = "",
+    ) -> bool:
+        """Check the date window, platform and the notice's context targets.
+
+        ``model``/``device_type``/``firmware_repo``/``firmware_version``
+        describe one reader context (what they selected, or a device they
+        logged). Every target the notice sets must match it; a target the
+        notice leaves blank is not narrowed. Callers that only have a model
+        (as older call sites do) keep the original model-only behaviour.
+        """
+        if not self.is_live(platform):
+            return False
+        if self.models and model:
+            target = model.strip().upper()
+            if not any(m.strip().upper() == target for m in self.models):
+                return False
+        if self.device_types:
+            wanted_types = {t.strip().upper() for t in self.device_types if t.strip()}
+            if device_type:
+                if device_type.strip().upper() not in wanted_types:
+                    return False
+            elif model:
+                # No revision is known for this context. A model sold in one
+                # revision is evidence enough that the notice does not apply;
+                # a model with revisions could still match, so leave it be.
+                available = _hardware_types_for(model)
+                if not available or not (wanted_types & {t.upper() for t in available}):
+                    return False
+        if self.firmware_repo:
+            if not firmware_repo or not _repo_matches(self.firmware_repo, firmware_repo):
+                return False
+        if self.firmware_versions:
+            if not _version_matches(self.firmware_versions, firmware_version):
+                return False
+        return True
+
+    def matches(self, context: "NoticeContext", platform: str = "") -> bool:
+        """True when this notice applies to one reader context."""
+        ctx = context or NoticeContext()
+        return self.is_active_for(
+            model=ctx.model,
+            platform=platform,
+            device_type=ctx.device_type,
+            firmware_repo=ctx.firmware_repo,
+            firmware_version=ctx.firmware_version,
+        )
+
+    def context_score(self, context: "NoticeContext", platform: str = "") -> int:
+        """How specifically this notice answers ``context`` (-1 when it does not).
+
+        The Select Software card orders by this, so the firmware the reader is
+        looking at is talked about before a general announcement. A notice
+        with no targets scores 0 and stays in the rotation for everyone.
+        """
+        ctx = context or NoticeContext()
+        if not self.matches(ctx, platform):
+            return -1
+        score = 0
+        if self.firmware_repo:
+            score += 8
+        if self.firmware_versions:
+            score += 4
+        if self.device_types:
+            score += 2
+        if self.models:
+            score += 1
+        return score
+
+
+@dataclass(frozen=True)
+class NoticeContext:
+    """One reader's situation, used to pick contextual notices.
+
+    The Select Software screen contributes the model, revision, software repo
+    and selected release. Every device logged for update reminders
+    contributes its own model, hardware type, software repo and last installed
+    tag, so a notice about a player the reader actually owns is offered even
+    while another model is selected in the drop-down.
+    """
+
+    model: str = ""
+    device_type: str = ""
+    firmware_repo: str = ""
+    firmware_version: str = ""
+
+    def is_empty(self) -> bool:
+        return not (
+            self.model
+            or self.device_type
+            or self.firmware_repo
+            or self.firmware_version
+        )
 
 
 def notice_fingerprint(notice: Notice) -> str:
@@ -101,6 +257,81 @@ def notice_fingerprint(notice: Notice) -> str:
         for part in (notice.title, notice.content, notice.full_content)
     )
     return hashlib.sha256(text.encode("utf-8")).hexdigest()[:24]
+
+
+def _hardware_types_for(model: str) -> tuple[str, ...]:
+    """Hardware revisions ``model`` was sold in (empty for single-revision models)."""
+    try:
+        from .config import hardware_types_for_model
+
+        return hardware_types_for_model(model)
+    except Exception:
+        return ()
+
+
+def _normalise_repo(repo: str) -> str:
+    """A repository name comparable with ``firmware_repo=``.
+
+    Accepts ``rockbox-y1/rockbox`` as well as a GitHub URL, ignores a trailing
+    ``.git`` and case, so the feed and ``slidia_manifest.xml`` can be written
+    the way each is normally written.
+    """
+    text = str(repo or "").strip()
+    text = re.sub(r"^https?://(?:www\.)?github\.com/", "", text, flags=re.IGNORECASE)
+    text = text.strip().rstrip("/")
+    if text.lower().endswith(".git"):
+        text = text[:-4]
+    return text.casefold()
+
+
+def _repo_matches(targets: str, repo: str) -> bool:
+    """True when ``repo`` is one of the (possibly wildcard) notice repos."""
+    wanted = _normalise_repo(repo)
+    if not wanted:
+        return False
+    for part in str(targets or "").split(","):
+        pattern = _normalise_repo(part)
+        if pattern and fnmatch.fnmatchcase(wanted, pattern):
+            return True
+    return False
+
+
+def _version_matches(patterns: tuple[str, ...], version: str) -> bool:
+    """Match a release tag against ``firmware_version`` patterns.
+
+    ``*`` matches any release (a repo-wide notice), ``v3.2.*`` matches that
+    series, and a bare ``3.2.0`` matches a ``v3.2.0`` tag: the leading ``v`` is
+    the feed's business, not the reader's.
+    """
+    tag = str(version or "").strip()
+    if not tag:
+        return any(str(p).strip() == "*" for p in patterns)
+    candidates = {tag.casefold(), tag.lstrip("vV").casefold()}
+    for pattern in patterns:
+        wanted = str(pattern or "").strip().casefold()
+        if not wanted:
+            continue
+        for candidate in candidates:
+            if fnmatch.fnmatchcase(candidate, wanted):
+                return True
+            if wanted.startswith("v") and fnmatch.fnmatchcase(candidate, wanted[1:]):
+                return True
+    return False
+
+
+def _parse_device_types(value: str | None) -> tuple[str, ...]:
+    """``device_type="A"`` / ``"Type A, B"`` to ``("A", "B")``."""
+    types: list[str] = []
+    for part in str(value or "").replace(";", ",").split(","):
+        text = part.strip()
+        if not text:
+            continue
+        if text.lower().startswith("type"):
+            pieces = text.split()
+            text = pieces[-1] if pieces else ""
+        if text:
+            types.append(text.upper())
+    return tuple(types)
 
 
 def current_platform() -> str:
@@ -232,6 +463,18 @@ def parse_notice_xml(xml_content: str) -> list[Notice]:
                 url_el = el.find("link")
             url = url_el.text.strip() if url_el is not None and url_el.text else ""
 
+        if url:
+            from urllib.parse import quote, urlsplit
+
+            parsed = urlsplit(url)
+            host = (parsed.hostname or "").lower()
+            if host == "innioasis.app" or host.endswith(".innioasis.app"):
+                path = parsed.path.strip("/")
+                is_bare_root = not path and not parsed.query and not parsed.fragment
+                is_generic_notices = path == "notices.html" and "notice=" not in parsed.query
+                if (is_bare_root or is_generic_notices) and notice_id:
+                    url = f"https://innioasis.app/notices.html?notice={quote(notice_id)}"
+
         from_d = _parse_timestamp(el.get("from"))
         until_d = _parse_date(el.get("until"))
 
@@ -240,6 +483,16 @@ def parse_notice_xml(xml_content: str) -> list[Notice]:
         platforms_raw = el.get("platform", "")
         platforms = tuple(
             p.strip().lower() for p in platforms_raw.split(",") if p.strip()
+        )
+        # Contextual targeting: hardware revision, firmware repository and
+        # release tag(s). They only narrow the Select Software card; the
+        # Notices list keeps showing every active notice.
+        device_types = _parse_device_types(el.get("device_type"))
+        firmware_repo = (el.get("firmware_repo") or "").strip()
+        firmware_versions = tuple(
+            part.strip()
+            for part in (el.get("firmware_version") or "").split(",")
+            if part.strip()
         )
 
         notice = Notice(
@@ -255,6 +508,9 @@ def parse_notice_xml(xml_content: str) -> list[Notice]:
             until_date=until_d,
             models=models,
             platforms=platforms,
+            device_types=device_types,
+            firmware_repo=firmware_repo,
+            firmware_versions=firmware_versions,
         )
         notice.source_fingerprint = notice_fingerprint(notice)
         # The app already carries the one-time battery toast on Select
@@ -292,13 +548,31 @@ class NoticeService(QObject):
         self._session_dismissed_fingerprints: dict[str, str] = {}
         self._banner_dismissed: set[str] = set()
         self._active_notices: list[Notice] = []
+        # The Select Software selection: model, hardware revision, and the
+        # firmware the reader is looking at. Logged devices are read live from
+        # the install records instead of being copied here.
         self._current_model: str = ""
+        self._current_type: str = ""
+        self._current_repo: str = ""
+        self._current_version: str = ""
+        self._rotation_index = 0
+        self._rotation_timer = None
         self._fetch_lock = threading.Lock()
         self._fetch_inflight = False
+        try:
+            snapshot = self._snapshot_text()
+            if snapshot:
+                from .i18n import current_language
+
+                self._active_notices = self._localised(
+                    parse_notice_xml(snapshot), current_language(), cached_only=True
+                )
+        except Exception:
+            pass
 
     @property
     def active_notices(self) -> list[Notice]:
-        """Notices currently shown for this model, with dismissals respected."""
+        """Notices currently active and not dismissed, across all models."""
         dismissed_past = self.get_dismissed_ids()
         dismissed_fingerprints = self.get_dismissed_fingerprints()
         platform = current_platform()
@@ -326,7 +600,8 @@ class NoticeService(QObject):
                 stored = dismissed_fingerprints.get(notice.id, "") or dismissed_fingerprints.get(compound_key, "")
                 if not stored or stored == fingerprint:
                     continue
-            if not notice.is_active_for(self._current_model, platform):
+            # Context is not applied here: the full list is everyone's.
+            if not notice.is_live(platform=platform):
                 continue
             visible.append(notice)
         return visible
@@ -349,55 +624,59 @@ class NoticeService(QObject):
 
     def get_dismissed_ids(self) -> set[str]:
         """IDs of non-persistent notices that were dismissed in past runs."""
-        s = QSettings("Innioasis", "Innioasis Updater")
-        val = s.value(_SETTINGS_DISMISSED_KEY, [])
-        if isinstance(val, str):
-            return set(val.split(",")) if val else set()
-        if isinstance(val, (list, tuple, set)):
-            return set(str(x) for x in val if x)
-        return set()
+        ids: set[str] = set()
+        for org, app in (("Innioasis", "Innioasis Updater"), ("innioasis", "updater")):
+            s = QSettings(org, app)
+            val = s.value(_SETTINGS_DISMISSED_KEY, [])
+            if isinstance(val, str) and val:
+                ids.update(val.split(","))
+            elif isinstance(val, (list, tuple, set)):
+                ids.update(str(x) for x in val if x)
+        return ids
 
     def set_dismissed_ids(self, ids: set[str]) -> None:
-        s = QSettings("Innioasis", "Innioasis Updater")
-        if ids:
-            s.setValue(_SETTINGS_DISMISSED_KEY, sorted(ids))
-        elif hasattr(s, "remove"):
-            # Remove rather than store an empty array: macOS keeps the old
-            # value when an empty list is written, which made a cleared
-            # dismissal come back on the next launch.
-            s.remove(_SETTINGS_DISMISSED_KEY)
-        else:
-            s.setValue(_SETTINGS_DISMISSED_KEY, [])
-        sync = getattr(s, "sync", None)
-        if callable(sync):
-            sync()
+        for org, app in (("Innioasis", "Innioasis Updater"), ("innioasis", "updater")):
+            s = QSettings(org, app)
+            if ids:
+                s.setValue(_SETTINGS_DISMISSED_KEY, sorted(ids))
+            elif hasattr(s, "remove"):
+                # Remove rather than store an empty array: macOS keeps the old
+                # value when an empty list is written, which made a cleared
+                # dismissal come back on the next launch.
+                s.remove(_SETTINGS_DISMISSED_KEY)
+            else:
+                s.setValue(_SETTINGS_DISMISSED_KEY, [])
+            sync = getattr(s, "sync", None)
+            if callable(sync):
+                sync()
 
     def get_dismissed_fingerprints(self) -> dict[str, str]:
         """Digest of each dismissed notice's wording, keyed by notice id."""
-        raw = QSettings("Innioasis", "Innioasis Updater").value(
-            _SETTINGS_DISMISSED_FINGERPRINTS_KEY, ""
-        )
-        if not raw:
-            return {}
-        try:
-            data = json.loads(str(raw))
-        except Exception:
-            return {}
-        if not isinstance(data, dict):
-            return {}
-        return {str(k): str(v) for k, v in data.items() if k and v}
+        fingerprints: dict[str, str] = {}
+        for org, app in (("Innioasis", "Innioasis Updater"), ("innioasis", "updater")):
+            raw = QSettings(org, app).value(_SETTINGS_DISMISSED_FINGERPRINTS_KEY, "")
+            if not raw:
+                continue
+            try:
+                data = json.loads(str(raw))
+                if isinstance(data, dict):
+                    fingerprints.update({str(k): str(v) for k, v in data.items() if k and v})
+            except Exception:
+                pass
+        return fingerprints
 
     def set_dismissed_fingerprints(self, values: dict[str, str]) -> None:
-        s = QSettings("Innioasis", "Innioasis Updater")
-        if values:
-            s.setValue(_SETTINGS_DISMISSED_FINGERPRINTS_KEY, json.dumps(values, sort_keys=True))
-        elif hasattr(s, "remove"):
-            s.remove(_SETTINGS_DISMISSED_FINGERPRINTS_KEY)
-        else:
-            s.setValue(_SETTINGS_DISMISSED_FINGERPRINTS_KEY, "")
-        sync = getattr(s, "sync", None)
-        if callable(sync):
-            sync()
+        for org, app in (("Innioasis", "Innioasis Updater"), ("innioasis", "updater")):
+            s = QSettings(org, app)
+            if values:
+                s.setValue(_SETTINGS_DISMISSED_FINGERPRINTS_KEY, json.dumps(values, sort_keys=True))
+            elif hasattr(s, "remove"):
+                s.remove(_SETTINGS_DISMISSED_FINGERPRINTS_KEY)
+            else:
+                s.setValue(_SETTINGS_DISMISSED_FINGERPRINTS_KEY, "")
+            sync = getattr(s, "sync", None)
+            if callable(sync):
+                sync()
 
     def reset_all_read_state(self) -> None:
         """Reset all dismissed and read states so every notice can be re-read."""
@@ -418,8 +697,18 @@ class NoticeService(QObject):
             sync = getattr(st, "sync", None)
             if callable(sync):
                 sync()
-        self.fetch_async(force=True)
+        try:
+            snapshot = self._snapshot_text()
+            if snapshot:
+                from .i18n import current_language
+
+                self._active_notices = self._localised(
+                    parse_notice_xml(snapshot), current_language(), cached_only=True
+                )
+        except Exception as e:
+            logger.debug("Failed re-parsing snapshot during reset_all_read_state: %s", e)
         self._emit_next_notice()
+        self.fetch_async(force=True)
 
     def dismiss_for_session(self, notice: Notice) -> None:
         """Hide a notice from the Select Software banner only.
@@ -455,9 +744,88 @@ class NoticeService(QObject):
         self._emit_next_notice()
 
     def set_model(self, model: str) -> None:
-        """Update target device model and re-evaluate active notice."""
-        self._current_model = model or ""
+        """Back-compat: update the target model and re-evaluate the card."""
+        self.set_context(model=model)
+
+    def set_context(
+        self,
+        model=_UNSET,
+        *,
+        device_type=_UNSET,
+        firmware_repo=_UNSET,
+        firmware_version=_UNSET,
+    ) -> None:
+        """Tell the service what the reader is looking at right now.
+
+        Only the axes passed are changed, so a model change can clear the
+        firmware context without forgetting the rest. A selection is a good
+        moment to surface something relevant: the card jumps to the notice
+        that best matches the new context, then resumes its rotation.
+        """
+        if model is not _UNSET:
+            self._current_model = (model or "").strip()
+        if device_type is not _UNSET:
+            self._current_type = (device_type or "").strip()
+        if firmware_repo is not _UNSET:
+            self._current_repo = (firmware_repo or "").strip()
+        if firmware_version is not _UNSET:
+            self._current_version = (firmware_version or "").strip()
+        self._rotation_index = 0
         self._emit_next_notice()
+
+    def refresh_context(self) -> None:
+        """Re-read logged devices and republish (after adding or installing one)."""
+        self._rotation_index = 0
+        self._emit_next_notice()
+
+    def tracked_contexts(self) -> list[NoticeContext]:
+        """Devices logged for update reminders, manually or by an install.
+
+        A notice about a player the reader owns should reach them even while
+        another model is selected in the drop-down. The install record names
+        the software and the tag it came from, which supplies the repository
+        and version a ``firmware_repo`` / ``firmware_version`` notice needs.
+        """
+        try:
+            from . import player_update_check
+
+            installs = player_update_check.get_all_device_installs()
+        except Exception:
+            logger.debug("Could not read logged devices for notices", exc_info=True)
+            return []
+        contexts: list[NoticeContext] = []
+        for key, record in (installs or {}).items():
+            rec = record or {}
+            model = str(rec.get("model") or str(key).split("_")[0] or "").strip().upper()
+            if not model:
+                continue
+            try:
+                if not player_update_check.is_device_reminder_enabled(model):
+                    continue
+            except Exception:
+                pass
+            contexts.append(
+                NoticeContext(
+                    model=model,
+                    device_type=str(rec.get("hardware_type") or "").strip(),
+                    firmware_repo=self._repo_for_software(model, rec.get("software_name") or ""),
+                    firmware_version=str(rec.get("tag_name") or "").strip(),
+                )
+            )
+        return contexts
+
+    @staticmethod
+    def _repo_for_software(model: str, software: str) -> str:
+        """The catalogue repository behind a logged install's software name."""
+        if not model or not software:
+            return ""
+        try:
+            from . import catalog
+
+            packages = catalog.packages_for_model_software(model, software)
+            return str(getattr(packages[0], "repo", "") or "") if packages else ""
+        except Exception:
+            return ""
 
     def fetch_async(self, force: bool = True) -> None:
         """Fetch remote notice.xml in a background thread, never concurrently."""
@@ -549,9 +917,8 @@ class NoticeService(QObject):
             # of the list even when the feed around it changes.
 
         # Translate new or changed notices (cached per notice and language), then show them.
-        if content_changed or not local_content or not is_english_language(lang):
-            self._active_notices = self._localised(parse_notice_xml(remote_content), lang)
-            self._emit_next_notice()
+        self._active_notices = self._localised(parse_notice_xml(remote_content), lang)
+        self._emit_next_notice()
 
     def reload_translations(self) -> None:
         """Re-render the cached notices in the language just selected.
@@ -628,21 +995,100 @@ class NoticeService(QObject):
         """
         self._emit_next_notice()
 
+    def selection_context(self) -> NoticeContext:
+        """The context the Select Software screen last reported."""
+        return NoticeContext(
+            model=self._current_model,
+            device_type=self._current_type,
+            firmware_repo=self._current_repo,
+            firmware_version=self._current_version,
+        )
+
+    def contextual_notices(self) -> list[Notice]:
+        """Active notices that apply to this reader, most specific first.
+
+        This is the Select Software card's set, not the Notices list: the list
+        (and the pop-out list, and the tray) keeps showing every active notice
+        so an announcement meant for everyone is never hidden by context.
+        """
+        return self._banner_candidates()
+
+    def _contexts(self) -> list[NoticeContext]:
+        """The selected context plus every device logged for reminders."""
+        contexts: list[NoticeContext] = []
+        selected = self.selection_context()
+        if not selected.is_empty():
+            contexts.append(selected)
+        for context in self.tracked_contexts():
+            if context not in contexts:
+                contexts.append(context)
+        return contexts
+
+    def _banner_candidates(self, visible: list[Notice] | None = None) -> list[Notice]:
+        """What the card may show, ordered by how well it fits this reader."""
+        notices = self.active_notices if visible is None else list(visible)
+        contexts = self._contexts()
+        platform = current_platform()
+        ranked: list[tuple[int, int, Notice]] = []
+        for position, notice in enumerate(notices):
+            if notice_fingerprint(notice) in self._banner_dismissed:
+                continue
+            best = -1
+            for context in contexts:
+                score = notice.context_score(context, platform)
+                if score >= 0:
+                    best = max(best, score)
+            # Without any context (first launch) the card still has to say
+            # something, so every notice is offered until a model is known.
+            if contexts and best < 0:
+                continue
+            ranked.append((-max(best, 0), position, notice))
+        ranked.sort(key=lambda row: (row[0], row[1]))
+        return [row[2] for row in ranked]
+
+    def _rotate_notice(self) -> None:
+        """Show the next applicable notice on the card, one at a time."""
+        candidates = self._banner_candidates()
+        if not candidates:
+            self.notice_ready.emit(None)
+            self._sync_rotation_timer(0)
+            return
+        self._rotation_index = (self._rotation_index + 1) % len(candidates)
+        self.notice_ready.emit(candidates[self._rotation_index])
+
+    def _sync_rotation_timer(self, count: int) -> None:
+        """Rotate only while more than one notice applies."""
+        from PySide6.QtCore import QCoreApplication, QTimer
+
+        if QCoreApplication.instance() is None:
+            return
+        if count < 2:
+            if self._rotation_timer is not None:
+                self._rotation_timer.stop()
+            return
+        if self._rotation_timer is None:
+            self._rotation_timer = QTimer(self)
+            self._rotation_timer.setInterval(NOTICE_ROTATION_MS)
+            self._rotation_timer.timeout.connect(self._rotate_notice)
+        if not self._rotation_timer.isActive():
+            self._rotation_timer.start()
+
     def _emit_next_notice(self) -> None:
         try:
             from .remote_flags import is_remote_flag_active
             if is_remote_flag_active("notices_off"):
                 self.notices_ready.emit([])
                 self.notice_ready.emit(None)
+                self._sync_rotation_timer(0)
                 return
         except Exception:
             pass
-        # The Notices list shows every active notice; the Select Software
-        # banner shows the first one that has not been hidden from it.
+        # The list, pop-out and tray see every active notice; the card gets
+        # one notice, chosen for this reader and rotated through the rest.
         visible = self.active_notices
         self.notices_ready.emit(visible)
-        banner = next(
-            (n for n in visible if notice_fingerprint(n) not in self._banner_dismissed),
-            None,
-        )
-        self.notice_ready.emit(banner)
+        candidates = self._banner_candidates(visible)
+        if self._rotation_index >= len(candidates):
+            self._rotation_index = 0
+        self.notice_ready.emit(candidates[self._rotation_index] if candidates else None)
+        self._sync_rotation_timer(len(candidates))

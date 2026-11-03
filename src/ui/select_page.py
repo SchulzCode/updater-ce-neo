@@ -1593,6 +1593,7 @@ class SelectPackagePage(QWidget):
                 toast.install_clicked.connect(self._on_model_toast_install)
                 toast.later_clicked.connect(self._on_model_toast_later)
                 self._model_toast_column.addWidget(toast)
+                toast.show()
                 self._model_toasts.append(toast)
         self.content_size_changed.emit()
 
@@ -1700,6 +1701,7 @@ class SelectPackagePage(QWidget):
             self._show_online_view()
         if hasattr(self, "_check_and_load_cached_firmware"):
             self._check_and_load_cached_firmware()
+        self._sync_notice_context()
         self.content_size_changed.emit()
 
     def retranslate(self):
@@ -1913,11 +1915,7 @@ class SelectPackagePage(QWidget):
         self._populate_software_combo(names)
         self._update_device_status_copy()
         self._on_software_changed()
-        try:
-            from ..notice_service import NoticeService
-            NoticeService.instance().set_model(model)
-        except Exception:
-            pass
+        self._sync_notice_context()
 
     def _on_notice_ready(self, notice) -> None:
         if hasattr(self, "_notice_prompt") and self._notice_prompt is not None:
@@ -2025,9 +2023,32 @@ class SelectPackagePage(QWidget):
     def _on_type_changed(self, index):
         self._selected_type = self._type_combo.currentData()
         self._refresh_releases()
+        self._sync_notice_context()
 
     def _on_software_changed(self):
         self._refresh_releases()
+        self._sync_notice_context()
+
+    def _sync_notice_context(self) -> None:
+        """Report what the reader is looking at, so notices can be contextual.
+
+        The model, hardware revision and the selected firmware's repository
+        and release tag narrow which notice the card offers. A selection
+        change is exactly when a targeted notice becomes worth surfacing.
+        """
+        try:
+            from ..notice_service import NoticeService
+
+            package = self.current_package()
+            rel = getattr(self, "_current_selected_rel", None) or {}
+            NoticeService.instance().set_context(
+                model=self.current_model(),
+                device_type=self.current_hardware_type(),
+                firmware_repo=str(getattr(package, "repo", "") or ""),
+                firmware_version=str(rel.get("tag_name") or ""),
+            )
+        except Exception:
+            logger.debug("Could not report the notice context", exc_info=True)
 
     def _refresh_releases(self, force_refresh=False):
         package = self.current_package()
@@ -2393,6 +2414,7 @@ class SelectPackagePage(QWidget):
             self._notes.updateGeometry()
             self._set_details_header(None, None)
             self._update_translate_link()
+            self._sync_notice_context()
             self._emit_gui_firmware_changed()
             return
         rel = current.data(Qt.UserRole)
@@ -2411,6 +2433,9 @@ class SelectPackagePage(QWidget):
             if self._auto_translate_notes and not is_english_language():
                 self._translate_current_release_in_app()
             self._update_translate_link()
+            # The selected release is now part of the notice context, so a
+            # notice about this firmware tag can take the card over.
+            self._sync_notice_context()
             self._emit_gui_firmware_changed()
 
     def _render_release_notes(self, rel, translated_body=None, translated_name=None, as_html: bool = False) -> str:

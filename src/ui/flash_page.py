@@ -3957,42 +3957,27 @@ class FlashPage(QWidget):
 
     def _open_post_install_guide(self) -> None:
         """Globe and inline hint: the firmware's setup page (``post_install``)."""
-        from ..browser import open_browser
-        from ..player_update_check import is_donation_ui_disabled
-        donations_enabled = not is_donation_ui_disabled()
+        from ..browser import open_browser, _with_donation_preference
+
         url = getattr(self, "_post_install_url", "") or getattr(self, "_post_install_url_2", "")
         if url:
-            if not donations_enabled:
-                sep = "&" if "?" in url else "?"
-                if "donations=" not in url:
-                    url = f"{url}{sep}donations=false"
-            open_browser(url)
+            open_browser(_with_donation_preference(url))
 
     def _open_view_guide(self) -> None:
-        """View Guide (donations shown): opens post_install link."""
-        from ..browser import open_browser
-        from ..player_update_check import is_donation_ui_disabled
-        donations_enabled = not is_donation_ui_disabled()
-        url = getattr(self, "_post_install_url", "") or getattr(self, "_post_install_url_2", "") or getattr(self, "_post_install_url_2", "")
+        """View Guide: opens post_install link."""
+        from ..browser import open_browser, _with_donation_preference
+
+        url = getattr(self, "_post_install_url", "") or getattr(self, "_post_install_url_2", "")
         if url:
-            if not donations_enabled:
-                sep = "&" if "?" in url else "?"
-                if "donations=" not in url:
-                    url = f"{url}{sep}donations=false"
-            open_browser(url)
+            open_browser(_with_donation_preference(url))
 
     def _open_coffee_page(self) -> None:
-        from ..browser import open_browser
+        from ..browser import open_browser, _with_donation_preference
         from ..config import DONATION_LINKS
-        from ..player_update_check import is_donation_ui_disabled
 
         post_install_2 = getattr(self, "_post_install_url_2", "")
         if post_install_2:
-            if is_donation_ui_disabled():
-                sep = "&" if "?" in post_install_2 else "?"
-                if "donations=" not in post_install_2:
-                    post_install_2 = f"{post_install_2}{sep}donations=false"
-            open_browser(post_install_2)
+            open_browser(_with_donation_preference(post_install_2))
         else:
             open_browser(DONATION_LINKS["kofi"])
 
@@ -4815,29 +4800,27 @@ class FlashPage(QWidget):
             h = card_h + warn_h + appeal_h + complete_note_h
         elif cur_view is self._waiting_view:
             card_h = self._wait_card.sizeHint().height()
+            head_h = self._wait_head.sizeHint().height() if hasattr(self, "_wait_head") else 48
+            wait_col = getattr(self, "_wait_col", None)
+            if wait_col is not None:
+                body_w = self.text_column_width() if hasattr(self, "text_column_width") else 260
+                copy_h = 0
+                for i in range(wait_col.count()):
+                    item = wait_col.itemAt(i)
+                    if item is not None and item.widget() is not None and item.widget().isVisible():
+                        w = item.widget()
+                        wh = w.sizeHint().height()
+                        if w.hasHeightForWidth():
+                            wh = max(wh, w.heightForWidth(int(body_w)))
+                        copy_h += wh + wait_col.spacing()
+                card_h = max(card_h, head_h + copy_h + 36)
             hint_h = 0
             if (
                 hasattr(self, "_paperclip_hint_host")
                 and self._paperclip_hint_host.isVisible()
+                and not self._wait_card.isAncestorOf(self._paperclip_hint_host)
             ):
-                if not self._wait_card.isAncestorOf(self._paperclip_hint_host):
-                    hint_h = self._paperclip_hint_host.sizeHint().height() + 6
-                else:
-                    head_h = self._wait_head.sizeHint().height() if hasattr(self, "_wait_head") else 48
-                    wait_col = getattr(self, "_wait_col", None)
-                    if wait_col is not None:
-                        copy_h = sum(
-                            wait_col.itemAt(i).widget().sizeHint().height() + wait_col.spacing()
-                            for i in range(wait_col.count())
-                            if wait_col.itemAt(i) is not None
-                            and wait_col.itemAt(i).widget() is not None
-                            and wait_col.itemAt(i).widget().isVisible()
-                        )
-                    else:
-                        prompt_h = self._wait_prompt_label.sizeHint().height() if hasattr(self, "_wait_prompt_label") else 40
-                        copy_h = prompt_h + self._paperclip_hint_host.minimumHeight()
-                    min_needed = head_h + copy_h + 36
-                    card_h = max(card_h, min_needed)
+                hint_h = self._paperclip_hint_host.sizeHint().height() + 6
             h = card_h + hint_h
         elif cur_view is self._preparing_view:
             h = self._prep_card.sizeHint().height()
