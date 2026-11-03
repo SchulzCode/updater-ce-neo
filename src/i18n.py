@@ -1584,6 +1584,14 @@ _STRINGS: dict = {
         "de": "Eine weitere Kopie ist geöffnet oder läuft noch im Hintergrund. Zwei Kopien würden um die USB-Verbindung des Players konkurrieren, daher startet diese nicht.",
         "ja": "別のコピーが開かれているか、バックグラウンドで実行中です。2つのコピーはプレーヤーの USB 接続を取り合うため、こちらは起動しません。",
     },
+    "single_instance_focus_failed": {
+        "en": "The running copy did not respond to the request to show its window. You can force quit it and start this one instead.",
+        "zh-CN": "正在运行的副本未响应显示窗口的请求。您可以强制退出它，然后启动此副本。",
+        "fr": "L'autre copie n'a pas répondu à la demande d'afficher sa fenêtre. Vous pouvez la forcer à quitter et démarrer celle-ci.",
+        "es": "La otra copia no respondió a la solicitud de mostrar su ventana. Puede forzar su cierre e iniciar esta.",
+        "de": "Die laufende Kopie hat nicht auf die Anforderung reagiert, ihr Fenster anzuzeigen. Sie können sie beenden und diese Kopie starten.",
+        "ja": "実行中のコピーはウィンドウ表示の要求に応答しませんでした。強制終了して、こちらを起動できます。",
+    },
     "single_instance_force_quit": {
         "en": "Force Quit Other Copy",
         "zh-CN": "强制退出其他副本",

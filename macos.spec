@@ -218,6 +218,10 @@ app = BUNDLE(
         "LSMinimumSystemVersion": "12.0",
         "NSHighResolutionCapable": True,
         "NSRequiresAquaSystemAppearance": False,
+        # Keep the pre-macOS-26 control rendering: the Liquid Glass design makes
+        # Qt's Aqua style draw combos as blue chevron capsules (see the Qt blog
+        # "Qt on macOS 26 Tahoe").
+        "UIDesignRequiresCompatibility": True,
         "LSApplicationCategoryType": "public.app-category.utilities",
         "NSHumanReadableCopyright": "Copyright © 2024-2026 Ryan Specter. All rights reserved.",
         "CFBundleDocumentTypes": [
@@ -280,6 +284,10 @@ try:
             "LSMinimumSystemVersion": "12.0",
             "NSHighResolutionCapable": True,
             "NSRequiresAquaSystemAppearance": False,
+        # Keep the pre-macOS-26 control rendering: the Liquid Glass design makes
+        # Qt's Aqua style draw combos as blue chevron capsules (see the Qt blog
+        # "Qt on macOS 26 Tahoe").
+        "UIDesignRequiresCompatibility": True,
             "NSPrincipalClass": "NSApplication",
             "NSHumanReadableCopyright": "Copyright © 2024-2026 Ryan Specter. All rights reserved.",
         }

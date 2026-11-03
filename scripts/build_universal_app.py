@@ -602,6 +602,13 @@ def build():
         "LSMinimumSystemVersion": "12.0",
         "NSHighResolutionCapable": True,
         "NSRequiresAquaSystemAppearance": False,
+        # macOS 26+ applies the Liquid Glass control design to apps built with
+        # the new SDK. Qt's Aqua style then draws combo boxes as white fields
+        # with a blue chevron capsule instead of the native pop-up buttons, and
+        # the window follows the new (grey) materials. Qt documents this key as
+        # the official opt-out: it keeps the pre-26 look and metrics, which is
+        # what the 2.5.1 builds (built with an older SDK) rendered.
+        "UIDesignRequiresCompatibility": True,
         "NSPrincipalClass": "NSApplication",
         "NSHumanReadableCopyright": "Copyright © 2024-2026 Ryan Specter. All rights reserved.",
         "CFBundleDocumentTypes": [

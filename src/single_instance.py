@@ -187,7 +187,7 @@ def terminate_pid(pid: int, wait_seconds: float = 4.0) -> bool:
     return not _pid_alive(pid)
 
 
-def _ask_force_quit(pid: int) -> bool:
+def _ask_force_quit(pid: int, focus_failed: bool = False) -> bool:
     """Ask the user whether to end the copy that is already running."""
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
@@ -210,7 +210,9 @@ def _ask_force_quit(pid: int) -> bool:
     title.setFont(font)
     layout.addWidget(title)
 
-    body = QLabel(tr("single_instance_body"))
+    body = QLabel(
+        tr("single_instance_focus_failed" if focus_failed else "single_instance_body")
+    )
     body.setWordWrap(True)
     body.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
     layout.addWidget(body)
@@ -256,7 +258,7 @@ def ensure_single_instance(app, lock: Optional[InstanceLock] = None) -> bool:
         logger.info("Asked the running copy (pid %s) to show its window", pid or "unknown")
         return False
 
-    if pid and _pid_alive(pid) and _ask_force_quit(pid):
+    if pid and _pid_alive(pid) and _ask_force_quit(pid, focus_failed=True):
         terminate_pid(pid)
         if lock.acquire():
             app._instance_lock = lock

@@ -264,6 +264,27 @@ _INSTALL_RUN_STATES = (
 )
 
 
+def _mouse_button_held() -> bool:
+    """True while a mouse button is down, including native macOS drags.
+
+    ``QApplication.mouseButtons()`` only knows about presses Qt delivered. A
+    drag that starts in AppKit's own title-bar region can own the gesture
+    without one, so the window would still accept a programmatic resize. AppKit
+    keeps the real button state; ask it first on macOS.
+    """
+    if sys.platform == "darwin":
+        try:
+            import AppKit
+
+            if AppKit.NSEvent.pressedMouseButtons():
+                return True
+        except Exception:
+            pass
+    from PySide6.QtWidgets import QApplication
+
+    return QApplication.mouseButtons() != Qt.MouseButton.NoButton
+
+
 class DraggableHeaderBar(QWidget):
     """Draggable header row: brand icon, title, and the active page name.
 
@@ -290,12 +311,19 @@ class DraggableHeaderBar(QWidget):
                 super().mousePressEvent(event)
                 return
             if win is not None:
-                self._dragging = True
-                self._drag_offset = event.globalPosition().toPoint() - win.pos()
                 win._user_dragging = True
+                win._stop_size_anim_for_drag()
             if begin_unified_caption_drag(win):
+                # The OS owns the gesture now. Leaving the manual mover armed
+                # made this widget move the window as well as AppKit, which
+                # read as the frame jumping under the cursor.
+                self._dragging = False
+                self._drag_offset = None
                 event.accept()
                 return
+            if win is not None:
+                self._dragging = True
+                self._drag_offset = event.globalPosition().toPoint() - win.pos()
             if getattr(self, "_dragging", False):
                 event.accept()
                 return
@@ -2244,14 +2272,18 @@ class MainWindow(QMainWindow):
             if in_bar and not caption_drag_blocked(bar.childAt(local)) and caption_button_hit(
                 local.x(), local.y(), getattr(self, "_caption_button_bounds", None),
             ) is None:
-                self._mw_dragging = True
-                self._mw_drag_offset = event.globalPosition().toPoint() - self.pos()
                 # No programmatic resize may land mid-gesture: it makes the
                 # window stutter and can cancel the drag outright.
                 self._user_dragging = True
+                self._stop_size_anim_for_drag()
                 if begin_unified_caption_drag(self):
+                    # Native drag: do not also run the manual mover.
+                    self._mw_dragging = False
+                    self._mw_drag_offset = None
                     event.accept()
                     return
+                self._mw_dragging = True
+                self._mw_drag_offset = event.globalPosition().toPoint() - self.pos()
                 event.accept()
                 return
         super().mousePressEvent(event)
@@ -3403,25 +3435,26 @@ class MainWindow(QMainWindow):
         ):
             return
 
-        if getattr(self, "_user_dragging", False):
-            # The user owns the frame while they move it. A resize animation
-            # started here fights the drag, so try again after the gesture.
-            from PySide6.QtWidgets import QApplication
-
-            if QApplication.mouseButtons() != Qt.MouseButton.NoButton:
-                timer = getattr(self, "_drag_geometry_retry", None)
-                if timer is None:
-                    timer = QTimer(self)
-                    timer.setSingleShot(True)
-                    timer.setInterval(250)
-                    timer.timeout.connect(self._adjust_window_geometry)
-                    self._drag_geometry_retry = timer
-                if not timer.isActive():
-                    timer.start()
-                return
+        held = _mouse_button_held()
+        if getattr(self, "_user_dragging", False) or held:
+            # The user owns the frame while they move it, including a native
+            # title-bar drag Qt never reports to our header. Resizing here
+            # makes AppKit shift the window under the cursor, so retry after
+            # the gesture instead.
+            timer = getattr(self, "_drag_geometry_retry", None)
+            if timer is None:
+                timer = QTimer(self)
+                timer.setSingleShot(True)
+                timer.setInterval(250)
+                timer.timeout.connect(self._adjust_window_geometry)
+                self._drag_geometry_retry = timer
+            if not timer.isActive():
+                timer.start()
             # A native drag can swallow the release event: no button held means
-            # the gesture is over, so the flag is stale and the fit may run.
-            self._user_dragging = False
+            # the gesture is over, so a stale flag may clear.
+            if not held:
+                self._user_dragging = False
+            return
 
         # If flash page is not yet set up, use minimum size to avoid crashes
         if not hasattr(self, "_flash_page"):
@@ -3702,12 +3735,24 @@ class MainWindow(QMainWindow):
         except Exception:
             logger.debug("Select content fit failed", exc_info=True)
 
+    def _stop_size_anim_for_drag(self) -> None:
+        """Cancel an in-flight fit animation before the user takes the frame."""
+        anim = getattr(self, "_size_anim", None)
+        if anim is not None:
+            try:
+                anim.stop()
+            except Exception:
+                pass
+            self._size_anim = None
+        self._size_animating = False
+
     def _animate_window_size(self, width: int, height: int, minimum=None) -> None:
         """Ease a programmatic resize. Reduced motion and a maximized window snap."""
         from .widgets import prefers_reduced_motion
 
-        if getattr(self, "_user_dragging", False):
-            # Never move the frame out from under a caption drag.
+        if getattr(self, "_user_dragging", False) or _mouse_button_held():
+            # Never move the frame out from under a caption drag, including a
+            # native title-bar drag Qt does not report to our header.
             return
         self._release_select_window_size()
         width = int(width)
@@ -4947,9 +4992,10 @@ class MainWindow(QMainWindow):
                 self._flash_start_ts = time.time()
             self._elapsed_timer.start(1000)
 
-    # One paint per tick, not per signal: 25 fps is more than a bar can show,
-    # and it leaves the event loop free for window drags and the caption.
-    _PROGRESS_COALESCE_MS = 40
+    # One paint per tick, not per signal. 10 fps is more than a percentage bar
+    # can show, and it keeps the event loop free while a backend floods it with
+    # per-partition ticks; 25 fps was measurable UI load during a flash.
+    _PROGRESS_COALESCE_MS = 100
     _PARTITION_COALESCE_MS = 80
 
     def _queue_progress(self, percent):
@@ -8053,7 +8099,27 @@ class MainWindow(QMainWindow):
     def close(self):
         return super().close()
 
+    def _schedule_app_quit(self) -> None:
+        """Leave after the current close handler has unwound.
+
+        The single-instance lock marks a real app session. A window created by
+        a test or an embedding host has no lock, and must not quit that host's
+        event loop or destroy its threads on the way out.
+        """
+        app = QApplication.instance()
+        if app is None or getattr(app, "_instance_lock", None) is None:
+            return
+        app.setQuitOnLastWindowClosed(True)
+        QTimer.singleShot(0, app.quit)
+
     def closeEvent(self, event):
+        app = QApplication.instance()
+        if app is not None and getattr(app, "_instance_lock", None) is not None:
+            # Do not let Qt quit in the middle of this handler. The close path
+            # retires workers, and quitting there destroyed the process while
+            # they were still winding up (SIGABRT on exit). A window built by a
+            # test or embedding host has no lock and keeps the host's setting.
+            app.setQuitOnLastWindowClosed(False)
         flashing_in_flight = (
             getattr(self, "_download_active", False)
             or getattr(self, "_prep_active", False)
@@ -8141,12 +8207,19 @@ class MainWindow(QMainWindow):
             return
         self._closing_accepted = True
         super().closeEvent(event)
+        self._schedule_app_quit()
 
     def _hide_to_tray(self, event) -> None:
         """Close the window but keep the process and its tray icon alive."""
         self.hide()
         event.ignore()
-        self._ensure_background_tray().show()
+        tray = self._ensure_background_tray()
+        tray.show()
+        if not tray.is_visible():
+            # No menu bar/tray on this host: an invisible process with no
+            # window and no icon is unreachable, so leave cleanly instead.
+            self._schedule_app_quit()
+            return
         self._start_background_update_timer()
         self._set_window_polling(False)
 
@@ -8220,7 +8293,7 @@ class MainWindow(QMainWindow):
             tray = getattr(self, "_background_tray", None)
             if tray is not None:
                 tray.hide()
-            QApplication.quit()
+            self._schedule_app_quit()
 
 
 _METHOD_LABELS = {

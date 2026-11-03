@@ -728,11 +728,6 @@ def prune_to_firmware_package(extract_dir: Union[str, Path]) -> list[str]:
             keep.add(ini.resolve())
     if (folder / FW_PACKAGE_INI).is_file():
         keep.add((folder / FW_PACKAGE_INI).resolve())
-    # Y2Linux's manifest carries the authoritative absolute partition
-    # addresses; MTKclient needs it beside the scatter when flashing.
-    if (folder / "manifest.json").is_file():
-        keep.add((folder / "manifest.json").resolve())
-
     for _name, img in _list_expected_images(scatter):
         if img.exists():
             keep.add(img.resolve())

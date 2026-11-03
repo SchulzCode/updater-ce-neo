@@ -1949,11 +1949,20 @@ class ExtractWorker(QThread):
         buf = b""
         last_pct = -1
         stop_event = threading.Event()
+        # Fallback progress for archives whose tool prints no percentage.
+        # Sizing the extract tree means walking every entry, which competes
+        # with the extractor's own I/O on a firmware with thousands of files;
+        # it is a 1 s fallback and stops as soon as real percentages arrive.
+        monitor_stop = threading.Event()
         pkg_size = max(1, os.path.getsize(package))
 
         def _dir_monitor():
             nonlocal last_pct
-            while not stop_event.wait(0.2) and not self._cancelled:
+            while (
+                not stop_event.wait(1.0)
+                and not monitor_stop.is_set()
+                and not self._cancelled
+            ):
                 try:
                     cur = _calc_dir_size(Path(extract_dir))
                     pct = min(95, max(1, int(cur * 95 / pkg_size)))
@@ -1975,6 +1984,9 @@ class ExtractWorker(QThread):
                 for m in re.finditer(rb"(\d+)%", buf):
                     pct = min(99, int(m.group(1)))
                     if pct > last_pct:
+                        # The tool reports the real figure now: the directory
+                        # walk is only a fallback and has nothing left to add.
+                        monitor_stop.set()
                         last_pct = pct
                         self.progress.emit(pct)
                         QThread.msleep(1)
@@ -1982,6 +1994,7 @@ class ExtractWorker(QThread):
                     buf = buf[-256:]
         finally:
             stop_event.set()
+            monitor_stop.set()
             monitor_thread.join(timeout=1.0)
 
         if self._cancelled:
@@ -3088,46 +3101,6 @@ def _scatter_region_parttype(region: str, partition_name: str = "") -> str:
     return "user"
 
 
-def _y2linux_manifest_addresses(scatter_path):
-    """Absolute write addresses declared by a Y2Linux release manifest.
-
-    Y2Linux's scatter uses the stock Y2 physical column, but its manifest is
-    the authoritative install map (the release's own install.md says to stop if
-    SP Flash Tool shows different addresses). The generic legacy mapper adds
-    the Y2 stock MBR bias, which would move every Y2Linux image 8 MiB past its
-    partition. Use the manifest's absolute starts for those packages only.
-    """
-    import json
-
-    try:
-        manifest = Path(scatter_path).parent / "manifest.json"
-        data = json.loads(manifest.read_text(encoding="utf-8"))
-    except (OSError, ValueError, TypeError):
-        return {}
-    schema = str(data.get("schema") or "")
-    if not schema.startswith("org.schulzcode.y2linux.release"):
-        return {}
-    overrides = {}
-    for payload in data.get("payloads") or ():
-        if not isinstance(payload, dict):
-            continue
-        name = str(payload.get("target_partition") or "").strip().upper()
-        address = payload.get("absolute_start_bytes")
-        if name and isinstance(address, int) and address >= 0:
-            overrides[name] = address
-    # RECOVERY is not one of the manifest payloads, but the scatter's physical
-    # column is already the absolute start for it. Use that as the fallback
-    # rather than the generic +8 MiB legacy bias.
-    for entry in _parse_scatter_entries(scatter_path):
-        if not entry.get("is_download") or entry.get("tail_relative"):
-            continue
-        name = str(entry.get("name") or "").strip().upper()
-        physical = entry.get("physical_start_addr")
-        if name and name not in overrides and isinstance(physical, int) and physical >= 0:
-            overrides[name] = physical
-    return overrides
-
-
 def build_mtk_write_plan(
     scatter_path,
     model="",
@@ -3138,7 +3111,6 @@ def build_mtk_write_plan(
     user_addressing=None,
     user_size=None,
     block_size=None,
-    address_overrides=None,
 ):
     """Return the ordered write plan the shipped 1.1.7 build performs.
 
@@ -3155,10 +3127,6 @@ def build_mtk_write_plan(
     ``legacy_preloader_last``), the preloader is moved to the very end so an interrupted
     write leaves the existing BROM/preloader boot mechanism intact.
 
-    ``address_overrides`` maps partition names to absolute byte addresses for
-    packages whose manifest supplies its own layout (Y2Linux). It takes
-    precedence over the generic legacy MBR calibration.
-
     Non-empty partition tables (MBR, EBR1) shipped in the package are included
     so the device has its partition tables configured, while all-zero empty stubs
     are skipped via ``_is_empty_placeholder_image``.
@@ -3173,11 +3141,6 @@ def build_mtk_write_plan(
     if not entries:
         return []
     scatter_dir = scatter_p.parent
-    overrides = {
-        str(name).strip().upper(): int(address)
-        for name, address in (address_overrides or {}).items()
-        if str(name).strip()
-    }
 
     plan = []
     seen = set()
@@ -3221,12 +3184,7 @@ def build_mtk_write_plan(
         # inside eMMC boot1 (the preloader) and at the head of the user area
         # (which the MBR occupies).
         offset = int(entry.get("offset") or 0)
-        absolute = overrides.get(name.strip().upper())
-        if absolute is not None:
-            # Y2Linux supplies an install map in its manifest; do not apply the
-            # stock Y2 physical+0x800000 calibration on top of it.
-            offset = absolute
-        elif user_addressing is not None and parttype == "user":
+        if user_addressing is not None and parttype == "user":
             raw_part = raw_parts[int(entry.get("order", 0))]
             calibrated = _resolve_scatter_user_addr_for_candidate(
                 raw_part, user_addressing, user_size, block_size or DEFAULT_SCATTER_BLOCK_SIZE
@@ -4188,7 +4146,7 @@ class FlashWorker(QThread):
 
         ``scatter`` is an explicit choice (the user pointed at that file), and
         it wins over discovery: with two scatters in one folder, guessing is
-        exactly how a hand-picked Y2Linux layout became the stock one.
+        exactly how a hand-picked layout became the stock one.
         """
         explicit = Path(scatter) if scatter else None
         found = explicit if explicit is not None and explicit.is_file() else _find_scatter(directory)
@@ -5743,15 +5701,6 @@ class FlashWorker(QThread):
             )
             user_size = _get_emmc_user_size(mtk)
             block_size = _parse_scatter_block_size(scatter_file)
-            y2_addresses = _y2linux_manifest_addresses(scatter_file)
-            if y2_addresses:
-                self._log(
-                    "Y2Linux manifest addresses: "
-                    + ", ".join(
-                        f"{name}=0x{address:X}"
-                        for name, address in sorted(y2_addresses.items())
-                    )
-                )
             plan = build_mtk_write_plan(
                 scatter_file,
                 getattr(self, "package_model", "") or self.model,
@@ -5760,7 +5709,6 @@ class FlashWorker(QThread):
                 user_addressing=addressing,
                 user_size=user_size,
                 block_size=block_size,
-                address_overrides=y2_addresses,
             )
         except PackageLayoutError as e:
             unresolved = "auto-probe" in str(e)

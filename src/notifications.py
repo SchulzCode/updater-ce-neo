@@ -26,16 +26,17 @@ def bring_window_to_front(window: Optional[QWidget]) -> None:
         return
 
     try:
-        # Standard Qt window state restoration
-        state = window.windowState()
-        if state & Qt.WindowMinimized:
-            window.setWindowState((state & ~Qt.WindowMinimized) | Qt.WindowActive)
-        else:
-            window.setWindowState(state | Qt.WindowActive)
-
+        # Standard Qt window state restoration, including a copy that was
+        # closed to the menu bar/tray (hidden rather than minimised).
+        if window.isMinimized():
+            window.showNormal()
+        window.setWindowState(window.windowState() | Qt.WindowActive)
         window.show()
         window.raise_()
         window.activateWindow()
+        handle = window.windowHandle()
+        if handle is not None:
+            handle.requestActivate()
     except Exception as e:
         logger.debug("Failed basic Qt window raise: %s", e)
 

@@ -588,9 +588,17 @@ def main():
 
         _focus_server = start_focus_server()
         if _focus_server is not None:
-            _focus_server.focus_requested.connect(
-                lambda: bring_window_to_front(window)
-            )
+            def _show_existing_window() -> None:
+                # _show_from_tray also resumes the window-only timers; a bare
+                # raise would leave a copy restored from the menu bar polling
+                # as though it were still hidden.
+                show = getattr(window, "_show_from_tray", None)
+                if callable(show):
+                    show()
+                else:
+                    bring_window_to_front(window)
+
+            _focus_server.focus_requested.connect(_show_existing_window)
     except Exception:
         logging.getLogger(__name__).debug(
             "Single-instance focus channel could not start", exc_info=True
