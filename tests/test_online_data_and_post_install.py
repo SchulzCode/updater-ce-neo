@@ -21,6 +21,7 @@ from src.notice_service import Notice, NoticeService, parse_notice_xml
 from src.ui.dialogs import (
     NoticeDetailView,
     NoticesDialog,
+    _NoticeRow,
     format_notice_markdown,
     notice_see_more_url,
 )
@@ -327,26 +328,68 @@ def test_notice_toast_shows_banner_content_not_full_content(qapp):
     assert notice.full_content not in toast._content_label.text()
 
 
-def test_notices_dialog_cards_preview_content_and_open_full_notice(qapp):
+def test_notices_dialog_cards_show_full_body_and_page_button(qapp, monkeypatch):
     notices = parse_notice_xml(NOTICE_XML)
     dialog = NoticesDialog(None, notices)
     try:
         assert len(dialog._rows) == 2
         first = dialog._rows[0]
-        # Cards use the short <content> preview, not <full_content>.
-        assert first._body.toPlainText().strip() == notices[0].content
-        assert notices[0].full_content not in first._body.toPlainText()
+        # Cards carry the complete body, not just the short <content> preview.
+        assert first._body.toPlainText().strip() == notices[0].full_content
+        assert notices[0].content not in first._body.toPlainText()
         assert not first._more.isHidden()
-        # A notice with no full body and no specific page has no Read more.
+        assert not first._open_page.isHidden()
+        assert first._open_page.toolTip() == tr("notices_open_page")
+        assert not first._open_page.icon().isNull()
+
+        # A notice with no full body and no specific page has no extra actions.
         second = dialog._rows[1]
         assert second._more.isHidden()
+        assert second._open_page.isHidden()
+
+        opened = []
+        monkeypatch.setattr("src.browser.open_browser", lambda url: opened.append(url))
+        first._open_page.click()
+        assert opened == [notice_see_more_url(notices[0].url)]
 
         first._more.click()
         assert dialog._stack.currentWidget() is dialog._detail
-        assert dialog._detail._body.toPlainText().strip() != ""
         assert notices[0].full_content.split(".")[0] in dialog._detail._body.toPlainText()
     finally:
         dialog.deleteLater()
+
+
+def test_notice_cards_render_markdown_images_and_inner_scroll(qapp):
+    from PySide6.QtCore import Qt
+
+    from src.ui.dialogs import NOTICE_CARD_BODY_MAX_HEIGHT
+
+    long_body = "## Details\n\n**Bold** and [a link](https://example.test/guide).\n\n![Screenshot](https://example.test/shot.png)\n\n" + "\n\n".join(
+        f"Paragraph {index}" for index in range(60)
+    )
+    notice = Notice(
+        id="markdown-card",
+        title="Markdown notice",
+        content="Short preview",
+        full_content=long_body,
+    )
+    row = _NoticeRow(notice)
+    try:
+        html = row._body.toHtml()
+        assert "Details" in html
+        assert "Bold" in html
+        assert "example.test/guide" in html
+        assert "shot.png" in html
+        assert row._body.verticalScrollBarPolicy() == Qt.ScrollBarAsNeeded
+
+        row.resize(480, 420)
+        row.show()
+        qapp.processEvents()
+        assert row._body.height() <= NOTICE_CARD_BODY_MAX_HEIGHT
+        assert row._body.verticalScrollBar().maximum() > 0
+    finally:
+        row.close()
+        row.deleteLater()
 
 
 def test_notices_page_opens_a_notice_and_returns_to_the_list(qapp):
@@ -368,6 +411,40 @@ def test_notices_page_opens_a_notice_and_returns_to_the_list(qapp):
         assert page.display_title() == tr("nav_notices")
     finally:
         page.deleteLater()
+
+
+def test_window_auto_fit_never_grows_past_the_height_ceiling(qapp):
+    """Tall page content scrolls; it never stretches the window past 600 px."""
+    from PySide6.QtWidgets import QWidget
+
+    from src.ui.main_window import MAXIMUM_AUTO_FIT_HEIGHT, MainWindow
+
+    class _TallPage(QWidget):
+        def content_height_hint(self):
+            # What the Notices list measured with three long notice cards.
+            return 1168
+
+    window = MainWindow()
+    window.show()
+    qapp.processEvents()
+    page = _TallPage()
+    index = window._stack.addWidget(page)
+    window._stack.setCurrentIndex(index)
+    try:
+        window._fit_window_to_page()
+        assert window.height() <= MAXIMUM_AUTO_FIT_HEIGHT
+        assert window.maximumHeight() <= MAXIMUM_AUTO_FIT_HEIGHT
+
+        # A second fit over the same content cannot creep past it either.
+        window._fit_window_to_page()
+        assert window.height() <= MAXIMUM_AUTO_FIT_HEIGHT
+    finally:
+        window._stack.setCurrentIndex(0)
+        window._stack.removeWidget(page)
+        page.deleteLater()
+        window.close()
+        window.deleteLater()
+        qapp.processEvents()
 
 
 def test_notice_detail_renders_markdown_and_ignores_bare_site_url(qapp):
@@ -814,4 +891,11 @@ def test_select_page_release_notes_layout_no_overlap(qapp):
         assert notes_geom.bottom() < trans_geom.top()
         assert trans_geom.bottom() < see_more_geom.top()
     finally:
+        # The page's connectivity probe is a shared background QThread. The
+        # worker is daemon-like in the app, but a test process that exits with
+        # it still running aborts in Qt, after every assertion has passed.
+        try:
+            win._select_page._monitor.stop_monitoring()
+        except Exception:
+            pass
         win.close()

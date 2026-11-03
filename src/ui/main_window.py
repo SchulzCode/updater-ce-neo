@@ -160,7 +160,12 @@ DEFAULT_WINDOW_HEIGHT = 440
 MINIMUM_WINDOW_WIDTH = 640
 MINIMUM_WINDOW_HEIGHT = 340
 MAXIMUM_WINDOW_WIDTH = 1240
-MAXIMUM_SELECT_WINDOW_HEIGHT = 720
+# The tallest the app may size itself to. A page with more content than this
+# (the Notices list, a long support appeal) scrolls inside the window instead
+# of stretching it: a taller window covers the instructions the user is
+# following and can hang off a small display. The diagnostics log is the one
+# page allowed past it, because there the log is the window.
+MAXIMUM_AUTO_FIT_HEIGHT = 600
 
 # Slack added to a page's own content height when the window hugs it, so the
 # last card's shadow and the status bar are never clipped.
@@ -3331,8 +3336,11 @@ class MainWindow(QMainWindow):
                 max_h = int(available.height())
             else:
                 max_h = max(min_floor, min(max_h, int(available.height())))
-        if stack is not None and stack.currentIndex() == _PAGE_SELECT and not fill_height:
-            max_h = min(max_h, MAXIMUM_SELECT_WINDOW_HEIGHT)
+        if not fill_height:
+            # Nothing may be resized past the auto-fit ceiling, including by a
+            # border drag: the page's overflow scrolls, so extra height would
+            # only leave an empty band. A page's own floor still wins.
+            max_h = max(min_floor, min(max_h, MAXIMUM_AUTO_FIT_HEIGHT))
         if (max_w, max_h) != (self.maximumWidth(), self.maximumHeight()):
             self.setMaximumSize(max_w, max_h)
 
@@ -3368,8 +3376,6 @@ class MainWindow(QMainWindow):
         chrome_w = max(int(chrome_w), int(self._rail_width.width))
         content_h = self._page_content_height(page)
         target_h = int(content_h) + chrome_h + CONTENT_FIT_SLACK
-        if stack.currentIndex() == _PAGE_SELECT:
-            target_h = min(target_h, MAXIMUM_SELECT_WINDOW_HEIGHT)
         try:
             target_h = max(target_h, int(page.minimumSizeHint().height()) + chrome_h)
             need_w = int(page.minimumSizeHint().width()) + chrome_w
@@ -3419,6 +3425,10 @@ class MainWindow(QMainWindow):
         if stack.currentIndex() == _PAGE_SETTINGS and not solo_settings_card:
             max_settings_h = min(int(available.height()) - 60, 560) if screen is not None else 560
             target_h = min(target_h, max(DEFAULT_WINDOW_HEIGHT, max_settings_h))
+        # No page grows the window past the ceiling on its own. Content that
+        # needs more (the Notices list, a long appeal) scrolls instead; the
+        # page's floor still wins where it cannot be drawn any shorter.
+        target_h = max(floor_h, min(target_h, MAXIMUM_AUTO_FIT_HEIGHT))
         self._apply_window_size_limits(target_h)
         floor_w = max(MINIMUM_WINDOW_WIDTH, min(floor_w, target_w))
         if target_w != self.width() or target_h != self.height():
@@ -3596,6 +3606,9 @@ class MainWindow(QMainWindow):
                     page_h + prompt_h + actual_chrome + 8,
                     rail_min,
                 )
+                # The progress card is capped like every other page: its own
+                # overflow scrolls rather than pushing the window taller.
+                target_h = min(target_h, MAXIMUM_AUTO_FIT_HEIGHT)
             else:
                 # The catalogue is still showing. The short install size is
                 # applied once the progress card is the page on screen. The

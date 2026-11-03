@@ -6670,7 +6670,7 @@ def test_window_minimum_size_and_titlebar_stability():
     from src.ui.main_window import (
         MINIMUM_WINDOW_HEIGHT,
         MINIMUM_WINDOW_WIDTH,
-        MAXIMUM_SELECT_WINDOW_HEIGHT,
+        MAXIMUM_AUTO_FIT_HEIGHT,
         MainWindow,
         default_window_size,
     )
@@ -6692,7 +6692,7 @@ def test_window_minimum_size_and_titlebar_stability():
     default_w, started_h = default_window_size(w.screen())
     assert w.size().width() >= default_w
     started_w = w.size().width()
-    assert MINIMUM_WINDOW_HEIGHT <= w.size().height() <= MAXIMUM_SELECT_WINDOW_HEIGHT
+    assert MINIMUM_WINDOW_HEIGHT <= w.size().height() <= MAXIMUM_AUTO_FIT_HEIGHT
 
     # 3. Each page owns the size it needs: the form hands the border back, and
     #    the catalogue pins its own fit when it comes around again.

@@ -9,7 +9,7 @@ import re
 import sys
 from datetime import datetime, timedelta
 
-from PySide6.QtCore import QDate, QDateTime, QSettings, QTime, Qt, QTimer, Signal
+from PySide6.QtCore import QDate, QDateTime, QSettings, QSize, QTime, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPalette, QTextCursor, QTextDocument
 from PySide6.QtWidgets import (
     QBoxLayout,
@@ -38,6 +38,9 @@ from ..config import install_power_on_steps, device_label_for_model
 # Lines kept in the text widget. The manager still retains the full log;
 # painting tens of thousands of blocks on the GUI thread is what froze the window.
 VISIBLE_LOG_LINES = 2000
+# A notice card's body scrolls internally after this many pixels instead of
+# stretching the whole Notices list.
+NOTICE_CARD_BODY_MAX_HEIGHT = 300
 
 from ..diagnostics import (
     CAT_ALL,
@@ -803,11 +806,11 @@ class NoticesPage(QWidget):
 
 
 class _NoticeRow(QFrame):
-    """One notice card: title, date and the short ``content`` preview.
+    """One notice card with the full Markdown body and its own scrollbar.
 
-    ``full_content`` is deliberately not rendered here: it is the long Markdown
-    body shown by :class:`NoticeDetailView` after the reader chooses Read more.
-    The card keeps its own dismiss control on the full Notices page.
+    Long notices stay inside the card instead of stretching the whole list.
+    The card keeps its own dismiss control on the full Notices page; the
+    globe button opens a notice-specific page when the feed provides one.
     """
 
     dismissed = Signal(object)
@@ -843,6 +846,8 @@ class _NoticeRow(QFrame):
             header.addWidget(self._dismiss, 0, Qt.AlignTop)
         col.addLayout(header)
 
+        from .icons import get_symbol_icon
+
         if show_dates:
             posted_text = _notice_posted_text(notice)
             if posted_text:
@@ -850,30 +855,54 @@ class _NoticeRow(QFrame):
                 dates.setStyleSheet(f"font-size: 12px; color: {t.fg_muted};")
                 col.addWidget(dates)
 
-        # The card is the abridged view: use <content>, never <full_content>.
-        body_text = notice.content or notice.full_content or ""
+        # The card carries the complete notice body, rendered as Markdown.
+        # _NoticeMarkdownView also fetches remote images and opens links in the
+        # user's browser. A bounded height keeps a long body scrollable inside
+        # the card rather than making one notice dominate the page.
         full_text = (notice.full_content or "").strip()
+        body_text = full_text or notice.content or ""
         has_more = bool(
             (full_text and full_text != (notice.content or "").strip())
             or notice_has_page_url(notice.url)
         )
-        self._body = QTextBrowser(self)
-        self._body.setOpenExternalLinks(False)
-        self._body.setReadOnly(True)
-        self._body.setFrameShape(QFrame.NoFrame)
-        self._body.setStyleSheet(f"font-size: 13px; color: {t.fg}; background: transparent;")
-        self._body.setPlainText(body_text)
-        self._body.document().setDocumentMargin(0)
-        self._body.document().setTextWidth(-1)
-        self._body.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._body = _NoticeMarkdownView(self)
+        self._body.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self._body.setMinimumHeight(40)
+        self._body.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self._body.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._body.set_markdown(body_text, text_color=t.fg)
         self._body.document().contentsChanged.connect(self._fit_body)
         col.addWidget(self._body)
+
+        page_url = getattr(notice, "url", "")
+        self._page_url = notice_see_more_url(page_url)
+        self._open_page = QPushButton(self)
+        self._open_page.setObjectName("noticesOpenPage")
+        self._open_page.setIcon(get_symbol_icon("globe", 16, color=t.fg))
+        self._open_page.setIconSize(QSize(16, 16))
+        self._open_page.setFixedSize(24, 24)
+        self._open_page.setFlat(True)
+        self._open_page.setCursor(Qt.PointingHandCursor)
+        self._open_page.setToolTip(tr("notices_open_page"))
+        self._open_page.setAccessibleName(tr("notices_open_page"))
+        self._open_page.setStyleSheet(
+            "QPushButton { border: none; background: transparent; padding: 2px; }"
+        )
+        self._open_page.clicked.connect(self._open_notice_page)
+        self._open_page.setVisible(notice_has_page_url(page_url))
 
         self._more = _notice_link_button(tr("notices_read_more"), self)
         self._more.clicked.connect(self._request_open_notice)
         self._more.setVisible(has_more)
-        col.addWidget(self._more, 0, Qt.AlignLeft)
+
+        footer = QHBoxLayout()
+        footer.setContentsMargins(0, 0, 0, 0)
+        footer.setSpacing(8)
+        footer.addWidget(self._more, 0, Qt.AlignLeft | Qt.AlignVCenter)
+        footer.addStretch(1)
+        footer.addWidget(self._open_page, 0, Qt.AlignRight | Qt.AlignVCenter)
+        if has_more or not self._open_page.isHidden():
+            col.addLayout(footer)
         self._fit_body()
 
     def _on_dismiss_clicked(self) -> None:
@@ -886,11 +915,14 @@ class _NoticeRow(QFrame):
         self.dismissed.emit(self._notice)
 
     def _fit_body(self) -> None:
-        """Size the body to its document, so the list scrolls instead of the text."""
+        """Give the body its content height up to a card-sized ceiling."""
         doc = self._body.document()
         width = self._body.viewport().width() or 400
         doc.setTextWidth(width)
-        self._body.setFixedHeight(int(doc.size().height()) + 4)
+        height = int(doc.size().height()) + 4
+        self._body.setFixedHeight(
+            max(40, min(height, NOTICE_CARD_BODY_MAX_HEIGHT))
+        )
 
     def resizeEvent(self, event):  # noqa: N802 (Qt naming)
         super().resizeEvent(event)
@@ -898,6 +930,12 @@ class _NoticeRow(QFrame):
 
     def _request_open_notice(self) -> None:
         self.open_notice.emit(self._notice)
+
+    def _open_notice_page(self) -> None:
+        if self._page_url:
+            from ..browser import open_browser
+
+            open_browser(self._page_url)
 
     def paintEvent(self, event):  # noqa: N802 (Qt naming)
         from .widgets import _paint_bento_surface
