@@ -33,6 +33,7 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 REPO_URL="https://github.com/y1-community/updater-ce-neo.git"
+AUTHOR="Ryan Specter"
 BIN_DIR="${HOME}/.local/bin"
 DESKTOP_DIR="${HOME}/.local/share/applications"
 ICON_DIR="${HOME}/.local/share/icons/hicolor/256x256/apps"
@@ -213,7 +214,8 @@ if [ "$UNINSTALL" -eq 1 ]; then
         update-desktop-database "$DESKTOP_DIR" >/dev/null 2>&1 || true
     fi
 
-    echo -e "\n${GREEN}${BOLD}Uninstallation of $APP_NAME complete.${NC}\n"
+    echo -e "\n${GREEN}${BOLD}Uninstallation of $APP_NAME complete.${NC}"
+    echo -e "${DIM}Author: ${AUTHOR}${NC}\n"
     exit 0
 fi
 
@@ -564,6 +566,7 @@ Type=Application
 Categories=Development;Utility;HardwareSettings;
 Keywords=mediatek;mtk;flash;firmware;spflashtool;mtkclient;bootrom;preloader;
 StartupWMClass=MediaTek Installer
+X-AppImage-Author=$AUTHOR
 EOF
 else
     cat << EOF > "$DESKTOP_FILE"
@@ -599,6 +602,7 @@ Type=Application
 Categories=AudioVideo;Utility;Development;
 Keywords=innioasis;timmkoo;y1;y2;a5;mtk;flash;firmware;rockbox;solar;
 StartupWMClass=Updater CE
+X-AppImage-Author=$AUTHOR
 EOF
 fi
 

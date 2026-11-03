@@ -18,6 +18,7 @@ cd "$(dirname "$0")"
 
 APP_NAME="Innioasis Updater"
 APP_ID="com.innioasis.updater"
+AUTHOR="Ryan Specter"
 # BUILD_BRAND=mediatek_installer (or --brand mediatek_installer) packages the
 # generic cross-platform MediaTek Installer instead: its own name and bundle
 # id, and an app that knows it is offline-only.
@@ -298,6 +299,8 @@ if [ "$CREATE_DMG" -eq 1 ]; then
     DMG_TEMP=$(mktemp -d)
     cp -R "$DIST_DIR/$APP_NAME.app" "$DMG_TEMP/"
     ln -s /Applications "$DMG_TEMP/Applications"
+    printf 'Author: %s\nCopyright (C) 2024-2026 %s. All rights reserved.\n' \
+        "$AUTHOR" "$AUTHOR" > "$DMG_TEMP/AUTHOR.txt"
 
     hdiutil create \
         -volname "$APP_NAME" \
@@ -314,6 +317,7 @@ echo ""
 echo "================================================================================"
 echo "  MACOS BUILD COMPLETE - Output Summary"
 echo "================================================================================"
+echo "  Author:      $AUTHOR"
 echo "  App Bundle:  $DIST_DIR/$APP_NAME.app ($APP_SIZE)"
 if [ "$CREATE_DMG" -eq 1 ]; then
     echo "  Disk Image:  $DIST_DIR/$DMG_NAME ($DMG_SIZE)"

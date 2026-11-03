@@ -103,7 +103,7 @@ function Get-IdentityValue($obj, $name, $fallback) {
 $tokens = @{
     "@@IDENTITY_NAME@@"         = Get-IdentityValue $identity "identityName" "Innioasis.UpdaterCE"
     "@@PUBLISHER@@"             = Get-IdentityValue $identity "publisher" "CN=00000000-0000-0000-0000-000000000000"
-    "@@PUBLISHER_DISPLAY_NAME@@" = Get-IdentityValue $identity "publisherDisplayName" "Innioasis"
+    "@@AUTHOR@@"                = Get-IdentityValue $identity "author" "Ryan Specter"
     "@@DISPLAY_NAME@@"          = Get-IdentityValue $identity "displayName" "Updater CE"
     "@@SHORT_NAME@@"            = Get-IdentityValue $identity "shortName" "Updater CE"
     "@@DESCRIPTION@@"           = Get-IdentityValue $identity "description" "Innioasis firmware updater."

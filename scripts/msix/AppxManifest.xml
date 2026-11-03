@@ -27,7 +27,9 @@
 
   <Properties>
     <DisplayName>@@DISPLAY_NAME@@</DisplayName>
-    <PublisherDisplayName>@@PUBLISHER_DISPLAY_NAME@@</PublisherDisplayName>
+    <!-- Author credit. This is intentionally separate from Identity Publisher,
+         which must remain the Partner Center reservation identity. -->
+    <PublisherDisplayName>@@AUTHOR@@</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
     <Description>@@DESCRIPTION@@</Description>
   </Properties>

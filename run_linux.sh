@@ -34,6 +34,7 @@ RELEASES_API="https://api.github.com/repos/${REPO}/releases?per_page=30"
 APP_FOLDER="InnioasisUpdater"
 APP_EXE="InnioasisUpdater"
 DISPLAY_NAME="Updater CE"
+AUTHOR="Ryan Specter"
 LAUNCHER_NAME="innioasis-updater"
 
 # XDG user directories are the cross-distro convention (Debian/Ubuntu,
@@ -184,7 +185,7 @@ EOF
 }
 
 uninstall() {
-    log "Uninstalling $DISPLAY_NAME"
+    log "Uninstalling $DISPLAY_NAME (author: $AUTHOR)"
     rm -f "$LAUNCHER" "$DESKTOP_FILE" "$ICON_PATH"
     rm -rf -- "$INSTALL_DIR" "$HOME/.local/opt/innioasis-updater"
     if [ -n "$LEGACY_INSTALL_DIR" ]; then
@@ -325,6 +326,7 @@ Icon=$LAUNCHER_NAME
 Terminal=false
 Categories=Utility;System;
 StartupWMClass=$APP_EXE
+X-AppImage-Author=$AUTHOR
 EOF
     chmod 0644 "$DESKTOP_FILE"
     refresh_caches

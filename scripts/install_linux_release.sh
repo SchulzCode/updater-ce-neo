@@ -26,6 +26,7 @@ LATEST_API="https://api.github.com/repos/${REPO}/releases/latest"
 
 APP_NAME="InnioasisUpdater"
 DISPLAY_NAME="Updater CE"
+AUTHOR="Ryan Specter"
 LAUNCHER_NAME="innioasis-updater"
 INSTALL_ROOT="${INNIOASIS_INSTALL_DIR:-$HOME/.local/opt/innioasis-updater}"
 BIN_DIR="$HOME/.local/bin"
@@ -100,11 +101,11 @@ refresh_desktop_caches() {
 }
 
 uninstall() {
-    log "Removing ${DISPLAY_NAME} from ${INSTALL_ROOT}"
+    log "Removing ${DISPLAY_NAME} by ${AUTHOR} from ${INSTALL_ROOT}"
     rm -f "$LAUNCHER" "$DESKTOP_FILE" "$ICON_PATH"
     rm -rf "$INSTALL_ROOT"
     refresh_desktop_caches
-    success "${DISPLAY_NAME} removed. Your settings in ~/.config are kept."
+    success "${DISPLAY_NAME} by ${AUTHOR} removed. Your settings in ~/.config are kept."
 }
 
 # Newest file in DIR matching PATTERN for this machine's architecture.
@@ -256,6 +257,7 @@ Icon=$ICON_PATH
 Terminal=false
 Categories=Utility;
 StartupWMClass=$DISPLAY_NAME
+X-AppImage-Author=$AUTHOR
 EOF
 }
 

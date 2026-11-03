@@ -20,6 +20,7 @@ cd "$(dirname "$0")"
 
 export BUILD_BRAND="${BUILD_BRAND:-}"
 VERSION=$(grep -oP 'APP_VERSION\s*=\s*"\K[^"]+' src/config.py 2>/dev/null || echo "2.5.2")
+AUTHOR="Ryan Specter"
 # Default to the host architecture; appimagetool and the release names use aarch64, not arm64.
 case "$(uname -m)" in
     aarch64|arm64) HOST_ARCH="aarch64" ;;
@@ -435,6 +436,7 @@ Terminal=false
 Categories=Utility;AudioVideo;
 Keywords=innioasis;timmkoo;y1;y2;a5;mtk;flash;firmware;rockbox;solar;
 StartupWMClass=Updater CE
+X-AppImage-Author=Ryan Specter
 EOF
     cp "$APPDIR/innioasis-updater.desktop" "$APPDIR/usr/share/applications/innioasis-updater.desktop"
 fi
@@ -654,6 +656,7 @@ echo "==========================================================================
 echo "  LINUX BUILD COMPLETE - Output Summary"
 echo "================================================================================"
 echo "  Brand:            $DISPLAY_NAME ($BRAND_SLUG)"
+echo "  Author:           $AUTHOR"
 echo "  Version:          $VERSION ($ARCH)"
 echo "  AppImage Package: $OUTPUT_VERSIONED ($APPIMAGE_SIZE)"
 echo "  Tarball Archive:  $TARBALL_VERSIONED ($TARBALL_SIZE)"
