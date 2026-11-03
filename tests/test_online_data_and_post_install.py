@@ -477,6 +477,7 @@ def test_rockbox_themes_are_an_opt_out_per_install():
 
 def test_post_install_completion_uses_a_globe_and_view_guide(qapp, monkeypatch):
     from src.config import DONATION_LINKS
+    from src.i18n import tr
     from src.ui.flash_page import FlashPage
 
     opened = []
@@ -489,6 +490,11 @@ def test_post_install_completion_uses_a_globe_and_view_guide(qapp, monkeypatch):
         page.set_device_done(donations_shown=False)
         assert page._done_mark._symbol == "www"
         assert not page._post_install_hint.isHidden()
+        hint = page._post_install_hint.text()
+        assert hint.count("<a ") == 1, hint
+        assert '<a href="post-install">' in hint, hint
+        assert "<img" in hint and "data:image/png;base64," in hint, hint
+        assert hint.count(tr("post_install_find_out_more")) == 1, hint
         assert page._view_guide_btn.isHidden()
 
         # Donations shown: View Guide points at the second URL, and the

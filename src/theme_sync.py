@@ -439,7 +439,7 @@ class ThemeSyncService(QObject):
         if not self._timer.isActive():
             self._timer.start()
 
-    def stop(self) -> None:
+    def stop(self, wait: bool = True) -> None:
         try:
             self._timer.stop()
         except Exception:
@@ -448,7 +448,15 @@ class ThemeSyncService(QObject):
         if worker is not None:
             try:
                 worker.requestInterruption()
-                worker.wait(3000)
+                if wait:
+                    worker.wait(3000)
+                else:
+                    # Do not block a close/quit on a hidden worker; keep it
+                    # referenced until its own run() returns.
+                    from .worker_lifecycle import retire_worker
+
+                    self._retired_workers = getattr(self, "_retired_workers", set())
+                    retire_worker(worker, self._retired_workers)
             except Exception:
                 pass
 

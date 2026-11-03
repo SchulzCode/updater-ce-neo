@@ -57,7 +57,7 @@ from .dark import T, apply_explicit_foreground, link_html, page_top_margin
 def _themed_link(href: str, text: str) -> str:
     """An in-app link in the theme foreground, with no visited or clicked tint."""
     return link_html(text, bold=False).replace('href="#"', f'href="{href}"', 1)
-from .icons import get_symbol_icon, get_symbol_pixmap
+from .icons import get_symbol_data_uri, get_symbol_icon, get_symbol_pixmap
 from .native_controls import (
     NativeRoundChip,
     NativeSegmentedPair,
@@ -1480,7 +1480,8 @@ class _SvgVectorWidget(QWidget):
 
 
 class FlashPage(QWidget):
-    # Bumped whenever the card changes stage; MainWindow fits the window to it.
+    # Bumped whenever the card changes stage or structure; MainWindow fits the
+    # window to it. A guide that appears or disappears counts as a change.
     view_generation = 0
 
     def __init__(self, parent=None, journey=None):
@@ -1817,11 +1818,8 @@ class FlashPage(QWidget):
         self._theme_back_btn.clicked.connect(self._show_theme_fallback_usb_mode)
 
         # Shown under the done mark when the software has post-install steps
-        # and donations are off: the globe opens them, and so does this link.
-        self._post_install_hint = QLabel(
-            f'{tr("post_install_explain")} '
-            f'<a href="post-install">{tr("post_install_find_out_more")}</a>'
-        )
+        # and donations are off: the globe chip and this sentence open them.
+        self._post_install_hint = QLabel(self._post_install_hint_html())
         self._post_install_hint.setTextFormat(Qt.TextFormat.RichText)
         self._post_install_hint.setWordWrap(True)
         self._post_install_hint.setProperty("cssClass", "dimmed")
@@ -2115,6 +2113,7 @@ class FlashPage(QWidget):
         img_label = getattr(self, "_paperclip_img", None)
         if host is None or label is None:
             return
+        was_hidden = host.isHidden()
         model = (self._model or "").strip()
         if not model:
             pkg = (getattr(self, "_package_name", "") or "").upper()
@@ -2146,6 +2145,7 @@ class FlashPage(QWidget):
             if img_label is not None:
                 img_label.setFixedSize(0, 0)
             host.setMinimumHeight(0)
+            self._note_paperclip_visibility_change(was_hidden)
             return
 
         if is_power_off:
@@ -2237,6 +2237,22 @@ class FlashPage(QWidget):
 
         waiting = getattr(self, "_waiting_view", None)
         host.setVisible(waiting is not None and self._stack.currentWidget() is waiting)
+        self._note_paperclip_visibility_change(was_hidden)
+
+    def _note_paperclip_visibility_change(self, was_hidden: bool) -> None:
+        """Refit the window when the guide changes the waiting card's height.
+
+        The power-off prompt and the USB-search prompt are the same stacked
+        view, so ``view_generation`` does not change between them. Hiding the
+        paperclip guide makes the card several hundred pixels shorter; without
+        a new generation MainWindow keeps the window at the prompt's height and
+        leaves an empty band under the connect card.
+        """
+        host = getattr(self, "_paperclip_hint_host", None)
+        if host is None or host.isHidden() == was_hidden:
+            return
+        self.view_generation = getattr(self, "view_generation", 0) + 1
+        self._notify_geometry_change()
 
     def show_downloading(self):
         val = self._package_name or "\u2014"
@@ -3851,6 +3867,8 @@ class FlashPage(QWidget):
     def refresh_theme(self):
         """Called when system theme or accent changes."""
         self._update_paperclip_hint()
+        if hasattr(self, "_post_install_hint"):
+            self._post_install_hint.setText(self._post_install_hint_html())
         if hasattr(self, "_appeal_dont"):
             self._appeal_dont.setText(self._dont_ask_html())
         if hasattr(self, "_theme_recover_link"):
@@ -3871,6 +3889,18 @@ class FlashPage(QWidget):
         self._post_install_url = str(post_install or "").strip()
         self._post_install_url_2 = str(post_install_2 or "").strip()
         self._apply_post_install_state()
+
+    def _post_install_hint_html(self) -> str:
+        """The completion note, with the globe glyph inline in its sentence."""
+        globe = get_symbol_data_uri("globe", 12, match_accent=False)
+        globe_html = (
+            f'<img src="{globe}" width="12" height="12" '
+            'style="vertical-align: -1px;">'
+        )
+        link = f'<a href="post-install">{tr("post_install_find_out_more")}</a>'
+        return tr("post_install_explain").format(
+            globe=globe_html, find_out_more=link
+        )
 
     def _apply_post_install_state(self) -> None:
         donations_shown = bool(getattr(self, "_donations_shown", False))
@@ -4453,6 +4483,8 @@ class FlashPage(QWidget):
         if hasattr(self, "_keep_data_microsd_note"):
             self._keep_data_microsd_note.setText(tr("keep_data_microsd_reassurance"))
         self._update_paperclip_hint()
+        if hasattr(self, "_post_install_hint"):
+            self._post_install_hint.setText(self._post_install_hint_html())
         if hasattr(self, "_flash_retry_btn"):
             self._flash_retry_btn.setText(tr("flash_btn_retry"))
         if hasattr(self, "_wait_continue_btn"):

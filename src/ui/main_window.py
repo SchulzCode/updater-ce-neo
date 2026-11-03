@@ -8053,8 +8053,14 @@ class MainWindow(QMainWindow):
         """
         return retire_worker(worker, self._retired_workers)
 
-    def cleanup_workers(self, sweep: bool = True):
-        """Cleanly terminate and wait for any background workers."""
+    def cleanup_workers(self, sweep: bool = True, wait: bool = True):
+        """Cleanly terminate background workers.
+
+        ``wait=False`` is for a close/quit: blocking the GUI thread on a worker
+        blocked in a socket read is what made the window beachball before it
+        could hide or quit. Retired workers stay referenced and ``_leave_cleanly``
+        ends the process if any is still running.
+        """
         if getattr(self, "_gui_quit_started", False):
             sweep = False
         self.service.cleanup(sweep=sweep)
@@ -8063,12 +8069,14 @@ class MainWindow(QMainWindow):
             rw = getattr(select_page, "_releases_worker", None)
             if rw is not None and rw.isRunning():
                 rw.requestInterruption()
-                rw.wait(1500)
+                if wait:
+                    rw.wait(1500)
                 self._retire_worker(rw)
             dw = getattr(select_page, "_download_worker", None)
             if dw is not None and dw.isRunning():
                 dw.cancel()
-                dw.wait(1500)
+                if wait:
+                    dw.wait(1500)
                 self._retire_worker(dw)
             mon = getattr(select_page, "_monitor", None)
             if mon is not None:
@@ -8093,7 +8101,8 @@ class MainWindow(QMainWindow):
         ):
             if w is not None and w.isRunning():
                 w.requestInterruption()
-                w.wait(1500)
+                if wait:
+                    w.wait(1500)
                 self._retire_worker(w)
 
     def close(self):
@@ -8171,6 +8180,19 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
+        # Opt-in: with "Run in background" on, hide at once. Waiting for
+        # worker/process cleanup here made a menu-bar close look like a hang,
+        # and the hidden app does not need the window to finish that work.
+        from ..tray import run_in_background_enabled
+
+        if (
+            run_in_background_enabled(self.settings)
+            and not getattr(self, "_force_quit", False)
+            and not getattr(self, "_tray_quit_pending", False)
+        ):
+            self._hide_to_tray(event)
+            return
+
         # Closing the window ends any install window: a backend left behind
         # would hold the USB port after the app is gone.
         from .. import process_guard
@@ -8189,22 +8211,11 @@ class MainWindow(QMainWindow):
         service = getattr(self, "_theme_sync_service", None)
         if service is not None:
             try:
-                service.stop()
+                service.stop(wait=False)
             except Exception:
                 pass
-        self.cleanup_workers(sweep=False)
+        self.cleanup_workers(sweep=False, wait=False)
 
-        # Opt-in: with "Run in background" on, closing the window leaves the
-        # app in the menu bar. Otherwise the app quits with its window.
-        from ..tray import run_in_background_enabled
-
-        if (
-            run_in_background_enabled(self.settings)
-            and not getattr(self, "_force_quit", False)
-            and not getattr(self, "_tray_quit_pending", False)
-        ):
-            self._hide_to_tray(event)
-            return
         self._closing_accepted = True
         super().closeEvent(event)
         self._schedule_app_quit()

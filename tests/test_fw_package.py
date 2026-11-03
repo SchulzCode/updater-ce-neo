@@ -557,17 +557,19 @@ def test_release_install_heading_uses_release_name_from_file_name():
 
 
 def test_release_install_heading_falls_back_to_generic_label():
-    assert fw_package.release_install_heading("Y2", ("rom_y2.zip",)) == "Get your Y2 ready to install software"
-    assert fw_package.release_install_heading("", ()) == "Get ready to install software"
+    assert fw_package.release_install_heading("Y2", ("rom_y2.zip",)) == "Installing software on your Y2"
+    assert fw_package.release_install_heading("", ()) == "Installing software on your player"
 
 
 def test_package_install_heading_prefers_release_name():
     named = _pkg_for(name="Rockbox", version="2.5", model="Y2")
     assert fw_package.package_install_heading(named) == "Get your Y2 ready to install Rockbox 2.5"
     generic = _pkg_for(name="Installing software on Y2", model="Y2")
-    assert fw_package.package_install_heading(generic) == "Get your Y2 ready to install software"
+    assert fw_package.package_install_heading(generic) == "Installing software on your Y2"
     generic_new = _pkg_for(name="Get your Y2 ready to install software", model="Y2")
-    assert fw_package.package_install_heading(generic_new) == "Get your Y2 ready to install software"
+    assert fw_package.package_install_heading(generic_new) == "Installing software on your Y2"
+    assert catalog.format_install_card_title("", "1.0.0", "Y2") == "Installing software on your Y2"
+    assert catalog.format_install_card_title("", "", "") == "Installing software on your player"
 
 
 def test_rockbox_240p_package_name_marks_small_screen_rockbox_rom():

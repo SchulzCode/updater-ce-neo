@@ -2,6 +2,7 @@
 
 import logging
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -411,4 +412,47 @@ def test_paperclip_hint_is_drawn_from_the_bundled_vector_asset(monkeypatch):
             assert max(abs(c.lightness() - foreground.lightness()) for c in coloured) <= 24, model
     finally:
         page.close()
+        app.processEvents()
+
+
+def _pump_window(app, window, predicate, seconds=3.0):
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        app.processEvents()
+        if predicate():
+            return True
+        time.sleep(0.02)
+    app.processEvents()
+    return bool(predicate())
+
+
+def test_connect_card_drops_the_power_off_guide_height():
+    """The window shrinks when the connect card replaces the power-off guide."""
+    from PySide6.QtWidgets import QApplication
+
+    from src.state import FlashState
+    from src.ui.main_window import MainWindow, _PAGE_FLASH
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    app.processEvents()
+    try:
+        page = window._flash_page
+        page.set_model("Y2")
+        page.set_package_name("Y2Reborn-2.5.1")
+        window._set_state(FlashState.S2_WAIT_CONNECTION)
+        window._nav_to_page(_PAGE_FLASH)
+        page.show_power_off_prompt()
+        assert _pump_window(app, window, lambda: page._paperclip_hint_host.isVisible())
+        assert _pump_window(app, window, lambda: window.height() > 350)
+        tall = window.height()
+
+        page.show_connect_search()
+        assert _pump_window(app, window, lambda: not page._paperclip_hint_host.isVisible())
+        assert _pump_window(
+            app, window, lambda: window.height() <= tall - 150
+        ), (tall, window.height())
+    finally:
+        window.close()
         app.processEvents()

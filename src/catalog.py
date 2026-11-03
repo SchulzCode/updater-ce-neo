@@ -1149,16 +1149,20 @@ def infer_model_from_scatter(platform: str, project: str) -> str:
 
 
 def format_install_heading(software: str, model: str = "") -> str:
-    """Install-screen heading: ``Get your <model> ready to install <release>``, or the generic label.
+    """Install-screen heading, or the generic title when no release name is known.
 
-    The install has not started until the device is connected, so the heading
-    must not claim anything is already installing.
+    A detected release keeps the pre-install ``Get your <model> ready to
+    install <release>`` wording. Without one, the card names the device it is
+    installing onto instead of showing a file name or an empty title.
     """
     software = str(software or "").strip()
     model = str(model or "").strip()
     if software:
         return f"Get your {model} ready to install {software}" if model else f"Get ready to install {software}"
-    return f"Get your {model} ready to install software" if model else "Get ready to install software"
+    from .i18n import tr
+
+    device = model or tr("flash_player_fallback")
+    return tr("flash_installing_software_on").format(model=device)
 
 
 def format_install_card_title(software: str, version_label: str = "", model: str = "") -> str:
@@ -1171,7 +1175,9 @@ def format_install_card_title(software: str, version_label: str = "", model: str
     name = re.sub(r"\s*\([^)]*\)\s*$", "", str(software or "")).strip()
     version = str(version_label or "").strip()
     device = str(model or "").strip()
-    if version and name and version.lower() == name.lower():
+    if not name:
+        return format_install_heading("", device)
+    if version and version.lower() == name.lower():
         version = ""
     title = " ".join(part for part in (name, version) if part)
     if device:
