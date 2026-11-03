@@ -603,6 +603,39 @@ def main():
         logging.getLogger(__name__).debug(
             "Single-instance focus channel could not start", exc_info=True
         )
+
+    # Reopen window when clicking Dock icon on macOS while hidden in the menu bar / tray
+    if _sys.platform == "darwin":
+        try:
+            from AppKit import NSApplication
+            import objc
+
+            ns_app = NSApplication.sharedApplication()
+            delegate = ns_app.delegate()
+            if delegate is not None:
+                orig_reopen = getattr(delegate, "applicationShouldHandleReopen_hasVisibleWindows_", None)
+
+                class QCocoaApplicationDelegate(objc.Category(delegate.__class__)):
+                    def applicationShouldHandleReopen_hasVisibleWindows_(self, sender, has_visible):
+                        if not has_visible or (window is not None and not window.isVisible()):
+                            show = getattr(window, "_show_from_tray", None)
+                            if callable(show):
+                                show()
+                            else:
+                                bring_window_to_front(window)
+                        if orig_reopen is not None:
+                            try:
+                                return orig_reopen(sender, has_visible)
+                            except Exception:
+                                pass
+                        return True
+        except Exception:
+            logging.getLogger(__name__).debug("Could not hook macOS applicationShouldHandleReopen", exc_info=True)
+
+    from .tray import run_in_background_enabled
+    if run_in_background_enabled():
+        app.setQuitOnLastWindowClosed(False)
+
     # Before show(): the window must exist to be prepared for glass. After it:
     # every other piece of host chrome, each one guarded.
     _startup_step("prepare_window_for_glass", prepare_window_for_glass, window)
@@ -615,7 +648,6 @@ def main():
         window.show()
         _apply_native_chrome(window, dark=is_dark())
     else:
-        from .tray import run_in_background_enabled
         if run_in_background_enabled():
             window._hide_to_tray_at_launch()
         else:

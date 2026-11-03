@@ -132,6 +132,75 @@ def test_app_update_while_hidden_is_announced_natively(monkeypatch):
         _clear_opt_in()
 
 
+def test_close_to_tray_holds_off_macos_automatic_termination(monkeypatch):
+    """A hidden menu-bar app must not be reaped by AppKit automatic termination."""
+    QSettings("innioasis", "updater").setValue(tray.RUN_IN_BACKGROUND_KEY, True)
+    calls = []
+    monkeypatch.setattr(tray, "hold_off_automatic_termination", lambda hold: calls.append(hold))
+    try:
+        app, win = _window()
+        win._hide_to_tray(QCloseEvent())
+        assert calls == [True]
+        assert win._window_hidden_in_tray()
+
+        win._show_from_tray()
+        assert calls == [True, False]
+        assert win.isVisible()
+    finally:
+        _clear_opt_in()
+        if getattr(win, "_background_tray", None) is not None:
+            win._background_tray.hide()
+        win._force_quit = True
+        win.close()
+        app.processEvents()
+
+
+def test_tray_that_is_not_visible_yet_does_not_quit_the_app(monkeypatch):
+    QSettings("innioasis", "updater").setValue(tray.RUN_IN_BACKGROUND_KEY, True)
+    quit_calls = []
+    monkeypatch.setattr(tray, "hold_off_automatic_termination", lambda hold: None)
+    app, win = _window()
+
+    class _InvisibleTray:
+        def show(self):
+            pass
+
+        def is_visible(self):
+            return False
+
+        def is_available(self):
+            return True
+
+    monkeypatch.setattr(win, "_ensure_background_tray", lambda: _InvisibleTray())
+    monkeypatch.setattr(win, "_schedule_app_quit", lambda: quit_calls.append(True))
+    try:
+        win._hide_to_tray(QCloseEvent())
+        assert quit_calls == []
+        assert not win.isVisible()
+    finally:
+        _clear_opt_in()
+        win._force_quit = True
+        win.close()
+        app.processEvents()
+
+
+def test_start_in_tray_holds_off_macos_automatic_termination(monkeypatch):
+    QSettings("innioasis", "updater").setValue(tray.RUN_IN_BACKGROUND_KEY, True)
+    calls = []
+    monkeypatch.setattr(tray, "hold_off_automatic_termination", lambda hold: calls.append(hold))
+    try:
+        app, win = _window()
+        win._hide_to_tray_at_launch()
+        assert calls == [True]
+    finally:
+        _clear_opt_in()
+        if getattr(win, "_background_tray", None) is not None:
+            win._background_tray.hide()
+        win._force_quit = True
+        win.close()
+        app.processEvents()
+
+
 def test_hidden_window_pauses_its_timers_and_resumes_on_show():
     QSettings("innioasis", "updater").setValue(tray.RUN_IN_BACKGROUND_KEY, True)
     try:
@@ -146,3 +215,35 @@ def test_hidden_window_pauses_its_timers_and_resumes_on_show():
             assert timer.isActive()
     finally:
         _clear_opt_in()
+
+
+def test_background_tray_show_message(monkeypatch):
+    """BackgroundTray must delegate showMessage to QSystemTrayIcon without AttributeError."""
+    app = _app()
+    from PySide6.QtGui import QIcon
+    bg_tray = tray.BackgroundTray(app, lambda: None, lambda: None, QIcon())
+    messages = []
+    monkeypatch.setattr(bg_tray._tray, "showMessage", lambda *args: messages.append(args))
+    bg_tray.showMessage("Test Title", "Test Message")
+    assert len(messages) == 1
+    assert messages[0][0] == "Test Title"
+    assert messages[0][1] == "Test Message"
+
+
+def test_settings_run_in_background_toggled_updates_quit_on_last_window_closed(monkeypatch):
+    """Toggling run_in_background immediately syncs QApplication.quitOnLastWindowClosed."""
+    from src.ui.settings_page import SettingsPage
+
+    app = _app()
+    monkeypatch.setattr("src.login_item.set_login_item", lambda enabled: None)
+    settings_page = SettingsPage()
+    try:
+        settings_page._on_run_in_background_toggled(True)
+        assert app.quitOnLastWindowClosed() is False
+
+        settings_page._on_run_in_background_toggled(False)
+        assert app.quitOnLastWindowClosed() is True
+    finally:
+        _clear_opt_in()
+        settings_page.deleteLater()
+

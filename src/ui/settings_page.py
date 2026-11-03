@@ -1824,6 +1824,9 @@ class SettingsPage(QWidget):
         from ..login_item import set_login_item
         QSettings("innioasis", "updater").setValue(RUN_IN_BACKGROUND_KEY, bool(checked))
         set_login_item(bool(checked))
+        app = QApplication.instance()
+        if app is not None:
+            app.setQuitOnLastWindowClosed(not checked)
         # Keep the notifications card honest: the two switches describe the
         # same background process, so neither can be on by itself.
         box = getattr(self, "_cb_notifications_background", None)
@@ -1846,6 +1849,9 @@ class SettingsPage(QWidget):
             RUN_IN_BACKGROUND_KEY, bool(checked)
         )
         set_login_item(bool(checked))
+        app = QApplication.instance()
+        if app is not None:
+            app.setQuitOnLastWindowClosed(not checked)
         if checked:
             from ..notice_alerts import set_notifications_enabled
 

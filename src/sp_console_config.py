@@ -24,9 +24,23 @@ parsing the same progress lines.
 
 ``<download-only/>`` is Download Only, the same operation as the CLI's
 ``-c download``: it writes the scatter's downloadable images and formats
-nothing. Format All + Download (``<format-download/>``) is never used, so a
-partition the app leaves out of the scatter -- the user data one, when the
-user asked to keep their data -- is not erased either.
+nothing. Format All + Download (``<format-download/>``) is never used.
+
+NOTE ON ALIGNMENT WITH THE CHINESE MARKET RELEASE & OVERLAY FIRMWARES:
+While we must be aligned with the Chinese market release for flashing
+back-end functionality in SP Flash Tool and MTKclient with correct scatter
+handling and partition image writes, we must however ensure that console mode
+XML runs do not run in the format mode, just the download mode, to ensure
+compatibility with "overlay firmware packages" like Reborn (Y2Linux) which
+leave some partitions untouched (see MT6582_Android_scatter.txt).
+Overlay firmwares rely on existing base bootloader/table/security partitions
+(PRELOADER, MBR/EBR, UBOOT/LK, SECCFG, PROTECT_F/S) already on the device.
+Running in format mode would erase those un-downloaded partitions and brick
+the player.
+We must also, in aligning with the reliable Chinese market release, not
+negatively impact our clearly intentional front end functionality like the
+keep data feature which simply excludes the usr/usrdata partition from the
+flashing / write process while the rest stays the same.
 
 Auth files are optional — most targets are not secure-booted — so the plain
 ``-c download -s ... -d ... -t without -r`` command line stays the

@@ -2262,6 +2262,8 @@ class FlashPage(QWidget):
         self._download_status_label.setText(tr("sel_download_start"))
         self._switch_view(self._downloading_view)
         self._apply_stop_hold()
+        self.view_generation = getattr(self, "view_generation", 0) + 1
+        self._notify_geometry_change()
 
     def update_download_progress(self, percent: int, status_text: str = ""):
         self._set_determinate(self._download_progress, percent)
@@ -2303,6 +2305,8 @@ class FlashPage(QWidget):
         self._prep_step_key = "step_extract"
         self._prep_step.setText(tr("step_extract"))
         self._apply_stop_hold()
+        self.view_generation = getattr(self, "view_generation", 0) + 1
+        self._notify_geometry_change()
 
     def show_drop_check(self, name: str = "") -> None:
         """Indeterminate bar while a dropped package is checked. No tool names."""
@@ -2315,6 +2319,8 @@ class FlashPage(QWidget):
         self._prep_step_key = "drop_checking"
         self._prep_step.setText(tr("drop_checking"))
         self._prep_progress.setRange(0, 0)
+        self.view_generation = getattr(self, "view_generation", 0) + 1
+        self._notify_geometry_change()
 
     def show_drop_error(self, message: str) -> None:
         """Stop the throbber and leave the reason on the progress card."""
@@ -2323,6 +2329,8 @@ class FlashPage(QWidget):
         self._prep_step_key = ""
         self._prep_step.setText(message)
         self._switch_view(self._preparing_view)
+        self.view_generation = getattr(self, "view_generation", 0) + 1
+        self._notify_geometry_change()
 
     def show_waiting(self):
         self._complete = False
@@ -2336,6 +2344,8 @@ class FlashPage(QWidget):
             # partition progress arrives.
             self._set_determinate(self._wait_progress_bar, 0)
         self._apply_stop_hold()
+        self.view_generation = getattr(self, "view_generation", 0) + 1
+        self._notify_geometry_change()
 
     def _set_indeterminate(self, bar: QProgressBar) -> None:
         """Native busy throbber. Range (0, 0) is the platform indeterminate bar."""
@@ -2410,6 +2420,8 @@ class FlashPage(QWidget):
         if hasattr(self, "_wait_mode_hint"):
             self._wait_mode_hint.setVisible(False)
         self._apply_stop_hold()
+        self.view_generation = getattr(self, "view_generation", 0) + 1
+        self._notify_geometry_change()
 
     def _is_mtk_active(self) -> bool:
         from ..flash_service import is_mtk_method
@@ -2536,6 +2548,8 @@ class FlashPage(QWidget):
             else:
                 self._flash_retry_btn.setToolTip(tr("btn_next"))
                 self._flash_retry_btn.setAccessibleName(tr("btn_next"))
+        self.view_generation = getattr(self, "view_generation", 0) + 1
+        self._notify_geometry_change()
         if hasattr(self, "_cancel_btn"):
             if done:
                 self._cancel_btn.setVisible(True)
@@ -2645,6 +2659,7 @@ class FlashPage(QWidget):
             self._flash_retry_btn.setAccessibleName(tr("sel_cache_retry_button"))
         if hasattr(self, "_flash_head"):
             self._flash_head._sync_to_band()
+        self.view_generation = getattr(self, "view_generation", 0) + 1
         self._notify_geometry_change()
 
     def stop_theme_workers(self) -> None:
@@ -2786,6 +2801,8 @@ class FlashPage(QWidget):
             self._driver_action_row.setVisible(False)
         if hasattr(self, "_flash_head"):
             self._flash_head._sync_to_band()
+        self.view_generation = getattr(self, "view_generation", 0) + 1
+        self._notify_geometry_change()
 
     def show_usb_disconnected(
         self, on_retry=None, on_cancel=None, prompt_key="", prompt_kwargs=None
@@ -2847,6 +2864,8 @@ class FlashPage(QWidget):
             self._cancel_btn.setEnabled(True)
         self._update_paperclip_hint()
         self._apply_stop_hold()
+        self.view_generation = getattr(self, "view_generation", 0) + 1
+        self._notify_geometry_change()
         self._notify_geometry_change()
 
     # ------------------------------------------------------------------
@@ -3488,6 +3507,7 @@ class FlashPage(QWidget):
             self._theme_trouble_widget.setVisible(False)
         if hasattr(self, "_flash_head"):
             self._flash_head._sync_to_band()
+        self.view_generation = getattr(self, "view_generation", 0) + 1
         self._notify_geometry_change()
         # A player that appears now still wins: the user may already have
         # mirrored the wait by connecting it.
@@ -3570,6 +3590,8 @@ class FlashPage(QWidget):
             self._wait_mode_hint.setVisible(False)
         self._update_paperclip_hint()
         self._apply_stop_hold()
+        self.view_generation = getattr(self, "view_generation", 0) + 1
+        self._notify_geometry_change()
 
     def _keep_data_visible(self) -> bool:
         """The tick is only for the power-off-and-disconnect prompt."""
@@ -3681,6 +3703,8 @@ class FlashPage(QWidget):
         self._set_determinate(self._wait_progress_bar, 0)
         if hasattr(self, "_paperclip_hint_host"):
             self._paperclip_hint_host.setVisible(False)
+        self._stack.setCurrentWidget(self._waiting_view)
+        self.view_generation = getattr(self, "view_generation", 0) + 1
         self._notify_geometry_change()
 
     def show_keep_data_erase_confirmation(self, question: str, explainer: str = "") -> None:
@@ -3708,6 +3732,8 @@ class FlashPage(QWidget):
         self._set_determinate(self._wait_progress_bar, 0)
         if hasattr(self, "_paperclip_hint_host"):
             self._paperclip_hint_host.setVisible(False)
+        self._stack.setCurrentWidget(self._waiting_view)
+        self.view_generation = getattr(self, "view_generation", 0) + 1
         self._notify_geometry_change()
 
     def on_try_anyway(self, cb) -> None:
@@ -3756,6 +3782,8 @@ class FlashPage(QWidget):
             self._keep_data_microsd_note.setVisible(False)
         self._sync_keep_data_visibility()
         self._update_paperclip_hint()
+        self.view_generation = getattr(self, "view_generation", 0) + 1
+        self._notify_geometry_change()
 
     def show_gui_handoff_prompt(self, hint: str) -> None:
         """Power-off line plus a small download-mode hint. Continue does not flash."""
@@ -4058,6 +4086,7 @@ class FlashPage(QWidget):
         self._complete_note_model = str(model or "").strip()
         self._render_completion_note()
         self._complete_note.setVisible(bool(visible))
+        self.view_generation = getattr(self, "view_generation", 0) + 1
         self._notify_geometry_change()
 
     def show_completion_appeal(
@@ -4089,9 +4118,11 @@ class FlashPage(QWidget):
         self._active_appeal_key = random.choice(appeal_variants)
         self._render_appeal_copy()
         self._appeal.setVisible(bool(visible))
+        self.view_generation = getattr(self, "view_generation", 0) + 1
         self._notify_geometry_change()
 
     def _on_not_now(self) -> None:
+        self.view_generation = getattr(self, "view_generation", 0) + 1
         self._notify_geometry_change()
         callback = getattr(self, "_appeal_not_now", None)
         if callable(callback):
@@ -4099,6 +4130,7 @@ class FlashPage(QWidget):
 
     def _on_appeal_dont_ask(self) -> None:
         """Turn donations off. The caller returns to the compact completion screen."""
+        self.view_generation = getattr(self, "view_generation", 0) + 1
         self._notify_geometry_change()
         callback = getattr(self, "_appeal_callback", None)
         if callable(callback):

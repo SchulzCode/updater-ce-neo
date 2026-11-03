@@ -669,7 +669,7 @@
  "settings_method_group": "Installationsmethode",
  "notify_install_complete_title": "Installation abgeschlossen",
  "settings_themes_refreshing": "Theme-Paket wird aktualisiert…",
- "settings_refresh_themes_btn": "Themes & Schriftarten aktualisieren",
+ "settings_refresh_themes_btn": "Themes aktualisieren",
  "settings_themes_refreshing_progress": "Lade {progress} herunter · {speed}/s",
  "settings_themes_progress_fmt": "{percent}% ({done} von {total})",
  "settings_themes_refresh_done": "Themes und Schriftarten sind aktuell.",

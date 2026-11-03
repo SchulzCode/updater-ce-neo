@@ -399,6 +399,28 @@ class NoticeService(QObject):
         if callable(sync):
             sync()
 
+    def reset_all_read_state(self) -> None:
+        """Reset all dismissed and read states so every notice can be re-read."""
+        self.set_dismissed_ids(set())
+        self.set_dismissed_fingerprints({})
+        self._session_dismissed.clear()
+        self._session_dismissed_fingerprints.clear()
+        self._banner_dismissed.clear()
+        for org, app in (
+            ("innioasis", "updater"),
+            ("Innioasis", "UpdaterCE"),
+            ("Innioasis", "Innioasis Updater"),
+        ):
+            st = QSettings(org, app)
+            st.remove(_SETTINGS_DISMISSED_KEY)
+            st.remove(_SETTINGS_DISMISSED_FINGERPRINTS_KEY)
+            st.remove("notified_notice_ids")
+            sync = getattr(st, "sync", None)
+            if callable(sync):
+                sync()
+        self.fetch_async(force=True)
+        self._emit_next_notice()
+
     def dismiss_for_session(self, notice: Notice) -> None:
         """Hide a notice from the Select Software banner only.
 
@@ -471,10 +493,15 @@ class NoticeService(QObject):
         """Run a fetch and always report completion, whatever happened."""
         try:
             self._fetch_worker_inner(force=force)
+        except Exception as e:
+            logger.debug("Notice fetch worker encountered exception: %s", e)
         finally:
             with self._fetch_lock:
                 self._fetch_inflight = False
-            self.refresh_finished.emit()
+            try:
+                self.refresh_finished.emit()
+            except RuntimeError:
+                pass
 
     def _fetch_worker_inner(self, force: bool = True) -> None:
         from .i18n import current_language, is_english_language

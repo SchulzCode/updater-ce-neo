@@ -550,7 +550,10 @@ def _parse_semver(version: str):
     if not version_str or not re.fullmatch(r'\d+(?:\.\d+)*', version_str):
         return None
     try:
-        return tuple(int(part) for part in version_str.split('.'))
+        parts = tuple(int(part) for part in version_str.split('.'))
+        if len(parts) == 1 and parts[0] >= 1000:
+            return None
+        return parts
     except ValueError:
         return None
 
@@ -754,14 +757,40 @@ def is_base_release_tag(tag_name) -> bool:
     return "base" in words
 
 
-def release_version_tuple(tag_name):
+def release_version_tuple(tag_name, release_name=None):
     """Dotted version a tag carries (``stable-v0.5`` → ``(0, 5)``), or ``None``
     when the tag has no dotted version to read (nightlies, branch names)."""
+    title_ver = None
+    if release_name:
+        title_str = _semver_from_release_title(release_name)
+        if title_str:
+            title_ver = _parse_semver(title_str.lstrip('vV'))
+
     clean = str(parse_version_designations(tag_name or '').get('clean_version') or '')
-    return _parse_semver(clean.lstrip('vV'))
+    parsed = _parse_semver(clean.lstrip('vV'))
+
+    if parsed is None or (len(parsed) == 1 and parsed[0] >= 1000):
+        if title_ver is not None:
+            return title_ver
+        from_tag_title = _semver_from_release_title(tag_name)
+        if from_tag_title:
+            return _parse_semver(from_tag_title.lstrip('vV'))
+        return None
+
+    if title_ver is not None and len(title_ver) >= 2 and len(parsed) == 1:
+        return title_ver
+
+    return parsed
 
 
-def release_version_ok(repo, tag_name, model=None, show_old_rockbox=False, show_nightly=False):
+def release_version_ok(
+    repo,
+    tag_name,
+    model=None,
+    show_old_rockbox=False,
+    show_nightly=False,
+    release_name=None,
+):
     """Whether a release from ``repo`` may be listed for ``model``.
 
     Rockbox builds before 0.5 are NOT compatible with Y1 units sold after
@@ -799,7 +828,7 @@ def release_version_ok(repo, tag_name, model=None, show_old_rockbox=False, show_
     if minimum is None:
         logger.warning("Invalid minimum version %r for %s; not gating", minimum_str, repo)
         return True
-    version = release_version_tuple(tag_name)
+    version = release_version_tuple(tag_name, release_name=release_name)
     if version is None:
         return False
     # Pad so 0.5 and 0.5.0 compare equal, and (0, 4, 9) < (0, 5).
@@ -1398,7 +1427,7 @@ class ReleasesClient:
                     return [
                         r for r in data
                         if isinstance(r, dict)
-                        and release_version_ok(repo, r.get("tag_name", ""))
+                        and release_version_ok(repo, r.get("tag_name", ""), show_old_rockbox=True, release_name=r.get("name"))
                         # A cache written before base tags were filtered out
                         # still holds them; they must never reach a list.
                         and not is_base_release_tag(r.get("tag_name", ""))
@@ -1719,7 +1748,7 @@ class ReleasesClient:
         tag_name = release.get("tag_name", "")
         if is_base_release_tag(tag_name):
             return None
-        if not release_version_ok(repo, tag_name, show_nightly=True):
+        if not release_version_ok(repo, tag_name, show_nightly=True, show_old_rockbox=True, release_name=release.get("name")):
             return None
         assets = release.get("assets", [])
         rom_variants = _release_rom_variants(assets, tag_name, repo)
@@ -1752,7 +1781,7 @@ class ReleasesClient:
             tag_name = release.get("tag_name", "")
             if is_base_release_tag(tag_name):
                 continue
-            if not release_version_ok(repo, tag_name, show_nightly=True):
+            if not release_version_ok(repo, tag_name, show_nightly=True, show_old_rockbox=True, release_name=release.get("name")):
                 continue
             is_prerelease = bool(release.get("prerelease"))
             if "stable" in tag_name.lower():
@@ -1820,6 +1849,7 @@ class ReleasesClient:
                 model=model,
                 show_old_rockbox=show_old_rockbox,
                 show_nightly=show_nightly,
+                release_name=rel.get("name"),
             ):
                 continue
             if original_y1_typea_pre_307_hidden(

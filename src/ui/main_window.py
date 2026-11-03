@@ -3100,6 +3100,10 @@ class MainWindow(QMainWindow):
             return True
         if getattr(self, "_power_off_prompt", False):
             return True
+        if getattr(self, "_keep_data_confirm_pending", False):
+            return True
+        if getattr(self, "_keep_data_erase_confirm_pending", False):
+            return True
         if getattr(self, "_install_complete", False) or getattr(self, "_install_failed", False):
             return False
         return hasattr(self, "sm") and self.sm.state in _INSTALL_RUN_STATES
@@ -3364,6 +3368,9 @@ class MainWindow(QMainWindow):
         stack = getattr(self, "_stack", None)
         page = stack.currentWidget() if stack is not None else None
         if page is None:
+            return
+        if stack.currentIndex() == _PAGE_FLASH or getattr(self, "_hugging_install", False):
+            self._adjust_window_geometry()
             return
         self._release_select_window_size()
         if stack.currentIndex() == _PAGE_DIAGNOSTICS:

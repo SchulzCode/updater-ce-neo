@@ -39,7 +39,7 @@ import zlib
 from dataclasses import dataclass
 from pathlib import Path
 from struct import pack, unpack
-from typing import Optional, Union, Tuple
+from typing import Optional, Union, Tuple, Sequence
 
 from .downloads import downloads_dir
 from . import mtk_legacy_layout as mtk_layout
@@ -1414,8 +1414,49 @@ def _scatter_part_label(part) -> str:
     return str(part.get("name") or part.get("partition_name") or "")
 
 
+def is_overlay_package(scatter_path: Union[str, Path], parts: Optional[Sequence[dict]] = None) -> bool:
+    """True when a firmware package is an overlay (e.g. Y2Linux, DebianY2, Reborn).
+
+    Overlay packages leave base bootloader, partition table, and security partitions
+    untouched (PRELOADER, MBR/EBR, UBOOT/LK, SECCFG are not downloaded), only flashing
+    a subset like BOOTIMG, RECOVERY, ANDROID (rootfs), and optionally USRDATA.
+    """
+    try:
+        manifest_path = Path(scatter_path).parent / "manifest.json"
+        if manifest_path.is_file():
+            import json
+            data = json.loads(manifest_path.read_text(encoding="utf-8", errors="ignore"))
+            schema = str(data.get("schema") or "")
+            if schema.startswith("org.schulzcode.y2linux.release"):
+                return True
+    except Exception:
+        pass
+
+    if parts is None:
+        parts = _parse_scatter_entries(scatter_path)
+
+    dl_names = {
+        _scatter_part_label(p).strip().lower()
+        for p in parts
+        if (
+            (p.get("is_download") is True or str(p.get("is_download", "")).lower() == "true")
+            and str(p.get("file_name", "")).strip().upper() not in ("", "NONE")
+        )
+    }
+
+    has_preloader = "preloader" in dl_names
+    has_bootloader = bool(dl_names & {"uboot", "lk", "lk2"})
+    has_table = bool(dl_names & {"mbr", "pgpt", "sgpt", "gpt", "pmt"})
+
+    return not (has_preloader and has_bootloader and has_table)
+
+
 def _detect_legacy_user_addr_bias(scatter_path, parts=None):
     """Detect whether a scatter file on a legacy platform requires MBR user address biasing."""
+    # Overlay firmware packages leave foundational bootloader / partition tables intact
+    # and write directly to their scatter physical addresses; never apply an artificial MBR bias.
+    if is_overlay_package(scatter_path, parts):
+        return 0
     platform_name = _parse_scatter_platform(scatter_path)
     if platform_name not in _LEGACY_MBR_BIAS_PLATFORMS:
         return 0
@@ -2116,11 +2157,27 @@ def sp_flash_tool_console_args(scatter_arg, da_arg, auth_file="", log=None):
     Chinese build drives, and the one that flashes a hand-selected scatter the
     way users expect.
 
+    ALIGNMENT WITH THE CHINESE MARKET RELEASE & OVERLAY FIRMWARE COMPATIBILITY:
+    While we must be aligned with the Chinese market release for flashing back-end
+    functionality in SP Flash Tool and MTKclient with correct scatter handling
+    and partition image writes, we must however ensure that console mode XML
+    runs do not run in the format mode, just the download mode (<download-only/>
+    or -c download), to ensure compatibility with "overlay firmware packages" like
+    Reborn (Y2Linux) which leave some partitions untouched (see
+    MT6582_Android_scatter.txt). Overlay packages leave foundational partitions
+    (PRELOADER, MBR, EBR, UBOOT/LK, SECCFG, PROTECT_F/S) intact. Running in format
+    mode would erase those untouched partitions and brick the device.
+    We must also, in aligning with the reliable Chinese market release, not
+    negatively impact our clearly intentional front end functionality like the
+    keep data feature which simply excludes the usr/usrdata partition from the
+    flashing / write process while the rest stays the same.
+
     SP Flash Tool has no ``--auth`` switch, so a run *with* an authentication
     file still goes through the console configuration file (``-i``), which
-    carries the file and the same Download Only command. A set auth file that is
-    missing, empty or cannot be written raises :class:`SpAuthFileError`: flashing
-    without the file the user chose would be silently wrong.
+    carries the file and the same Download Only command (<download-only/>).
+    A set auth file that is missing, empty or cannot be written raises
+    :class:`SpAuthFileError`: flashing without the file the user chose would
+    be silently wrong.
     """
     from . import sp_console_config
 
@@ -3101,6 +3158,46 @@ def _scatter_region_parttype(region: str, partition_name: str = "") -> str:
     return "user"
 
 
+def _y2linux_manifest_addresses(scatter_path):
+    """Absolute write addresses declared by a Y2Linux release manifest.
+
+    Y2Linux's scatter uses the stock Y2 physical column, but its manifest is
+    the authoritative install map (the release's own install.md says to stop if
+    SP Flash Tool shows different addresses). The generic legacy mapper adds
+    the Y2 stock MBR bias, which would move every Y2Linux image 8 MiB past its
+    partition. Use the manifest's absolute starts for those packages only.
+    """
+    import json
+
+    try:
+        manifest = Path(scatter_path).parent / "manifest.json"
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return {}
+    schema = str(data.get("schema") or "")
+    if not schema.startswith("org.schulzcode.y2linux.release"):
+        return {}
+    overrides = {}
+    for payload in data.get("payloads") or ():
+        if not isinstance(payload, dict):
+            continue
+        name = str(payload.get("target_partition") or "").strip().upper()
+        address = payload.get("absolute_start_bytes")
+        if name and isinstance(address, int) and address >= 0:
+            overrides[name] = address
+    # RECOVERY is not one of the manifest payloads, but the scatter's physical
+    # column is already the absolute start for it. Use that as the fallback
+    # rather than the generic +8 MiB legacy bias.
+    for entry in _parse_scatter_entries(scatter_path):
+        if not entry.get("is_download") or entry.get("tail_relative"):
+            continue
+        name = str(entry.get("name") or "").strip().upper()
+        physical = entry.get("physical_start_addr")
+        if name and name not in overrides and isinstance(physical, int) and physical >= 0:
+            overrides[name] = physical
+    return overrides
+
+
 def build_mtk_write_plan(
     scatter_path,
     model="",
@@ -3111,6 +3208,7 @@ def build_mtk_write_plan(
     user_addressing=None,
     user_size=None,
     block_size=None,
+    address_overrides=None,
 ):
     """Return the ordered write plan the shipped 1.1.7 build performs.
 
@@ -3127,6 +3225,10 @@ def build_mtk_write_plan(
     ``legacy_preloader_last``), the preloader is moved to the very end so an interrupted
     write leaves the existing BROM/preloader boot mechanism intact.
 
+    ``address_overrides`` maps partition names to absolute byte addresses for
+    packages whose manifest supplies its own layout (Y2Linux). It takes
+    precedence over the generic legacy MBR calibration.
+
     Non-empty partition tables (MBR, EBR1) shipped in the package are included
     so the device has its partition tables configured, while all-zero empty stubs
     are skipped via ``_is_empty_placeholder_image``.
@@ -3141,6 +3243,11 @@ def build_mtk_write_plan(
     if not entries:
         return []
     scatter_dir = scatter_p.parent
+    overrides = {
+        str(name).strip().upper(): int(address)
+        for name, address in (address_overrides or {}).items()
+        if str(name).strip()
+    }
 
     plan = []
     seen = set()
@@ -3184,7 +3291,12 @@ def build_mtk_write_plan(
         # inside eMMC boot1 (the preloader) and at the head of the user area
         # (which the MBR occupies).
         offset = int(entry.get("offset") or 0)
-        if user_addressing is not None and parttype == "user":
+        absolute = overrides.get(name.strip().upper())
+        if absolute is not None:
+            # Y2Linux supplies an install map in its manifest; do not apply the
+            # stock Y2 physical+0x800000 calibration on top of it.
+            offset = absolute
+        elif user_addressing is not None and parttype == "user":
             raw_part = raw_parts[int(entry.get("order", 0))]
             calibrated = _resolve_scatter_user_addr_for_candidate(
                 raw_part, user_addressing, user_size, block_size or DEFAULT_SCATTER_BLOCK_SIZE
@@ -5701,6 +5813,15 @@ class FlashWorker(QThread):
             )
             user_size = _get_emmc_user_size(mtk)
             block_size = _parse_scatter_block_size(scatter_file)
+            y2_addresses = _y2linux_manifest_addresses(scatter_file)
+            if y2_addresses:
+                self._log(
+                    "Y2Linux manifest addresses: "
+                    + ", ".join(
+                        f"{name}=0x{address:X}"
+                        for name, address in sorted(y2_addresses.items())
+                    )
+                )
             plan = build_mtk_write_plan(
                 scatter_file,
                 getattr(self, "package_model", "") or self.model,
@@ -5709,6 +5830,7 @@ class FlashWorker(QThread):
                 user_addressing=addressing,
                 user_size=user_size,
                 block_size=block_size,
+                address_overrides=y2_addresses,
             )
         except PackageLayoutError as e:
             unresolved = "auto-probe" in str(e)
@@ -5721,10 +5843,17 @@ class FlashWorker(QThread):
             )
             return
 
+        is_overlay = is_overlay_package(scatter_file)
         image_names = {str(name).strip().lower() for name, _path in image_files}
-        self._safe_full_flash = bool(
-            image_names & mtk_layout.FULL_FLASH_SYSTEM_PARTITIONS
-        ) and bool(image_names & mtk_layout.FULL_FLASH_BOOT_PARTITIONS)
+        self._safe_full_flash = (
+            not is_overlay
+            and not getattr(self, "keep_data", False)
+            and bool(image_names & mtk_layout.FULL_FLASH_SYSTEM_PARTITIONS)
+            and bool(image_names & mtk_layout.FULL_FLASH_BOOT_PARTITIONS)
+            and bool(image_names & {"preloader"})
+            and bool(image_names & {"uboot", "lk", "lk2"})
+            and bool(image_names & {"mbr", "pgpt", "sgpt", "gpt", "pmt"})
+        )
 
         # The write plan is the 1.1.7 build's, not a guess: every downloadable
         # image in scatter order, the preloader last, and genuine package
@@ -6319,17 +6448,30 @@ class FlashWorker(QThread):
         transfer = int(transfer_length or 0)
         return 0 < transfer < int(partition_size)
 
+    _CRITICAL_NON_RESET_PARTITIONS = frozenset(
+        {
+            "seccfg", "protect_f", "protect_s", "protect1", "protect2",
+            "nvram", "nvdata", "pro_info", "uboot", "lk", "lk2",
+            "preloader", "mbr", "ebr1", "ebr2", "boot", "bootimg",
+        }
+    )
+
     def _reset_runtime_partitions_before_flash(
         self, mtk, scatter_path, addressing, user_size, block_size
     ) -> None:
         """Clear rebuildable runtime partitions before a full legacy flash."""
+        if getattr(self, "keep_data", False) or is_overlay_package(scatter_path):
+            return
         parts = _read_scatter_parts(scatter_path)
         targets = []
         for part in parts:
             if not mtk_layout.user_part(part):
                 continue
             name = str(part.get("partition_name", "")).strip()
-            if name.lower() not in mtk_layout.RUNTIME_RESET_PARTITIONS:
+            low_name = name.lower()
+            if low_name in self._CRITICAL_NON_RESET_PARTITIONS:
+                continue
+            if low_name not in mtk_layout.RUNTIME_RESET_PARTITIONS:
                 continue
             candidate = mtk_layout.UserAddressCandidate(
                 addressing.mode, addressing.bias, addressing.source or ""

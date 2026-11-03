@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 RUN_IN_BACKGROUND_KEY = "run_in_background"
 SF_SYMBOL = "arrow.triangle.2.circlepath"
+_AUTOMATIC_TERMINATION_HELD = False
 
 
 def run_in_background_enabled(settings: Optional[QSettings] = None) -> bool:
@@ -36,6 +37,36 @@ def run_in_background_enabled(settings: Optional[QSettings] = None) -> bool:
     return str(value).lower() in ("1", "true", "yes")
 
 
+def hold_off_automatic_termination(hold: bool) -> None:
+    """Keep macOS from reaping an idle app that lives only in the menu bar.
+
+    AppKit treats a hidden window as "no windows" and enables automatic
+    termination when the close-to-tray path hides it. A few seconds later the
+    process can exit with status 0 while its menu bar icon is still up, which
+    looks like a crash. Hold that off while hidden and give it back when the
+    window is shown again.
+    """
+    global _AUTOMATIC_TERMINATION_HELD
+    if sys.platform != "darwin" or hold == _AUTOMATIC_TERMINATION_HELD:
+        return
+    try:
+        from AppKit import NSProcessInfo
+
+        info = NSProcessInfo.processInfo()
+        if hold:
+            info.disableAutomaticTermination_("Running in the menu bar")
+            if hasattr(info, "disableSuddenTermination"):
+                info.disableSuddenTermination()
+        else:
+            info.enableAutomaticTermination_("Running in the menu bar")
+            if hasattr(info, "enableSuddenTermination"):
+                info.enableSuddenTermination()
+    except Exception:
+        logger.debug("Could not change macOS automatic termination", exc_info=True)
+        return
+    _AUTOMATIC_TERMINATION_HELD = hold
+
+
 def _macos_template_icon(fallback: QIcon) -> QIcon:
     """A system-tinted SF Symbol, so macOS draws it black or white with the menu bar."""
     try:
@@ -49,8 +80,12 @@ def _macos_template_icon(fallback: QIcon) -> QIcon:
         from PySide6.QtGui import QImage, QPixmap
 
         rep = NSBitmapImageRep.imageRepWithData_(image.TIFFRepresentation())
+        if rep is None:
+            return fallback
         png = bytes(rep.representationUsingType_properties_(NSPNGFileType, None))
         pixmap = QPixmap.fromImage(QImage.fromData(png))
+        if pixmap.isNull():
+            return fallback
         icon = QIcon(pixmap)
         icon.setIsMask(True)
         return icon
@@ -83,6 +118,15 @@ class BackgroundTray(QObject):
         self._tray.activated.connect(self._on_activated)
         self._tray.messageClicked.connect(self.message_clicked.emit)
 
+    def showMessage(
+        self,
+        title: str,
+        message: str,
+        icon: QSystemTrayIcon.MessageIcon = QSystemTrayIcon.Information,
+        timeout_ms: int = 10000,
+    ) -> None:
+        self._tray.showMessage(title, message, icon, timeout_ms)
+
     def show(self) -> None:
         self._tray.show()
 
@@ -91,6 +135,9 @@ class BackgroundTray(QObject):
 
     def is_visible(self) -> bool:
         return self._tray.isVisible()
+
+    def is_available(self) -> bool:
+        return QSystemTrayIcon.isSystemTrayAvailable()
 
     def _on_activated(self, reason) -> None:
         if reason in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick):

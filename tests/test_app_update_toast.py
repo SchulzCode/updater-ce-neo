@@ -1,7 +1,7 @@
 """Tests for AppUpdateToast and its precedence over device update reminders."""
 
 import sys
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtWidgets import QApplication, QPushButton, QWidget
 
 from src.ui.widgets import AppUpdateToast
@@ -115,6 +115,57 @@ def test_main_window_update_during_install_shows_toast_instead_of_dialog(monkeyp
     # Verify toast was presented in SelectPackagePage instead
     assert w._select_page._app_update_prompt.isVisible()
     w.close()
+
+
+def test_update_test_shortcut_presents_the_latest_release_even_when_older(monkeypatch):
+    """Cmd/Ctrl+U shows the newest platform release, not just a newer build."""
+    import src.ui.main_window as mw
+    from src.updates import UpdateInfo
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    window = mw.MainWindow()
+    window.show()
+    app.processEvents()
+    started = []
+
+    class _FakeWorker(QObject):
+        # The test surface: the lookup itself belongs to UpdateChecker.
+        finished = Signal(object)
+
+        def __init__(self, checker, parent=None):
+            super().__init__(parent)
+            self._running = False
+
+        def isRunning(self):
+            return self._running
+
+        def start(self):
+            started.append(True)
+            self._running = True
+            # An older release than APP_VERSION must still be presented.
+            self.finished.emit(UpdateInfo(tag="2.5.1", name="2.5.1"))
+            self._running = False
+
+    monkeypatch.setattr(mw, "_SimulatedUpdateWorker", _FakeWorker)
+    try:
+        shortcut = window._update_test_shortcut
+        assert shortcut.key().toString() == "Ctrl+U"
+        assert shortcut.isEnabled()
+        # Headless is not Cocoa, so only the Qt shortcut is installed here.
+        assert getattr(window, "_update_key_monitor", None) is None
+
+        shortcut.activated.emit()
+        app.processEvents()
+
+        assert started == [True]
+        assert window._stack.currentIndex() == mw._PAGE_NOTICE
+        assert window._pending_app_update.tag == "2.5.1"
+        dialog = window._notice_host.findChild(mw.UpdateAvailableDialog)
+        assert dialog is not None and dialog.isVisible()
+    finally:
+        window._force_quit = True
+        window.close()
+        app.processEvents()
 
 
 def test_update_view_wraps_to_the_current_window_width():

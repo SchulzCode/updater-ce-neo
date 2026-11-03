@@ -285,6 +285,7 @@ def test_completion_screen_layout_and_post_install_buttons(app, monkeypatch):
     fp = FlashPage()
     try:
         # Case A: post_install2 present -> Button reads "View Guide + Donate"
+        monkeypatch.setattr("src.player_update_check.is_donation_ui_disabled", lambda *_: False)
         fp.set_post_install_urls(
             post_install="https://innioasis.app/guide/reborn",
             post_install_2="https://innioasis.app/guide/reborn-donate",

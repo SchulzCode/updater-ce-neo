@@ -4680,11 +4680,11 @@ _STRINGS: dict = {
         "es": "Actualizando el paquete de temas…",
     },
     "settings_refresh_themes_btn": {
-        "en": "Refresh themes & fonts",
-        "zh-CN": "刷新主题和字体",
-        "de": "Themes & Schriftarten aktualisieren",
-        "fr": "Actualiser thèmes et polices",
-        "es": "Actualizar temas y fuentes",
+        "en": "Refresh themes",
+        "zh-CN": "刷新主题",
+        "de": "Themes aktualisieren",
+        "fr": "Actualiser les thèmes",
+        "es": "Actualizar temas",
     },
     "settings_themes_refreshing_progress": {
         "en": "Downloading {progress} · {speed}/s",

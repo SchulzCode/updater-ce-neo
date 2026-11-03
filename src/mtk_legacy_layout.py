@@ -30,19 +30,19 @@ LEGACY_FORMAT_32BIT_ADDR_LIMIT = 0xFFFFFFFF
 PARTITION_TABLE_PARTITIONS = frozenset(
     {"mbr", "ebr", "ebr1", "ebr2", "ebr3", "pgpt", "sgpt", "gpt", "pmt"}
 )
+# Rebuildable runtime partitions created by Android at boot. Critical security
+# configuration (seccfg) and radio/hardware calibration (protect_f, protect_s,
+# nvdata, nvram, pro_info) MUST NEVER be placed here, as erasing them destroys
+# device security / calibration and bricks the device (e.g. Little Kernel fails
+# seccfg validation and halts with a black screen before the boot logo).
 RUNTIME_RESET_PARTITIONS = frozenset(
     {
         "metadata",
-        "protect_s",
-        "protect1",
-        "protect_f",
-        "seccfg",
         "expdb",
-        "oemkeystore",
-        "protect2",
-        "keystore",
         "para",
-        "nvdata",
+        "cache",
+        "oemkeystore",
+        "keystore",
     }
 )
 FULL_FLASH_SYSTEM_PARTITIONS = frozenset({"super", "android", "system"})
