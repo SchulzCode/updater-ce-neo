@@ -11,6 +11,7 @@
 set -euo pipefail
 
 REPO="y1-community/updater-ce-neo"
+AUTHOR="Ryan Specter"
 LATEST_RELEASE_API="https://api.github.com/repos/${REPO}/releases/latest"
 
 RED='\033[0;31m'
@@ -30,6 +31,7 @@ ARCH="$(uname -m)"
 echo "=========================================="
 echo "      Innioasis Updater CE 3.0 Setup      "
 echo "=========================================="
+echo "Author: ${AUTHOR}"
 echo "Detected Platform: ${OS} (${ARCH})"
 echo
 

@@ -185,6 +185,7 @@ if "%SKIT_PYI%"=="1" set "PS_ARGS=%PS_ARGS% -SkipPyInstaller"
 echo ================================================================================
 echo   Innioasis Updater CE / MediaTek Installer - Windows Build
 echo ================================================================================
+echo   Author:          Ryan Specter
 echo   Brand:           %BRAND%
 if not "%ARCH%"=="" (echo   Architecture:    %ARCH%) else (echo   Architecture:    auto-detect)
 echo   Clean previous:  %CLEAN%

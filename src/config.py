@@ -249,6 +249,25 @@ logger = logging.getLogger(__name__)
 # --- Device model helpers ---------------------------------------------------
 DEVICE_MODELS = ("Y1", "Y2", "A5")
 
+# Hardware revisions each model was sold in, standard revision first. Models
+# absent from this map have no selectable revision, so their UI never asks for
+# one. Keeping the metadata here means the manual Add Player flow and the
+# reminder labels can share the same rule.
+DEVICE_MODEL_TYPES = {
+    "Y1": ("A", "B"),
+}
+
+
+def hardware_types_for_model(model: str) -> tuple[str, ...]:
+    """Hardware revisions for ``model``, standard revision first."""
+    return DEVICE_MODEL_TYPES.get((model or "").strip().upper(), ())
+
+
+def default_hardware_type(model: str) -> str:
+    """The standard revision for ``model``, or ``""`` when it has none."""
+    types = hardware_types_for_model(model)
+    return types[0] if types else ""
+
 
 def resolve_firmware_repo(repo: str) -> str:
     """Map legacy/unpublished manifest repo names to a fetchable GitHub repo."""

@@ -34,14 +34,55 @@ def temp_settings(tmp_path):
 
 def test_add_player_renaming():
     """Verify that settings_add_device translates to 'Add Player' across languages."""
-    translator().set_language("en")
-    assert tr("settings_add_device") == "Add Player"
+    previous = translator().lang
+    try:
+        translator().set_language("en")
+        assert tr("settings_add_device") == "Add Player"
 
-    translator().set_language("zh-CN")
-    assert tr("settings_add_device") == "添加播放器"
+        translator().set_language("zh-CN")
+        assert tr("settings_add_device") == "添加播放器"
 
-    translator().set_language("de")
-    assert tr("settings_add_device") == "Player hinzufügen"
+        translator().set_language("de")
+        assert tr("settings_add_device") == "Player hinzufügen"
+    finally:
+        translator().set_language(previous or "en")
+
+
+def test_add_device_type_field_only_for_multi_type_models(app):
+    """Y1 needs a type choice; models with one revision must not show one."""
+    from types import SimpleNamespace
+
+    from PySide6.QtWidgets import QComboBox, QLabel
+
+    from src.ui.settings_page import SettingsPage
+
+    holder = SimpleNamespace(
+        _add_device_model=QComboBox(),
+        _add_device_type=QComboBox(),
+        _add_device_type_label=QLabel(),
+        _add_device_software=QComboBox(),
+        _on_add_device_software_changed=lambda *_: None,
+    )
+    holder._add_device_model.addItems(["Y1", "Y2"])
+
+    holder._add_device_model.setCurrentText("Y1")
+    SettingsPage._on_add_device_model_changed(holder)
+    assert not holder._add_device_type.isHidden()
+    assert not holder._add_device_type_label.isHidden()
+    assert holder._add_device_type.count() == 2
+    assert holder._add_device_type.currentData() == "A"
+    assert holder._add_device_type.itemText(0) == (
+        f"{tr('settings_add_device_type')} {tr('sel_type_a')}"
+    )
+    assert holder._add_device_type.itemText(1) == (
+        f"{tr('settings_add_device_type')} {tr('sel_type_b')}"
+    )
+
+    holder._add_device_model.setCurrentText("Y2")
+    SettingsPage._on_add_device_model_changed(holder)
+    assert holder._add_device_type.isHidden()
+    assert holder._add_device_type_label.isHidden()
+    assert holder._add_device_type.count() == 0
 
 
 def test_model_and_type_permutations_tracking(temp_settings):
@@ -83,11 +124,14 @@ def test_model_and_type_permutations_tracking(temp_settings):
     assert rec_b["software_name"] == "Rockbox"
     assert rec_b["hardware_type"] == "B"
 
-    # Permutation labels
+    # Permutation labels name only a non-standard hardware revision.
     label_a = device_tracking.tracked_permutation_label(rec_a)
     label_b = device_tracking.tracked_permutation_label(rec_b)
-    assert "Type A" in label_a or "Type A" in label_a
-    assert "Type B" in label_b
+    type_a = f"{tr('settings_add_device_type')} {tr('sel_type_a')}"
+    type_b = f"{tr('settings_add_device_type')} {tr('sel_type_b')}"
+    assert type_a not in label_a
+    assert "Y1" in label_a
+    assert type_b in label_b
 
     # Unchecking / clearing Y1_A leaves Y1_B and Y2 intact
     device_tracking.clear_device_install("Y1", hardware_type="A", settings=temp_settings)

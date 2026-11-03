@@ -177,6 +177,7 @@ function Set-BuildBrand([string]$b) {
 
 Write-Host "================================================================================" -ForegroundColor Cyan
 Write-Host "  Innioasis Updater Windows Package Builder (v$Version)" -ForegroundColor Yellow
+Write-Host "  Author:          Ryan Specter"
 Write-Host "  Target brand(s): $($BrandsToBuild -join ', ')"
 Write-Host "  Architecture:    $targetArch"
 Write-Host "  Destination:     $DistDir"

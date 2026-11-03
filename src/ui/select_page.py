@@ -2534,8 +2534,10 @@ class SelectPackagePage(QWidget):
             self._see_more_label.setText("")
             return
         t = T()
+        # The GitHub page is untranslated, but this link label belongs to the
+        # app UI and must follow the selected language.
         self._see_more_label.setText(
-            f'<a href="{url}" style="color:{t.fg}; text-decoration:none; font-weight:700;">See More</a>'
+            f'<a href="{url}" style="color:{t.fg}; text-decoration:none; font-weight:700;">{tr("notices_see_more")}</a>'
         )
         self._see_more_label.setVisible(True)
 

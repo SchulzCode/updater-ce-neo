@@ -762,6 +762,30 @@ def test_guided_power_off_and_keep_data_flow(qapp):
         win.close()
 
 
+def test_release_notes_see_more_follows_language(qapp):
+    """The GitHub page is English, but its link label belongs to this UI."""
+    from types import SimpleNamespace
+
+    from PySide6.QtWidgets import QLabel
+
+    from src.i18n import translator
+    from src.ui.select_page import SelectPackagePage
+
+    holder = SimpleNamespace(
+        _current_selected_rel={"html_url": "https://github.com/example/release"},
+        _see_more_label=QLabel(),
+    )
+    previous = translator().lang
+    try:
+        translator().set_language("de")
+        SelectPackagePage._update_see_more_link(holder)
+        text = holder._see_more_label.text()
+        assert tr("notices_see_more") in text
+        assert "See More" not in text
+    finally:
+        translator().set_language(previous or "en")
+
+
 def test_select_page_release_notes_layout_no_overlap(qapp):
     from src.ui.main_window import MainWindow
     from src.i18n import translator

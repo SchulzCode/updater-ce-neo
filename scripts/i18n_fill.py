@@ -77,19 +77,53 @@ def _placeholders(text: str):
     return sorted(re.findall(r"\{[^}]+\}", text or ""))
 
 
+class _Blank:
+    """Stands in for a formatted value, whatever the format spec asks for."""
+
+    def __format__(self, spec):
+        return ""
+
+    def __str__(self):
+        return ""
+
+
+class _Values(dict):
+    def __missing__(self, key):
+        return _Blank()
+
+
+def _safe_translation(source: str, translated: str) -> bool:
+    """A translation is usable only when its placeholders survived intact."""
+    if not translated or not translated.strip():
+        return False
+    if _placeholders(source) != _placeholders(translated):
+        return False
+    if source.count("\n") != translated.count("\n"):
+        return False
+    try:
+        source.format_map(_Values())
+        translated.format_map(_Values())
+    except Exception:
+        return False
+    return True
+
+
 def _repair(source: str, translated: str, lang: str, timeout: float) -> str:
     """Keep placeholders and line breaks; retry alone if the batch damaged it."""
+    def checked(value: str) -> str:
+        return value if _safe_translation(source, value) else source
+
     if not translated or translated == source:
-        return _one(source, lang, timeout)
-    if _placeholders(source) != _placeholders(translated):
-        return _one(source, lang, timeout)
+        return checked(_one(source, lang, timeout))
     if source.count("\n") != translated.count("\n"):
         lines = source.split("\n")
         done = [_one(line, lang, timeout) if line.strip() else line for line in lines]
         joined = "\n".join(done)
-        if joined.strip() and _placeholders(source) == _placeholders(joined):
+        if _safe_translation(source, joined):
             return joined
-        return _one(source, lang, timeout)
+        return checked(_one(source, lang, timeout))
+    if not _safe_translation(source, translated):
+        return checked(_one(source, lang, timeout))
     return translated
 
 

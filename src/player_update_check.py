@@ -14,7 +14,7 @@ from typing import Optional
 from PySide6.QtCore import QSettings
 
 from . import catalog
-from .config import DEVICE_MODELS, device_label_for_model
+from .config import DEVICE_MODELS, default_hardware_type, device_label_for_model
 
 logger = logging.getLogger(__name__)
 
@@ -235,15 +235,38 @@ def get_all_device_installs(settings: Optional[QSettings] = None) -> dict:
     return out
 
 
+def hardware_type_label(hardware_type: str) -> str:
+    """Localized “Type A” / “Type B” wording for a hardware revision."""
+    from .i18n import tr
+
+    hw = str(hardware_type or "").strip()
+    if hw.lower().startswith("type"):
+        hw = hw.split()[-1] if hw.split() else ""
+    hw = hw.upper()
+    if not hw:
+        return ""
+    value = tr(f"sel_type_{hw.lower()}") if hw in ("A", "B") else hw
+    return f"{tr('settings_add_device_type')} {value}"
+
+
+def tracked_model_label(record: dict) -> str:
+    """User-facing model label, naming only a non-standard hardware revision."""
+    model = record.get("model", "")
+    label = device_label_for_model(model)
+    hw = str(record.get("hardware_type") or "").strip()
+    if hw.lower().startswith("type"):
+        hw = hw.split()[-1] if hw.split() else ""
+    hw = hw.upper()
+    if hw and hw != default_hardware_type(model):
+        label = f"{label} ({hardware_type_label(hw)})"
+    return label
+
+
 def tracked_permutation_label(record: dict) -> str:
     """User-facing label for a tracked model + type permutation with software name."""
     from .i18n import tr
-    model = record.get("model", "")
-    hw = record.get("hardware_type", "")
-    label = device_label_for_model(model)
-    if hw:
-        hw_display = f"Type {hw}" if not hw.lower().startswith("type") else hw
-        label = f"{label} ({hw_display})"
+
+    label = tracked_model_label(record)
     software = record.get("software_name", "")
     if software:
         return tr("settings_reminders_model_fmt").format(software=software, model=label)

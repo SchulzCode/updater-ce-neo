@@ -24,6 +24,7 @@ from .. import catalog, device_tracking, paths, shortcut_manager
 from ..config import (
     DEVICE_MODELS,
     device_label_for_model,
+    hardware_types_for_model,
     is_mediatek_installer,
     is_offline_mode,
 )
@@ -1419,9 +1420,12 @@ class SettingsPage(QWidget):
             record = device_tracking.get_device_install(model)
             if not record:
                 continue
-            label = device_label_for_model(model)
+            label = device_tracking.tracked_model_label(record)
             software = str(record.get("software_name") or "").strip()
-            parts.append(f"{software} on {label}" if software else label)
+            parts.append(
+                tr("settings_reminders_model_fmt").format(software=software, model=label)
+                if software else label
+            )
         return " · ".join(parts)
 
     def _tracked_devices_summary(self) -> str:
@@ -1501,12 +1505,7 @@ class SettingsPage(QWidget):
             text = tr("settings_reminders_desc")
         elif len(tracked) == 1:
             _key, record = tracked[0]
-            model = record.get("model", "")
-            hw = record.get("hardware_type", "")
-            label = device_label_for_model(model)
-            if hw:
-                hw_display = f"Type {hw}" if not hw.lower().startswith("type") else hw
-                label = f"{label} ({hw_display})"
+            label = device_tracking.tracked_model_label(record)
             software = str(record.get("software_name") or "").strip()
             if not software or self._is_original_software(software):
                 text = tr("settings_reminders_tracked_original").format(model=label)
@@ -1532,7 +1531,7 @@ class SettingsPage(QWidget):
     # Refresh
     # ------------------------------------------------------------------
     def _build_add_device_panel(self) -> QWidget:
-        """Inline form: Model, Type (Y1 only), Software, Version, Save/Cancel."""
+        """Inline form: Model, Type (only variants), Software, Version, Save/Cancel."""
         panel = QWidget()
         form = QVBoxLayout(panel)
         form.setContentsMargins(0, 4, 0, 0)
@@ -1540,8 +1539,7 @@ class SettingsPage(QWidget):
 
         self._add_device_model = QComboBox()
         self._add_device_type = QComboBox()
-        self._add_device_type.addItem("Type A", "A")
-        self._add_device_type.addItem("Type B", "B")
+        self._add_device_type.setVisible(False)
         self._add_device_software = QComboBox()
         self._add_device_version = QComboBox()
         self._add_device_status = QLabel("")
@@ -1559,6 +1557,7 @@ class SettingsPage(QWidget):
             form.addWidget(combo)
             if combo is self._add_device_type:
                 self._add_device_type_label = label
+                label.setVisible(False)
 
         form.addWidget(self._add_device_status)
 
@@ -1598,9 +1597,17 @@ class SettingsPage(QWidget):
 
     def _on_add_device_model_changed(self, *_):
         model = self._add_device_model.currentText().strip()
-        is_y1 = model.upper() == "Y1"
-        self._add_device_type_label.setVisible(is_y1)
-        self._add_device_type.setVisible(is_y1)
+        types = hardware_types_for_model(model)
+        self._add_device_type.blockSignals(True)
+        self._add_device_type.clear()
+        for hw_type in types:
+            self._add_device_type.addItem(
+                device_tracking.hardware_type_label(hw_type), hw_type
+            )
+        self._add_device_type.blockSignals(False)
+        show_type = len(types) > 1
+        self._add_device_type_label.setVisible(show_type)
+        self._add_device_type.setVisible(show_type)
         self._add_device_software.blockSignals(True)
         self._add_device_software.clear()
         self._add_device_software.addItems(catalog.software_names_for_model(model))
@@ -1621,7 +1628,8 @@ class SettingsPage(QWidget):
             return
         model = self._add_device_model.currentText().strip()
         selected_type = (
-            self._add_device_type.currentData() if model.upper() == "Y1" else None
+            self._add_device_type.currentData()
+            if len(hardware_types_for_model(model)) > 1 else None
         )
         self._add_device_status.setText(tr("settings_add_device_loading"))
         self._add_device_version.addItem(tr("settings_add_device_loading"), "")
@@ -1659,7 +1667,10 @@ class SettingsPage(QWidget):
             self._add_device_status.setText(tr("settings_add_device_pick_version"))
             return
         model = self._add_device_model.currentText().strip()
-        hw_type = self._add_device_type.currentData() if model.upper() == "Y1" else ""
+        hw_type = (
+            self._add_device_type.currentData()
+            if len(hardware_types_for_model(model)) > 1 else ""
+        )
         tag_name = rel.get("tag_name", "")
         if not tag_name:
             self._add_device_status.setText(tr("settings_add_device_pick_version"))
