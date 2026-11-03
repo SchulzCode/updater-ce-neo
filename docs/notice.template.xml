@@ -6,7 +6,8 @@
 
   The app shows the newest active notice in the on-screen banner, and the whole
   active list behind it: clicking the banner (or the Notices link on the Select
-  screen) opens a pop-out where every notice can be expanded and read in full.
+  screen) opens the notices page. Read more there opens a notice's full
+  Markdown body in the page; the banner and cards only use the short <content>.
 
   Attributes on <notice>:
     id          required, unique. Give a new id to publish a notice again.
@@ -29,20 +30,29 @@
     <title>         required, short heading (the banner's first line).
     <content>       required, the short text shown in the banner. Plain text,
                     also accepts <body>.
-    <full_content>  optional, the complete text shown when the notice is
-                    expanded in the notices pop-out. Use this for the detail
-                    that does not fit in a banner (affected hardware
-                    revisions, workarounds, links to a release). Falls back to
-                    <content> when omitted.
-    <url>           optional, https:// URL behind the notice's "See More"
+    <full_content>  optional, the complete text shown after Read more in the
+                    app's full notice view, written in Markdown (headings,
+                    lists, **bold**, *italic*, `code`, fenced blocks, quotes,
+                    horizontal rules, [links](https://...), and images such as
+                    ![screenshot](https://...)). It is not used for the banner
+                    or card preview; those use the short <content>. The app
+                    renders it with Qt's Markdown engine, and the site renders
+                    the same text on the notice's own page. Falls back to
+                    <content> when omitted. May also be a full_content="..."
+                    attribute on <notice>.
+    <url>           optional, https:// URL behind the full notice's "Open page"
                     button. When the app is not in English the button opens
-                    the page's Google Translate view so the notice reads in
-                    the user's language. <link> is accepted as an alias.
+                    the page's Google Translate view so the notice reads in the
+                    user's language. A URL that is only the bare site root is
+                    ignored, and the button is hidden. <link> is accepted as an
+                    alias.
 
   A notice is the way to warn about firmware that should not be installed on a
   particular hardware revision, or about a new revision older releases do not
   support: put the one-line warning in <content>, the full explanation and the
-  affected revision in <full_content>, and the detail page in <url>.
+  affected revision in <full_content>, and the detail page in <url>. Read more
+  opens the full notice inside the app, filling the notices page; it does not
+  send the reader to the bare site root.
 -->
 <notices updated="2026-10-25">
   <notice id="2026-10-25-example" persistent="false" severity="info" from="2026-10-25T09:00" until="2026-12-31" models="Y1,Y2">

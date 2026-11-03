@@ -17,6 +17,7 @@ turned into firmware entries; the app-update placeholder package is skipped
 """
 
 import logging
+import re
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -67,17 +68,60 @@ def _slug_for(name: str, device: str) -> str:
     return f"{base}-{device.lower()}" if base else f"pkg-{device.lower()}"
 
 
+_START_TAG_RE = re.compile(r"<([A-Za-z_][\w:.-]*)([^<>]*?)(/?)>", re.DOTALL)
+_ATTRIBUTE_RE = re.compile(r"""([A-Za-z_][\w:.-]*)\s*=\s*("[^"]*"|'[^']*')""", re.DOTALL)
+
+
+def _dedupe_duplicate_attributes(xml_text: str) -> str:
+    """Drop repeated attributes from start tags, keeping the first value.
+
+    ``slidia_manifest.xml`` has shipped with ``derivative`` written twice on a
+    package. XML rejects that outright, which used to discard the whole live
+    catalogue and its Keep Data family information. The repaired copy is only
+    used after the normal parse fails.
+    """
+
+    def repair_tag(match) -> str:
+        tag, body, close = match.group(1), match.group(2) or "", match.group(3) or ""
+        seen: set[str] = set()
+
+        def keep_attribute(attribute) -> str:
+            name = attribute.group(1).casefold()
+            if name in seen:
+                return ""
+            seen.add(name)
+            return attribute.group(0)
+
+        body = _ATTRIBUTE_RE.sub(keep_attribute, body)
+        return f"<{tag}{body}{close}>"
+
+    return _START_TAG_RE.sub(repair_tag, xml_text)
+
+
 def parse_manifest_xml(xml_text: str):
     """Parse ``<package/>`` entries into ``FirmwarePackage`` objects.
 
     Returns a list; invalid/irrelevant entries are skipped (never raises).
+    A manifest with repeated attributes is retried with the duplicate values
+    removed, so one typo cannot hide the whole catalogue.
     """
     entries = []
     try:
         root = ET.fromstring(xml_text)
     except ET.ParseError as e:
-        logger.error("slidia_manifest.xml parse failed: %s", e)
-        return entries
+        repaired = _dedupe_duplicate_attributes(xml_text)
+        if repaired == xml_text:
+            logger.error("slidia_manifest.xml parse failed: %s", e)
+            return entries
+        try:
+            root = ET.fromstring(repaired)
+            logger.warning(
+                "slidia_manifest.xml had duplicate attributes; parsed repaired copy: %s",
+                e,
+            )
+        except ET.ParseError as repaired_error:
+            logger.error("slidia_manifest.xml parse failed: %s", repaired_error)
+            return entries
     for node in root.iter("package"):
         try:
             name = (node.get("name") or "").strip()

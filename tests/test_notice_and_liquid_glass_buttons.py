@@ -51,6 +51,20 @@ def test_parse_notice_xml():
     assert n2.is_active_for("any") is True
 
 
+def test_notice_accepts_markdown_attribute_and_link_alias():
+    notices = parse_notice_xml(
+        """<notices><notice id="inline" content="Short card preview"
+        full_content="## Full body&#10;&#10;**bold**">
+        <title>Inline body</title>
+        <link>https://innioasis.app/notice/inline.html</link>
+        </notice></notices>"""
+    )
+    assert len(notices) == 1
+    assert notices[0].content == "Short card preview"
+    assert notices[0].full_content == "## Full body\n\n**bold**"
+    assert notices[0].url == "https://innioasis.app/notice/inline.html"
+
+
 def test_notice_service_persistence(tmp_path, monkeypatch):
     service = NoticeService()
     service._cache_file = tmp_path / "notice.xml"

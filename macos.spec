@@ -30,6 +30,8 @@ APP_DISPLAY_NAME = "MediaTek Installer" if IS_MEDIATEK_INSTALLER_BUILD else "Inn
 BUNDLE_ID = (
     "com.innioasis.mediatekinstaller" if IS_MEDIATEK_INSTALLER_BUILD else "com.innioasis.updater"
 )
+APP_AUTHOR = "Ryan Specter"
+APP_COPYRIGHT = f"Copyright © 2024-2026 {APP_AUTHOR}. All rights reserved."
 
 if str(VENDOR_MTK) not in sys.path:
     sys.path.insert(0, str(VENDOR_MTK))
@@ -215,6 +217,7 @@ app = BUNDLE(
         "CFBundleDisplayName": APP_DISPLAY_NAME,
         "CFBundleShortVersionString": "2.5.2",
         "CFBundleVersion": "2.5.2",
+        "CFBundleGetInfoString": f"{APP_DISPLAY_NAME} by {APP_AUTHOR}",
         "LSMinimumSystemVersion": "12.0",
         "NSHighResolutionCapable": True,
         "NSRequiresAquaSystemAppearance": False,
@@ -223,7 +226,7 @@ app = BUNDLE(
         # "Qt on macOS 26 Tahoe").
         "UIDesignRequiresCompatibility": True,
         "LSApplicationCategoryType": "public.app-category.utilities",
-        "NSHumanReadableCopyright": "Copyright © 2024-2026 Ryan Specter. All rights reserved.",
+        "NSHumanReadableCopyright": APP_COPYRIGHT,
         "CFBundleDocumentTypes": [
             {
                 "CFBundleTypeName": "Firmware Archive",
@@ -280,6 +283,7 @@ try:
             "CFBundlePackageType": "APPL",
             "CFBundleShortVersionString": "2.5.2",
             "CFBundleVersion": "2.5.2",
+            "CFBundleGetInfoString": f"{APP_DISPLAY_NAME} by {APP_AUTHOR}",
             "LSApplicationCategoryType": "public.app-category.utilities",
             "LSMinimumSystemVersion": "12.0",
             "NSHighResolutionCapable": True,
@@ -289,7 +293,7 @@ try:
         # "Qt on macOS 26 Tahoe").
         "UIDesignRequiresCompatibility": True,
             "NSPrincipalClass": "NSApplication",
-            "NSHumanReadableCopyright": "Copyright © 2024-2026 Ryan Specter. All rights reserved.",
+            "NSHumanReadableCopyright": APP_COPYRIGHT,
         }
         with open(contents_dir / "Info.plist", "wb") as f:
             plistlib.dump(plist_data, f)

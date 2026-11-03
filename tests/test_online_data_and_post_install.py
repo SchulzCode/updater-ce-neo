@@ -16,8 +16,14 @@ from src.flash_service import (
     _write_scatter_preserving_data,
     sp_flash_tool_console_args,
 )
+from src.i18n import tr
 from src.notice_service import Notice, NoticeService, parse_notice_xml
-from src.ui.dialogs import NoticesDialog, notice_see_more_url
+from src.ui.dialogs import (
+    NoticeDetailView,
+    NoticesDialog,
+    format_notice_markdown,
+    notice_see_more_url,
+)
 from src.ui.widgets import NoticeToast
 
 # ── helpers ─────────────────────────────────────────────────────────────────
@@ -321,21 +327,72 @@ def test_notice_toast_shows_banner_content_not_full_content(qapp):
     assert notice.full_content not in toast._content_label.text()
 
 
-def test_notices_dialog_shows_full_content_for_each_notice(qapp):
+def test_notices_dialog_cards_preview_content_and_open_full_notice(qapp):
     notices = parse_notice_xml(NOTICE_XML)
     dialog = NoticesDialog(None, notices)
     try:
         assert len(dialog._rows) == 2
         first = dialog._rows[0]
-        # The full content is shown without a click.
-        assert not first._body.isHidden()
-        assert first._body.toPlainText().strip() != ""
-        # The globe button only exists for a notice that names a url.
+        # Cards use the short <content> preview, not <full_content>.
+        assert first._body.toPlainText().strip() == notices[0].content
+        assert notices[0].full_content not in first._body.toPlainText()
         assert not first._more.isHidden()
+        # A notice with no full body and no specific page has no Read more.
         second = dialog._rows[1]
         assert second._more.isHidden()
+
+        first._more.click()
+        assert dialog._stack.currentWidget() is dialog._detail
+        assert dialog._detail._body.toPlainText().strip() != ""
+        assert notices[0].full_content.split(".")[0] in dialog._detail._body.toPlainText()
     finally:
         dialog.deleteLater()
+
+
+def test_notices_page_opens_a_notice_and_returns_to_the_list(qapp):
+    from src.ui.dialogs import NoticesPage
+
+    notice = parse_notice_xml(NOTICE_XML)[0]
+    page = NoticesPage()
+    titles = []
+    page.title_changed.connect(lambda: titles.append(page.display_title()))
+    try:
+        page.set_notices([notice])
+        page.open_notice(notice)
+        assert page._pages.currentWidget() is page._detail
+        assert page.display_title() == notice.title
+        assert titles[-1] == notice.title
+
+        page._detail._back.click()
+        assert page._pages.currentWidget() is page._list_page
+        assert page.display_title() == tr("nav_notices")
+    finally:
+        page.deleteLater()
+
+
+def test_notice_detail_renders_markdown_and_ignores_bare_site_url(qapp):
+    notice = parse_notice_xml(
+        """<notices><notice id="markdown">
+        <title>Markdown notice</title>
+        <content>Short preview</content>
+        <full_content>## Details\n\n**Bold** and [a link](https://example.test/guide).\n\n![Screenshot](https://example.test/shot.png)</full_content>
+        <url>https://innioasis.app</url>
+        </notice></notices>"""
+    )[0]
+
+    detail = NoticeDetailView()
+    try:
+        detail.set_notice(notice)
+        html = detail._body.toHtml()
+        assert "Details" in html
+        assert "Bold" in html
+        assert "example.test/guide" in html
+        assert "shot.png" in html
+        # A bare site root is not a notice-specific page.
+        assert detail._open_page.isHidden()
+        assert "<img" in format_notice_markdown(notice.full_content)
+    finally:
+        detail.deleteLater()
 
 
 # ── keep data + Download Only flashing ─────────────────────────────────────

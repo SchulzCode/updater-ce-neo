@@ -12,6 +12,7 @@ InnioasisUpdater.exe and the bundled SP Flash Tool payload.
 
 import os
 import platform
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -53,6 +54,16 @@ if not _BUILD_BRAND and (PROJECT_ROOT / "src" / "_build_brand.py").exists():
 IS_MEDIATEK_INSTALLER_BUILD = (_BUILD_BRAND == "mediatek_installer")
 APP_DISPLAY_NAME = "MediaTek Installer" if IS_MEDIATEK_INSTALLER_BUILD else "Updater CE"
 APP_SLUG = "MediaTekInstaller" if IS_MEDIATEK_INSTALLER_BUILD else "InnioasisUpdater"
+APP_AUTHOR = "Ryan Specter"
+APP_COPYRIGHT = f"Copyright (C) 2024-2026 {APP_AUTHOR}. All rights reserved."
+APP_VERSION = "2.5.2"
+try:
+    for _config_line in (PROJECT_ROOT / "src" / "config.py").read_text(encoding="utf-8").splitlines():
+        if _config_line.strip().startswith("APP_VERSION"):
+            APP_VERSION = _config_line.split("=", 1)[1].strip().strip("\"'")
+            break
+except OSError:
+    pass
 
 _dist_root = Path(DISTPATH) if "DISTPATH" in globals() else (PROJECT_ROOT / "dist")  # noqa: F821
 print(f"[spec] packaging brand: {APP_DISPLAY_NAME} -> {_dist_root / APP_SLUG}")
@@ -190,6 +201,47 @@ a = Analysis(
 
 pyz = PYZ(a.pure)
 
+# Windows shows these fields in the executable's Properties > Details pane and
+# in the uninstall entry. Generate the resource per brand so the portable EXE
+# and the installed app carry the same author, product and copyright credit.
+_version_parts = [int(part) for part in re.findall(r"\d+", APP_VERSION)[:4]]
+_version_parts += [0] * (4 - len(_version_parts))
+_version_tuple = tuple(_version_parts)
+_version_info_path = PROJECT_ROOT / ".cache" / "windows-version" / f"{APP_SLUG}.txt"
+_version_info_path.parent.mkdir(parents=True, exist_ok=True)
+_version_info_path.write_text(
+    "VSVersionInfo(\n"
+    "  ffi=FixedFileInfo(\n"
+    f"    filevers={_version_tuple},\n"
+    f"    prodvers={_version_tuple},\n"
+    "    mask=0x3f,\n"
+    "    flags=0x0,\n"
+    "    OS=0x40004,\n"
+    "    fileType=0x1,\n"
+    "    subtype=0x0,\n"
+    "    date=(0, 0)\n"
+    "  ),\n"
+    "  kids=[\n"
+    "    StringFileInfo([\n"
+    "      StringTable(\n"
+    "        u'040904B0',\n"
+    "        [StringStruct(u'CompanyName', u'" + APP_AUTHOR + "'),\n"
+    "         StringStruct(u'FileDescription', u'" + APP_DISPLAY_NAME + "'),\n"
+    "         StringStruct(u'FileVersion', u'" + APP_VERSION + "'),\n"
+    "         StringStruct(u'InternalName', u'" + APP_SLUG + "'),\n"
+    "         StringStruct(u'LegalCopyright', u'" + APP_COPYRIGHT + "'),\n"
+    "         StringStruct(u'OriginalFilename', u'" + APP_SLUG + ".exe'),\n"
+    "         StringStruct(u'ProductName', u'" + APP_DISPLAY_NAME + "'),\n"
+    "         StringStruct(u'ProductVersion', u'" + APP_VERSION + "'),\n"
+    "         StringStruct(u'Comments', u'Author: " + APP_AUTHOR + "')]\n"
+    "      )\n"
+    "    ]),\n"
+    "    VarFileInfo([VarStruct(u'Translation', [1033, 1200])])\n"
+    "  ]\n"
+    ")\n",
+    encoding="utf-8",
+)
+
 exe = EXE(
     pyz,
     a.scripts,
@@ -202,6 +254,7 @@ exe = EXE(
     upx=False,
     console=False,
     icon=str(ASSETS / "icon.ico") if (ASSETS / "icon.ico").exists() else None,
+    version=str(_version_info_path) if sys.platform.startswith("win") else None,
 )
 
 coll = COLLECT(

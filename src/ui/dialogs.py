@@ -247,6 +247,30 @@ class PreInstallGuidanceDialog(QDialog):
         layout.addLayout(btn_row)
 
 
+def notice_has_page_url(url: str) -> bool:
+    """Whether a notice's link points at an actual page.
+
+    A notice that only carries the bare site root (https://innioasis.app) has
+    no page of its own to open, so the detail view hides its Open page button
+    instead of sending the reader to the homepage.
+    """
+    from urllib.parse import urlparse
+
+    text = (url or "").strip()
+    if not text:
+        return False
+    try:
+        parsed = urlparse(text)
+    except Exception:
+        return False
+    if parsed.scheme not in ("http", "https"):
+        return False
+    host = (parsed.hostname or "").lower()
+    on_innioasis = host == "innioasis.app" or host.endswith(".innioasis.app")
+    has_page = bool(parsed.path.strip("/") or parsed.query or parsed.fragment)
+    return has_page if on_innioasis else True
+
+
 def notice_see_more_url(url: str, lang: str | None = None) -> str:
     """The See More target: the notice page, or its Google Translate view outside English."""
     from urllib.parse import quote
@@ -262,8 +286,268 @@ def notice_see_more_url(url: str, lang: str | None = None) -> str:
     )
 
 
+def _style_notice_link_button(button) -> None:
+    """Give a text action the app's flat, accent-on-hover link treatment."""
+    t = T()
+    button.setStyleSheet(
+        f"QPushButton {{ border: none; background: transparent; color: {t.fg};"
+        " font-size: 13px; font-weight: 700; padding: 0; text-align: left; }"
+        f"QPushButton:hover {{ color: {t.accent}; }}"
+    )
+
+
+def _notice_link_button(text: str, parent=None):
+    """A real, focusable text button; round chips are intentionally icon-only."""
+    from PySide6.QtWidgets import QPushButton
+
+    button = QPushButton(text, parent)
+    button.setFlat(True)
+    button.setCursor(Qt.PointingHandCursor)
+    button.setAutoDefault(False)
+    button.setDefault(False)
+    _style_notice_link_button(button)
+    return button
+
+
+def _notice_posted_text(notice) -> str:
+    """The posted-date line used by both the list card and the detail page."""
+    posted = getattr(notice, "from_date", None)
+    if not posted:
+        return ""
+    stamp = (
+        posted.strftime("%Y-%m-%d %H:%M")
+        if posted.time() != datetime.min.time()
+        else posted.strftime("%Y-%m-%d")
+    )
+    return tr("notices_posted").format(date=stamp)
+
+
+def format_notice_markdown(body: str, *, text_color: str | None = None) -> str:
+    """Render a notice's Markdown body as app-styled HTML.
+
+    Qt's Markdown engine handles headings, lists, emphasis, code, block quotes,
+    links and images. Unlike the release-notes formatter this intentionally
+    keeps images: a full notice may carry a screenshot or a diagram. The
+    generated document has no paper background or hard-coded colours, so it
+    sits on the same card as the rest of the app.
+    """
+    t = T()
+    fg = text_color or t.fg
+    doc = QTextDocument()
+    doc.setMarkdown((body or "").strip())
+    html = doc.toHtml()
+
+    # Qt's export paints a solid body and writes inline default colours. Strip
+    # both so the notice follows the live palette instead of a stale one.
+    html = re.sub(r"background(?:-color)?:\s*[^;\"']+;?", "", html, flags=re.IGNORECASE)
+    html = re.sub(r"color:\s*[^;\"']+;?", "", html, flags=re.IGNORECASE)
+    html = re.sub(r"font-size:[^;\"'>]+;?", "font-size: 13px;", html, flags=re.IGNORECASE)
+
+    css = f"""
+    <style type="text/css">
+    body, p, span, div, li, b, strong, em, i, a, code, pre, h1, h2, h3, h4, h5, h6 {{
+        color: {fg};
+        font-size: 13px;
+        line-height: 1.45;
+    }}
+    body {{ margin: 0; padding: 0; background: transparent; }}
+    img {{ max-width: 100%; height: auto; }}
+    h1, h2, h3, h4, h5, h6 {{
+        font-weight: 700;
+        margin-top: 10px;
+        margin-bottom: 6px;
+    }}
+    h1 {{ font-size: 18px; }}
+    h2 {{ font-size: 16px; }}
+    h3 {{ font-size: 14px; }}
+    p {{ margin-top: 4px; margin-bottom: 8px; }}
+    ul, ol {{ margin-left: 20px; margin-top: 4px; margin-bottom: 8px; }}
+    li {{ margin-bottom: 3px; }}
+    a {{ color: {fg}; font-weight: 700; text-decoration: none; }}
+    code, pre {{
+        font-family: Menlo, Monaco, Consolas, "Cascadia Code", "Courier New", monospace;
+        background-color: {t.bg_input};
+        color: {fg};
+        padding: 2px 4px;
+        border-radius: 3px;
+    }}
+    blockquote {{ margin-left: 12px; color: {t.fg_muted}; }}
+    img {{ margin: 4px 0; }}
+    </style>
+    """
+    if "<head>" in html:
+        return html.replace("<head>", f"<head>{css}", 1)
+    return f"<html><head>{css}</head><body>{html}</body></html>"
+
+
+class _NoticeMarkdownView(QTextBrowser):
+    """Markdown view that opens links externally and loads remote images."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setOpenLinks(False)
+        self.setOpenExternalLinks(False)
+        self.setReadOnly(True)
+        self.setFrameShape(QFrame.NoFrame)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.viewport().setAutoFillBackground(False)
+        self._images: dict = {}
+        self._image_replies: dict = {}
+        self._network = None
+        self.anchorClicked.connect(self._open_link)
+
+    def set_markdown(self, body: str, *, text_color: str | None = None) -> None:
+        self.setHtml(format_notice_markdown(body, text_color=text_color))
+        self.document().setDocumentMargin(0)
+        self.verticalScrollBar().setValue(0)
+
+    def _open_link(self, url) -> None:
+        text = url.toString() if hasattr(url, "toString") else str(url)
+        if text.startswith(("http://", "https://")):
+            from ..browser import open_browser
+
+            open_browser(text)
+
+    def loadResource(self, resource_type, name):  # noqa: N802 (Qt naming)
+        if resource_type == QTextDocument.ResourceType.ImageResource:
+            key = name.toString() if hasattr(name, "toString") else str(name)
+            if key in self._images:
+                return self._images[key]
+            if key.startswith(("http://", "https://")) and key not in self._image_replies:
+                self._fetch_image(key)
+        return super().loadResource(resource_type, name)
+
+    def _fetch_image(self, url: str) -> None:
+        from PySide6.QtCore import QUrl
+        from PySide6.QtNetwork import QNetworkAccessManager, QNetworkRequest
+
+        if self._network is None:
+            self._network = QNetworkAccessManager(self)
+        reply = self._network.get(QNetworkRequest(QUrl(url)))
+        self._image_replies[url] = reply
+        reply.finished.connect(lambda u=url, r=reply: self._image_finished(u, r))
+
+    def _image_finished(self, url: str, reply) -> None:
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QImage
+        from PySide6.QtNetwork import QNetworkReply
+
+        try:
+            if reply.error() == QNetworkReply.NetworkError.NoError:
+                image = QImage.fromData(reply.readAll().data())
+                if not image.isNull():
+                    self._images[url] = image
+                    self.document().addResource(
+                        QTextDocument.ResourceType.ImageResource, QUrl(url), image
+                    )
+                    self.document().markContentsDirty(0, self.document().characterCount())
+                    self.viewport().update()
+        finally:
+            self._image_replies.pop(url, None)
+            reply.deleteLater()
+
+
+class _NoticePanel(QFrame):
+    """The rounded pane behind a full notice, matching the other app cards."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setProperty("cssClass", "card")
+        self.setAutoFillBackground(False)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+
+    def paintEvent(self, event):  # noqa: N802 (Qt naming)
+        from .widgets import _paint_bento_surface
+
+        _paint_bento_surface(self, event)
+
+
+class NoticeDetailView(QWidget):
+    """A full notice, rendered in the main window instead of on the website."""
+
+    back_requested = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("noticeDetail")
+        self._notice = None
+        self._page_url = ""
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(10)
+
+        self._back = _notice_link_button(tr("notices_back"), self)
+        self._back.clicked.connect(lambda *_: self.back_requested.emit())
+        back_row = QHBoxLayout()
+        back_row.setContentsMargins(0, 0, 0, 0)
+        back_row.addWidget(self._back, 0, Qt.AlignLeft)
+        back_row.addStretch(1)
+        root.addLayout(back_row)
+
+        self._panel = _NoticePanel()
+        panel = QVBoxLayout(self._panel)
+        panel.setContentsMargins(18, 16, 18, 16)
+        panel.setSpacing(8)
+
+        self._title = QLabel("")
+        self._title.setProperty("cssClass", "pageTitle")
+        self._title.setWordWrap(True)
+        panel.addWidget(self._title)
+
+        self._posted = QLabel("")
+        self._posted.setProperty("cssClass", "dimmed")
+        panel.addWidget(self._posted)
+
+        self._body = _NoticeMarkdownView(self._panel)
+        self._body.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self._body.setMinimumHeight(180)
+        panel.addWidget(self._body, 1)
+
+        self._open_page = _notice_link_button(tr("notices_open_page"), self._panel)
+        self._open_page.clicked.connect(self._open_notice_page)
+        panel.addWidget(self._open_page, 0, Qt.AlignLeft)
+
+        root.addWidget(self._panel, 1)
+
+    def set_notice(self, notice) -> None:
+        self._notice = notice
+        self._title.setText(getattr(notice, "title", "") or getattr(notice, "id", ""))
+        posted_text = _notice_posted_text(notice)
+        self._posted.setText(posted_text)
+        self._posted.setVisible(bool(posted_text))
+        body = (
+            getattr(notice, "full_content", "")
+            or getattr(notice, "content", "")
+            or ""
+        )
+        self._body.set_markdown(body, text_color=T().fg)
+        self._page_url = notice_see_more_url(getattr(notice, "url", ""))
+        self._open_page.setVisible(notice_has_page_url(getattr(notice, "url", "")))
+
+    def notice(self):
+        return self._notice
+
+    def _open_notice_page(self) -> None:
+        if self._page_url:
+            from ..browser import open_browser
+
+            open_browser(self._page_url)
+
+    def retranslate(self) -> None:
+        self._back.setText(tr("notices_back"))
+        self._open_page.setText(tr("notices_open_page"))
+        _style_notice_link_button(self._back)
+        _style_notice_link_button(self._open_page)
+        if self._notice is not None:
+            self.set_notice(self._notice)
+
+    def refresh_theme(self) -> None:
+        self.retranslate()
+
+
 class NoticesDialog(QDialog):
-    """Pop-out list of active notices. Each notice expands to its full content."""
+    """Pop-out list of active notices. Read more opens a notice in place."""
 
     def __init__(self, parent=None, notices=()):
         super().__init__(parent)
@@ -279,7 +563,7 @@ class NoticesDialog(QDialog):
 
         heading = QLabel(f"<h3 style='color:{t.fg}; margin:0; padding:0;'>{tr('notices_dialog_title')}</h3>")
         heading.setTextFormat(Qt.RichText)
-        layout.addWidget(heading)
+        self._heading = heading
 
         from .flash_page import _RoundNextButton
         from .scrollbars import configure_scroll_area
@@ -291,6 +575,7 @@ class NoticesDialog(QDialog):
         body_layout.setSpacing(8)
         for notice in notices:
             row = _NoticeRow(notice, parent=body)
+            row.open_notice.connect(self._show_notice)
             self._rows.append(row)
             body_layout.addWidget(row)
         if not notices:
@@ -310,7 +595,22 @@ class NoticesDialog(QDialog):
         show_glass_backdrop(scroll.viewport())
         show_glass_backdrop(body)
         configure_scroll_area(scroll)
-        layout.addWidget(scroll, 1)
+
+        from PySide6.QtWidgets import QStackedWidget
+
+        self._list_page = QWidget()
+        list_layout = QVBoxLayout(self._list_page)
+        list_layout.setContentsMargins(0, 0, 0, 0)
+        list_layout.setSpacing(10)
+        list_layout.addWidget(self._heading)
+        list_layout.addWidget(scroll, 1)
+
+        self._stack = QStackedWidget()
+        self._stack.addWidget(self._list_page)
+        self._detail = NoticeDetailView()
+        self._detail.back_requested.connect(self._show_list)
+        self._stack.addWidget(self._detail)
+        layout.addWidget(self._stack, 1)
 
         btn_row = QHBoxLayout()
         btn_row.addStretch()
@@ -320,9 +620,20 @@ class NoticesDialog(QDialog):
         btn_row.addWidget(close_btn, 0, Qt.AlignVCenter)
         layout.addLayout(btn_row)
 
+    def _show_notice(self, notice) -> None:
+        self._detail.set_notice(notice)
+        self._stack.setCurrentWidget(self._detail)
+        self.setWindowTitle(getattr(notice, "title", "") or tr("notices_dialog_title"))
+
+    def _show_list(self) -> None:
+        self._stack.setCurrentWidget(self._list_page)
+        self.setWindowTitle(tr("notices_dialog_title"))
+
 
 class NoticesPage(QWidget):
     """Notices as a main-window page: scrollable, self-refreshing, with dates."""
+
+    title_changed = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -336,6 +647,12 @@ class NoticesPage(QWidget):
         layout.setContentsMargins(20, 16, 20, 16)
         layout.setSpacing(10)
 
+        self._current_notice = None
+        self._list_page = QWidget()
+        list_layout = QVBoxLayout(self._list_page)
+        list_layout.setContentsMargins(0, 0, 0, 0)
+        list_layout.setSpacing(10)
+
         # No refresh button: the feed refreshes itself in the background, and
         # again whenever the sidebar row is clicked. The spinner is the only
         # thing that appears here, and only while a fetch is actually running.
@@ -343,7 +660,7 @@ class NoticesPage(QWidget):
         top.addStretch(1)
         self._spinner = Throbber(self)
         top.addWidget(self._spinner, 0, Qt.AlignVCenter)
-        layout.addLayout(top)
+        list_layout.addLayout(top)
 
         self._body = QWidget()
         self._body_layout = QVBoxLayout(self._body)
@@ -357,7 +674,7 @@ class NoticesPage(QWidget):
         show_glass_backdrop(self._scroll.viewport())
         show_glass_backdrop(self._body)
         configure_scroll_area(self._scroll)
-        layout.addWidget(self._scroll, 1)
+        list_layout.addWidget(self._scroll, 1)
 
         # A plain hint, not a different-coloured web link: it is the way to
         # learn how these notices are written and moderated.
@@ -372,7 +689,16 @@ class NoticesPage(QWidget):
             f"QPushButton:hover {{ color: {T().fg}; }}"
         )
         self._how_btn.clicked.connect(self._open_how_notices_work)
-        layout.addWidget(self._how_btn, 0, Qt.AlignHCenter)
+        list_layout.addWidget(self._how_btn, 0, Qt.AlignHCenter)
+
+        from PySide6.QtWidgets import QStackedWidget
+
+        self._pages = QStackedWidget(self)
+        self._pages.addWidget(self._list_page)
+        self._detail = NoticeDetailView()
+        self._detail.back_requested.connect(self.show_list)
+        self._pages.addWidget(self._detail)
+        layout.addWidget(self._pages, 1)
 
         try:
             from ..notice_service import NoticeService
@@ -407,6 +733,7 @@ class NoticesPage(QWidget):
             row = _NoticeRow(
                 notice, parent=self._body, show_dates=True, allow_dismiss=True
             )
+            row.open_notice.connect(self.open_notice)
             row.dismissed.connect(lambda _notice: self.refresh_from_service())
             self._body_layout.addWidget(row)
         if not notices:
@@ -414,9 +741,39 @@ class NoticesPage(QWidget):
             empty.setWordWrap(True)
             self._body_layout.addWidget(empty)
         self._body_layout.addStretch()
+        if self._current_notice is not None and not any(
+            getattr(notice, "id", "") == getattr(self._current_notice, "id", "")
+            for notice in notices
+        ):
+            self.show_list()
+
+    def open_notice(self, notice) -> None:
+        """Show one notice's full Markdown body in place of the card list."""
+        if notice is None:
+            return
+        self._current_notice = notice
+        self._detail.set_notice(notice)
+        self._pages.setCurrentWidget(self._detail)
+        self.title_changed.emit()
+
+    def show_list(self) -> None:
+        """Return the page to the notice cards."""
+        changed = self._current_notice is not None
+        self._current_notice = None
+        self._pages.setCurrentWidget(self._list_page)
+        if changed:
+            self.title_changed.emit()
+
+    def display_title(self) -> str:
+        """Window title for the list, or for the notice being read."""
+        notice = self._current_notice
+        if notice is None:
+            return tr("nav_notices")
+        return getattr(notice, "title", "") or tr("nav_notices")
 
     def refresh(self) -> None:
         """Reload from the cache now, then fetch a fresh copy in the background."""
+        self.show_list()
         self.refresh_from_service()
         try:
             from ..notice_service import NoticeService
@@ -435,17 +792,26 @@ class NoticesPage(QWidget):
     def retranslate(self) -> None:
         if hasattr(self, "_how_btn"):
             self._how_btn.setText(tr("notices_how_community"))
+        if hasattr(self, "_detail"):
+            self._detail.retranslate()
+
+    def refresh_theme(self) -> None:
+        """Rebuild the cards and the open detail view for a live theme change."""
+        self.refresh_from_service()
+        if hasattr(self, "_detail"):
+            self._detail.refresh_theme()
 
 
 class _NoticeRow(QFrame):
-    """One notice in the list: its title, dates and the full content, always shown.
+    """One notice card: title, date and the short ``content`` preview.
 
-    The body is Markdown and its links open in the browser. A notice with a
-    ``url`` gets a circular globe button that opens the page on the web. On the
-    full page each row can also be dismissed (the banner carries its own cross).
+    ``full_content`` is deliberately not rendered here: it is the long Markdown
+    body shown by :class:`NoticeDetailView` after the reader chooses Read more.
+    The card keeps its own dismiss control on the full Notices page.
     """
 
     dismissed = Signal(object)
+    open_notice = Signal(object)
 
     def __init__(self, notice, parent=None, show_dates=False, allow_dismiss=False):
         super().__init__(parent)
@@ -477,25 +843,26 @@ class _NoticeRow(QFrame):
             header.addWidget(self._dismiss, 0, Qt.AlignTop)
         col.addLayout(header)
 
-        if show_dates and notice.from_date:
-            posted = notice.from_date
-            # A bare date carries no time, so show only the date for it.
-            stamp = (
-                posted.strftime("%Y-%m-%d %H:%M")
-                if posted.time() != datetime.min.time()
-                else posted.strftime("%Y-%m-%d")
-            )
-            dates = QLabel(tr("notices_posted").format(date=stamp), self)
-            dates.setStyleSheet(f"font-size: 12px; color: {t.fg_muted};")
-            col.addWidget(dates)
+        if show_dates:
+            posted_text = _notice_posted_text(notice)
+            if posted_text:
+                dates = QLabel(posted_text, self)
+                dates.setStyleSheet(f"font-size: 12px; color: {t.fg_muted};")
+                col.addWidget(dates)
 
-        body_text = notice.full_content or notice.content or ""
+        # The card is the abridged view: use <content>, never <full_content>.
+        body_text = notice.content or notice.full_content or ""
+        full_text = (notice.full_content or "").strip()
+        has_more = bool(
+            (full_text and full_text != (notice.content or "").strip())
+            or notice_has_page_url(notice.url)
+        )
         self._body = QTextBrowser(self)
-        self._body.setOpenExternalLinks(True)
+        self._body.setOpenExternalLinks(False)
         self._body.setReadOnly(True)
         self._body.setFrameShape(QFrame.NoFrame)
         self._body.setStyleSheet(f"font-size: 13px; color: {t.fg}; background: transparent;")
-        self._body.setMarkdown(body_text)
+        self._body.setPlainText(body_text)
         self._body.document().setDocumentMargin(0)
         self._body.document().setTextWidth(-1)
         self._body.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -503,12 +870,9 @@ class _NoticeRow(QFrame):
         self._body.document().contentsChanged.connect(self._fit_body)
         col.addWidget(self._body)
 
-        from .flash_page import _RoundNextButton
-
-        self._more = _RoundNextButton(symbol="www", accent=True)
-        self._more.setText(tr("notices_see_more"))
-        self._more.clicked.connect(self._open_see_more)
-        self._more.setVisible(bool(notice.url))
+        self._more = _notice_link_button(tr("notices_read_more"), self)
+        self._more.clicked.connect(self._request_open_notice)
+        self._more.setVisible(has_more)
         col.addWidget(self._more, 0, Qt.AlignLeft)
         self._fit_body()
 
@@ -532,11 +896,8 @@ class _NoticeRow(QFrame):
         super().resizeEvent(event)
         self._fit_body()
 
-    def _open_see_more(self) -> None:
-        from PySide6.QtCore import QUrl
-        from PySide6.QtGui import QDesktopServices
-
-        QDesktopServices.openUrl(QUrl(notice_see_more_url(self._notice.url)))
+    def _request_open_notice(self) -> None:
+        self.open_notice.emit(self._notice)
 
     def paintEvent(self, event):  # noqa: N802 (Qt naming)
         from .widgets import _paint_bento_surface

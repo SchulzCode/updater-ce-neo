@@ -6,6 +6,9 @@ build-backend = "hatchling.build"
 name = "innioasis-updater-neo"
 version = "3.0"
 description = "Cross-platform Innioasis firmware updater: InniUpdaterChin flash engine + online firmware catalog + donations modal"
+authors = [
+  { name = "Ryan Specter" },
+]
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }

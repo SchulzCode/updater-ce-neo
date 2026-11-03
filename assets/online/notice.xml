@@ -22,8 +22,13 @@
 
   Child elements:
   - <title>: required, headline of the notice.
-  - <content>: required, description/body text (also supports <body>).
-  - <link>: optional URL opened when the user clicks the action button.
+  - <content>: required, the short preview shown on banners and cards (also
+      supports <body> or a content="..." attribute).
+  - <full_content>: optional Markdown body shown after Read more in the full
+      notice view. Supports headings, lists, emphasis, links and images; also
+      accepted as a full_content="..." attribute.
+  - <link>: optional URL behind the notice's Open page button. A bare
+      https://innioasis.app URL is ignored.
 -->
 <notices updated="2026-10-25">
 

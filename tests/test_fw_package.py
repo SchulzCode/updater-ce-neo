@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from PySide6.QtGui import QColor, QImage
 from PySide6.QtWidgets import QApplication
 
-from src import fw_package
+from src import catalog, fw_package
 from src.ui.select_page import SelectPackagePage
 from src.fw_package import (
     find_installed_package,

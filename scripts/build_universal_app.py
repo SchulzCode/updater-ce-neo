@@ -598,6 +598,7 @@ def build():
         "CFBundlePackageType": "APPL",
         "CFBundleShortVersionString": "2.5.2",
         "CFBundleVersion": "2.5.2",
+        "CFBundleGetInfoString": f"{APP_DISPLAY_NAME} by Ryan Specter",
         "LSApplicationCategoryType": "public.app-category.utilities",
         "LSMinimumSystemVersion": "12.0",
         "NSHighResolutionCapable": True,

@@ -135,6 +135,38 @@ def test_keep_data_with_tracked_permutations(temp_settings):
         assert keep_data.needs_confirmation("Y1", orig_pkg, settings=temp_settings, hardware_type="B") is True
 
 
+def test_manifest_duplicate_derivatives_list_the_keep_data_family():
+    """A malformed duplicate attribute must not hide the whole derivative family."""
+    from src.manifest import parse_manifest_xml
+
+    xml = """<slidia>
+      <package name="Original Software" repo="y1-community/y1-stock-rom"
+               device="Y1" type="img" handler="Custom Firmware" />
+      <package name="Better-Y" repo="Leska1337/better-Y" device="Y1"
+               type="img" handler="Custom Firmware"
+               derivative="y1-community/y1-stock-rom"
+               derivative="y1-community/y1-stock-rom" />
+      <package name="Koensayr" repo="ryan-specter/koensayr-auto" device="Y1"
+               type="img" handler="Custom Firmware"
+               derivative="y1-community/y1-stock-rom"
+               derivative="y1-community/y1-stock-rom" />
+    </slidia>"""
+
+    entries = parse_manifest_xml(xml)
+    assert [entry.name for entry in entries] == [
+        "Original Software",
+        "Better-Y",
+        "Koensayr",
+    ]
+    with patch("src.keep_data._packages", return_value=entries):
+        for entry in entries:
+            assert keep_data.compatible_software_names(entry, "Y1") == [
+                "Original Software",
+                "Better-Y",
+                "Koensayr",
+            ]
+
+
 def test_remote_flags_candidate_filenames():
     """Verify that candidate filenames correctly generate compound platform, arch, and region patterns."""
     names = remote_flags.candidate_flag_filenames("no-term-install")

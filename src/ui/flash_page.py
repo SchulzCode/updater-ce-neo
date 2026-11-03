@@ -3857,6 +3857,8 @@ class FlashPage(QWidget):
         self._model = (model or "").strip() or ""
         if hasattr(self, "_wait_prompt_label") and getattr(self, "_wait_copy", "") == "power_off":
             self._wait_prompt_label.setText(self._power_off_prompt_text())
+        if hasattr(self, "_prep_pkg_label"):
+            self._render_package_name()
         self._update_paperclip_hint()
         self._update_keep_data_warning()
 
@@ -4119,21 +4121,37 @@ class FlashPage(QWidget):
                 label.setPixmap(painted)
                 label.setText("")
 
+    def _generic_install_title(self) -> str:
+        """Name the device a package is installing to when its title is unknown."""
+        from ..config import device_label_for_model
+
+        device = device_label_for_model(self._model) if self._model else tr("flash_player_fallback")
+        return tr("flash_installing_software_on").format(model=device)
+
     def _display_package_name(self) -> str:
         """Card title with its leading software name in the current language.
 
         The name is stored as the English catalogue title, so a language change
         re-localises it here rather than keeping the wording from install start.
+        A package with no detected release title names its target device instead.
         """
-        name = getattr(self, "_package_name", "") or ""
+        name = (getattr(self, "_package_name", "") or "").strip()
+        lower = name.casefold()
+        if (
+            not name
+            or name == "\u2014"
+            or lower.startswith("installing software")
+            or lower.endswith("ready to install software")
+            or lower.endswith((".zip", ".rar", ".7z", ".tar", ".gz", ".bin", ".img", ".txt"))
+        ):
+            return self._generic_install_title()
         canonical = "Original Software"
         if name == canonical or name.startswith(canonical + " "):
             return tr("software_original") + name[len(canonical):]
         return name
 
-    def set_package_name(self, name):
-        self._package_name = name or ""
-        self.update_partition_progress("")
+    def _render_package_name(self) -> None:
+        """Put the current display title on every install-view card."""
         val = self._display_package_name() or "\u2014"
         if hasattr(self, "_prep_pkg_label"):
             self._prep_pkg_label.setText(val)
@@ -4144,6 +4162,11 @@ class FlashPage(QWidget):
         if hasattr(self, "_download_pkg_label"):
             self._download_pkg_label.setText(val)
         self._pkg_row.set_value(val)
+
+    def set_package_name(self, name):
+        self._package_name = name or ""
+        self.update_partition_progress("")
+        self._render_package_name()
         self._relayout_for_text()
 
     def _connect_model_text(self):

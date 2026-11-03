@@ -2849,6 +2849,7 @@ class SelectPackagePage(QWidget):
         self._local_status_key = "sel_preparing"
         self._download_bar.setVisible(False)
         self._local_bar.setVisible(False)
+        self._ensure_install_title()
         self.prep_started.emit(
             getattr(self, "_current_package_name", "") or "",
             getattr(self, "_current_package_model", "") or "",
@@ -3234,10 +3235,26 @@ class SelectPackagePage(QWidget):
                     return
             self._emit_ready()
 
+    def _ensure_install_title(self) -> str:
+        """Use a detected release title, or name the device being installed to."""
+        name = (getattr(self, "_current_package_name", "") or "").strip()
+        model = (getattr(self, "_current_package_model", "") or "").strip()
+        lower = name.casefold()
+        generic = (
+            not name
+            or name == "\u2014"
+            or lower.startswith("installing software")
+            or lower.endswith("ready to install software")
+        )
+        if generic:
+            self._current_package_name = catalog.format_install_heading("", model)
+        return self._current_package_name
+
     def _emit_ready(self):
+        name = self._ensure_install_title()
         self.package_selected.emit(
             self._current_package_path,
-            self._current_package_name,
+            name,
             getattr(self, "_current_package_model", ""),
         )
 

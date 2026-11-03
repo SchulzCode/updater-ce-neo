@@ -83,8 +83,19 @@ def family_repos(pkg, packages: Optional[Iterable] = None) -> set[str]:
 
 
 def compatible_packages(pkg, model: str = "") -> list:
-    """Catalogue packages whose data partition matches ``pkg``."""
+    """Catalogue packages whose data partition matches ``pkg``.
+
+    The incoming package is part of its own family even when it came from a
+    local selection rather than the cached catalogue, so the derivative being
+    installed is always one of the choices.
+    """
     packages = _packages(model or getattr(pkg, "model", ""))
+    incoming_repo = _norm(getattr(pkg, "repo", ""))
+    if pkg is not None and incoming_repo and all(
+        _norm(getattr(candidate, "repo", "")) != incoming_repo
+        for candidate in packages
+    ):
+        packages = [*packages, pkg]
     family = family_repos(pkg, packages)
     return [p for p in packages if _norm(getattr(p, "repo", "")) in family]
 

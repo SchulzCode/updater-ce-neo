@@ -29,7 +29,15 @@
   Child elements:
   - <title>: required, headline of the notice.
   - <content>: required, description/body text (also supports <body>).
-  - <url>: optional URL behind the See More button. Omit it to show no link.
+  - <full_content>: optional full body, written in Markdown. Rendered in the
+      app's full notice view (not on the banner or card, which use <content>),
+      and on the notice's own page on the site. Supports headings, lists,
+      emphasis, code, block quotes, links and images. It may also be supplied as
+      a full_content="..." attribute on <notice>.
+  - <url>: optional URL behind the full notice's Open page button. Omit it to
+      show no link; a URL that is only the bare site root is ignored too. The
+      app opens the full Markdown view locally before offering this page.
+  - <link>: accepted as an alias for <url>.
 -->
 <notices updated="2026-10-25">
 

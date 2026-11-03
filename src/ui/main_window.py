@@ -926,18 +926,21 @@ class MainWindow(QMainWindow):
         The drop is a local package, so it does not become an installed-version record.
         """
         self._drop_check_active = True
+        from .. import catalog
+
+        name = catalog.format_install_heading("", "")
         self._package_path = str(path)
-        self._package_name = path.name
+        self._package_name = name
         self._package_model = ""
         page = getattr(self, "_select_page", None)
         if page is not None:
             page._current_installed_release_info = None
             page._current_package_path = str(path)
-            page._current_package_name = path.name
+            page._current_package_name = name
             page._current_package_model = ""
-        self._flash_page.set_package_name(path.name)
+        self._flash_page.set_package_name(name)
         self._flash_page.set_model("")
-        self._flash_page.show_drop_check(path.name)
+        self._flash_page.show_drop_check(name)
         self._nav_to_page(_PAGE_FLASH)
 
         worker = _DropCheckThread(path, self)
@@ -955,17 +958,42 @@ class MainWindow(QMainWindow):
             self._flash_page.show_drop_error(tr(key))
             self._nav_to_page(_PAGE_FLASH)
             return
+        from .. import catalog
+        from ..fw_package import locate_package, package_install_heading
+
+        source = Path(getattr(worker, "path", "") or flash_path)
+        model = ""
+        name = catalog.format_install_heading("", "")
+        try:
+            # An archive's extracted files are not at flash_path (which is the
+            # archive itself), so only inspect a folder/scatter drop here. Do
+            # not scan the archive's parent: it may hold an unrelated package.
+            folder = Path(flash_path)
+            pkg = None
+            if folder.is_dir():
+                pkg = locate_package(
+                    folder,
+                    require_ini=False,
+                    source_names=(source.name,) if source.name else (),
+                )
+            if pkg is not None:
+                model = pkg.model or ""
+                name = package_install_heading(pkg)
+        except Exception:
+            logger.debug("Could not read dropped package metadata", exc_info=True)
+
         page = getattr(self, "_select_page", None)
         if page is not None:
             page._current_installed_release_info = None
             page._current_package_path = flash_path
-            page._current_package_name = Path(flash_path).name
+            page._current_package_name = name
+            page._current_package_model = model
             page._current_selected_rel = None
             page._details_package = None
             page._raw_release_pixmap = None
-        self._on_package_selected(flash_path, Path(flash_path).name, "")
+        self._on_package_selected(flash_path, name, model)
         if page is not None:
-            page._remember_gui_local(flash_path, "", Path(flash_path).name)
+            page._remember_gui_local(flash_path, model, name)
         self._sync_sp_gui_button_visibility()
         self._sync_settings_sp_gui_visibility()
 
@@ -1092,6 +1120,7 @@ class MainWindow(QMainWindow):
             paint_window_surface(w)
             self._stack.addWidget(w)
         self._notices_page = NoticesPage()
+        self._notices_page.title_changed.connect(self._update_header_title)
         paint_window_surface(self._notices_page)
         self._stack.addWidget(self._notices_page)
         content_col = QWidget()
@@ -1816,6 +1845,7 @@ class MainWindow(QMainWindow):
             self._retry_page,
             self._settings_page,
             getattr(self, "_diagnostics_page", None),
+            getattr(self, "_notices_page", None),
         ):
             if page is not None and hasattr(page, "refresh_theme") and callable(page.refresh_theme):
                 page.refresh_theme()
@@ -4019,11 +4049,12 @@ class MainWindow(QMainWindow):
         if page_idx == _PAGE_RETRY:
             return tr("flash_retry_title")
         if page_idx == _PAGE_NOTICES:
-            self._notices_page.refresh_from_service()
+            notices_page = getattr(self, "_notices_page", None)
+            if notices_page is not None:
+                return notices_page.display_title()
+            return tr("nav_notices")
         if page_idx == _PAGE_NOTICE:
             return getattr(self, "_notice_title", "") or tr("sel_title")
-        if page_idx == _PAGE_NOTICES:
-            return tr("nav_notices")
         if page_idx == _PAGE_SUPPORT:
             return tr("nav_donate")
         return tr("sel_title")

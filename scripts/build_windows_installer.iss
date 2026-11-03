@@ -96,9 +96,11 @@ AppId={#MyAppId}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
+AppCopyright=Copyright (C) 2024-2026 {#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}/issues
 AppUpdatesURL={#MyAppURL}/releases
+UninstallDisplayName={#MyAppName} (by {#MyAppPublisher})
 ; The install is always all users, so {autopf} is Program Files.
 DefaultDirName={autopf}\{#MyAppDirName}
 DefaultGroupName={#MyAppGroup}

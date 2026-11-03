@@ -50,8 +50,9 @@ class Notice:
     severity: str = "info"
     # Feed marker for release notices; blank means an ordinary announcement.
     kind: str = ""
-    # ``content`` is the banner text; ``full_content`` (falls back to ``content``)
-    # is the body shown in the notices pop-out. ``url`` opens the See More page.
+    # ``content`` is the banner/card text; ``full_content`` (falls back to
+    # ``content``) is the Markdown body shown in the full notice view. ``url``
+    # opens the notice-specific page when one exists.
     full_content: str = ""
     url: str = ""
     # ``from`` is when the notice was posted (a date or a timestamp); the app
@@ -181,15 +182,20 @@ def parse_notice_xml(xml_content: str) -> list[Notice]:
         if count > 0:
             notice_id = f"{notice_id}_{count}"
 
-        # Title
-        title_el = el.find("title")
-        title = title_el.text.strip() if title_el is not None and title_el.text else ""
+        # Title and card copy are normally child elements, but accepting the
+        # attributes too keeps compact one-line notices valid.
+        title = (el.get("title") or "").strip()
+        if not title:
+            title_el = el.find("title")
+            title = title_el.text.strip() if title_el is not None and title_el.text else ""
 
-        # Content (supports <content> or <body>)
-        content_el = el.find("content")
-        if content_el is None:
-            content_el = el.find("body")
-        content = content_el.text.strip() if content_el is not None and content_el.text else ""
+        # Content (supports <content>, <body>, or a content="..." attribute)
+        content = (el.get("content") or "").strip()
+        if not content:
+            content_el = el.find("content")
+            if content_el is None:
+                content_el = el.find("body")
+            content = content_el.text.strip() if content_el is not None and content_el.text else ""
 
         if not title and not content:
             continue
@@ -209,13 +215,22 @@ def parse_notice_xml(xml_content: str) -> list[Notice]:
         kind_raw = (el.get("type") or "").strip().lower().replace("-", "_")
         kind = kind_raw if kind_raw in ("player_update", "app_update") else ""
 
-        full_el = el.find("full_content")
-        full_content = full_el.text.strip() if full_el is not None and full_el.text else ""
+        # The feed historically used child elements, but a hand-written notice
+        # can carry the same field as an attribute. Accept both spellings; the
+        # Markdown still belongs to full_content rather than the card preview.
+        full_content = (el.get("full_content") or "").strip()
+        if not full_content:
+            full_el = el.find("full_content")
+            full_content = full_el.text.strip() if full_el is not None and full_el.text else ""
         if not full_content:
             full_content = content
 
-        url_el = el.find("url")
-        url = url_el.text.strip() if url_el is not None and url_el.text else ""
+        url = (el.get("url") or "").strip()
+        if not url:
+            url_el = el.find("url")
+            if url_el is None:
+                url_el = el.find("link")
+            url = url_el.text.strip() if url_el is not None and url_el.text else ""
 
         from_d = _parse_timestamp(el.get("from"))
         until_d = _parse_date(el.get("until"))
