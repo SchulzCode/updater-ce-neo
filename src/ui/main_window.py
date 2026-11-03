@@ -529,6 +529,14 @@ def can_inline_title_with_window_controls() -> bool:
 COMPACT_INSTALL_MIN_HEIGHT = 188
 COMPACT_INSTALL_MIN_HEIGHT_NO_DONATIONS = 168
 
+# The flashing screen is a wizard pane, not a document or a horizontal strip.
+# Its card is short, so a pure content fit can leave a 760px-wide window only
+# ~230px tall. Keep a compact, width-derived frame around the card and let a
+# genuinely taller card (a prompt, a failure, the completion appeal) win.
+INSTALL_WIZARD_MIN_HEIGHT = 380
+INSTALL_WIZARD_FRAME_MAX_HEIGHT = 520
+INSTALL_WIZARD_FRAME_RATIO = 0.52
+
 
 def compact_install_height(
     page_h: int,
@@ -549,6 +557,21 @@ def compact_install_height(
     if donations_disabled:
         return max(COMPACT_INSTALL_MIN_HEIGHT_NO_DONATIONS, page_h + prompt_h + header_h)
     return max(COMPACT_INSTALL_MIN_HEIGHT, page_h + prompt_h + status_h + header_h)
+
+
+def install_wizard_height(content_height: int, width: int) -> int:
+    """Give a progress card a compact wizard pane instead of a thin strip.
+
+    The card's own height remains the floor. At a typical installer width the
+    preferred frame is roughly 1.9:1 (about 395px at 760px wide, 416px at
+    800px); long prompts and completion copy still make the window taller.
+    """
+    preferred = int(round(max(1, int(width)) * INSTALL_WIZARD_FRAME_RATIO))
+    preferred = max(
+        INSTALL_WIZARD_MIN_HEIGHT,
+        min(INSTALL_WIZARD_FRAME_MAX_HEIGHT, preferred),
+    )
+    return max(int(content_height), preferred)
 
 
 def page_title_alignment() -> Qt.AlignmentFlag:
@@ -3607,14 +3630,7 @@ class MainWindow(QMainWindow):
             # Hug the progress card. The minimum comes from the wrapped copy
             # (package name, prompt, buttons), not a fixed height that clips it.
             page = self._flash_page
-            # A running install only gets a new geometry when its stage's view
-            # changes. Re-measuring and animating the window from every action
-            # or progress line made dragging and minimising it impossible.
             generation = getattr(page, "view_generation", None)
-            if self._install_run_active() and generation is not None:
-                if generation == getattr(self, "_install_fit_generation", None):
-                    return
-                self._install_fit_generation = generation
             if hasattr(page, "sync_text_fit"):
                 page.sync_text_fit()
             if page.layout() is not None:
@@ -3663,20 +3679,45 @@ class MainWindow(QMainWindow):
                     if nav is not None
                     else 0
                 )
+                content_h = compact_install_height(
+                    page_h=page_h,
+                    prompt_h=prompt_h,
+                    status_h=status_h,
+                    inline_header=getattr(self, "_title_bar", None) is not None,
+                    donations_disabled=donations_disabled,
+                )
+                # Downloading and extraction keep their deliberately short
+                # cards. The flashing screen is the one that must look like a
+                # compact installer while it runs (and while it completes).
+                if (
+                    getattr(page, "_stack", None) is not None
+                    and page._stack.currentWidget()
+                    is getattr(page, "_flashing_view", None)
+                ):
+                    content_h = install_wizard_height(content_h, target_w)
                 target_h = max(
-                    compact_install_height(
-                        page_h=page_h,
-                        prompt_h=prompt_h,
-                        status_h=status_h,
-                        inline_header=getattr(self, "_title_bar", None) is not None,
-                        donations_disabled=donations_disabled,
-                    ),
+                    content_h,
                     page_h + prompt_h + actual_chrome + 8,
                     rail_min,
                 )
                 # The progress card is capped like every other page: its own
                 # overflow scrolls rather than pushing the window taller.
                 target_h = min(target_h, MAXIMUM_AUTO_FIT_HEIGHT)
+                # A running install only needs a new geometry when the target
+                # actually changes. Do not skip solely because the view
+                # generation is unchanged: a native/manual resize or a stale
+                # pre-layout measurement can leave the frame taller than this
+                # stage needs, and that is exactly what the compact fit fixes.
+                if (
+                    self._install_run_active()
+                    and generation is not None
+                    and generation == getattr(self, "_install_fit_generation", None)
+                    and self.width() == target_w
+                    and self.height() == target_h
+                ):
+                    return
+                if generation is not None:
+                    self._install_fit_generation = generation
             else:
                 # The catalogue is still showing. The short install size is
                 # applied once the progress card is the page on screen. The

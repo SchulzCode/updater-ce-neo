@@ -91,6 +91,26 @@ def test_eta_uses_measured_install_time_and_optional_prep_time():
         page.close()
 
 
+def test_install_progress_frame_keeps_a_wizard_shape():
+    """A short progress card gets a pane, not a full-height or strip window."""
+    from src.ui.main_window import (
+        INSTALL_WIZARD_FRAME_MAX_HEIGHT,
+        INSTALL_WIZARD_MIN_HEIGHT,
+        install_wizard_height,
+    )
+
+    assert install_wizard_height(220, 640) == INSTALL_WIZARD_MIN_HEIGHT
+    assert install_wizard_height(220, 760) == 395
+    assert install_wizard_height(220, 800) == 416
+    assert install_wizard_height(220, 920) == 478
+    assert install_wizard_height(560, 760) == 560
+    assert (
+        INSTALL_WIZARD_MIN_HEIGHT
+        <= install_wizard_height(220, 760)
+        <= INSTALL_WIZARD_FRAME_MAX_HEIGHT
+    )
+
+
 def test_stop_prompt_keeps_the_status_line_wrapping():
     """The sanity check borrows the step line, so it must wrap, not run off."""
     page = _flashing_page(900)
