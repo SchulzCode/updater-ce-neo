@@ -26,6 +26,37 @@ def _get_install_dir() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def get_appimage_path() -> Path | None:
+    """Return the Path to the running AppImage file if running under an AppImage on Linux."""
+    appimage = os.environ.get("APPIMAGE")
+    if appimage:
+        try:
+            return Path(appimage).resolve()
+        except (OSError, ValueError):
+            pass
+    if sys.argv and sys.argv[0]:
+        try:
+            cand = Path(sys.argv[0]).resolve()
+            if cand.suffix.lower() == ".appimage":
+                return cand
+        except (OSError, ValueError):
+            pass
+    return None
+
+
+def get_appimage_dir() -> Path | None:
+    """Return the host directory containing the AppImage if running under AppImage."""
+    img = get_appimage_path()
+    if img is not None:
+        try:
+            parent = img.parent
+            if parent.is_dir():
+                return parent
+        except (OSError, ValueError):
+            pass
+    return None
+
+
 BUNDLE_DIR = _get_bundle_dir()
 INSTALL_DIR = _get_install_dir()
 
@@ -207,14 +238,25 @@ def find_sp_flash_tool():
         Path(os.environ["SP_FLASH_TOOL_DIR"]) if os.environ.get("SP_FLASH_TOOL_DIR") else None,
         SP_FLASH_TOOL_DIR,
         INSTALL_DIR / "SP_Flash_Tool",
+        INSTALL_DIR / "sp_flash_tool",
         INSTALL_DIR,
+    ]
+    appimage_dir = get_appimage_dir()
+    if appimage_dir:
+        candidates.extend([
+            appimage_dir / "SP_Flash_Tool",
+            appimage_dir / "sp_flash_tool",
+            appimage_dir,
+        ])
+    candidates.extend([
         REPO_ROOT / "SP_Flash_Tool",
         REPO_ROOT / "tools" / "SP_Flash_Tool",
         REPO_ROOT / "tools" / "windows" / "SP_Flash_Tool_v5.1904_Win",
         REPO_ROOT / "tools" / "linux" / "SP_Flash_Tool_v5.1904_Linux",
         Path.cwd() / "SP_Flash_Tool",
+        Path.cwd() / "sp_flash_tool",
         Path.cwd(),
-    ]
+    ])
     if IS_WINDOWS:
         if os.environ.get("LOCALAPPDATA"):
             candidates.append(Path(os.environ["LOCALAPPDATA"]) / "Updater CE" / "tools" / "sp_flash_tool_win")

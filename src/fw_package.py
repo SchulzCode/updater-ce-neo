@@ -45,12 +45,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Union
 
-from .paths import INSTALL_DIR, IS_MAC, IS_WINDOWS, REPO_ROOT, find_sp_flash_tool
+from .paths import INSTALL_DIR, IS_MAC, IS_WINDOWS, REPO_ROOT, find_sp_flash_tool, get_appimage_dir
 
 FW_PACKAGE_INI = "fw_package.ini"
 PACKAGE_ICON_NAMES = ("updater.png", "updater.jpg", "updater.jpeg")
 #: Folder beside the macOS ``.app`` that holds a portable firmware release.
 MACOS_FIRMWARE_FOLDER = "Firmware"
+FIRMWARE_FOLDER_NAMES = ("Firmware", "firmware", "_Firmware", "_firmware")
+SP_TOOL_FOLDER_NAMES = ("SP_Flash_Tool", "sp_flash_tool", "_SP_flash_tool", "_sp_flash_tool")
+PACKAGE_SUBFOLDER_NAMES = FIRMWARE_FOLDER_NAMES + SP_TOOL_FOLDER_NAMES
 logger = logging.getLogger(__name__)
 
 
@@ -241,15 +244,16 @@ def pick_scatter(folder: Union[str, Path]) -> Optional[Path]:
     non_preserve = [p for p in matches if "preserve" not in p.name.lower()]
     candidates = non_preserve if non_preserve else matches
 
-    # Preference *ndroid_scatter*.txt over generic *scatter*.txt
-    android = [p for p in candidates if "ndroid_scatter" in p.name.lower()]
-    if len(android) == 1:
-        return android[0]
-    elif len(android) > 1:
-        candidates = android
-
     if len(candidates) == 1:
         return candidates[0]
+
+    # Preference *ndroid_scatter*.txt over generic *scatter*.txt only when
+    # every other scatter is an alias/duplicate named "scatter.txt".
+    android = [p for p in candidates if "ndroid_scatter" in p.name.lower()]
+    if len(android) == 1:
+        others = [p for p in candidates if p not in android]
+        if all(p.name.lower() in ("scatter.txt",) for p in others):
+            return android[0]
 
     return None
 
@@ -343,14 +347,19 @@ def _package_image(folder: Path) -> Optional[Path]:
 def _release_ini(folder: Path, app_dir: Optional[Path] = None) -> Optional[Path]:
     """Return the ``fw_package.ini`` describing the release in ``folder``.
 
-    On Windows and Linux the file beside the application executable is preferred, so a
-    portable app zipped with its firmware can describe the release from its own folder.
-    Otherwise the file in the package folder (the SP Flash Tool directory) is used.
-    macOS keeps only the package-folder lookup.
+    On Windows and Linux the file beside the application executable or AppImage is preferred,
+    so a portable app zipped with its firmware can describe the release from its own folder.
+    Otherwise the file in the package folder (the SP Flash Tool or Firmware directory) is used.
+    macOS keeps only the package-folder lookup when running bundled.
     """
     candidates: list[Path] = []
-    if app_dir is not None and not IS_MAC:
+    if app_dir is not None:
         candidates.append(Path(app_dir) / FW_PACKAGE_INI)
+    elif not IS_MAC:
+        candidates.append(Path(INSTALL_DIR) / FW_PACKAGE_INI)
+    appimage_dir = get_appimage_dir()
+    if appimage_dir is not None:
+        candidates.append(appimage_dir / FW_PACKAGE_INI)
     candidates.append(folder / FW_PACKAGE_INI)
     for candidate in candidates:
         if candidate.is_file():
@@ -506,6 +515,10 @@ def read_package(
     if image is None and ini is not None and ini.parent != folder_p:
         # fw_package.ini beside the app: its updater image may sit there too.
         image = _package_image(ini.parent)
+    if image is None:
+        appimage_dir = get_appimage_dir()
+        if appimage_dir is not None:
+            image = _package_image(appimage_dir)
 
     return FwPackage(
         folder=folder_p.resolve(),
@@ -576,10 +589,12 @@ def find_bundled_firmware(app_dir=None) -> Optional[FwPackage]:
     """Locate an automated portable firmware package packaged with the application.
 
     Locations searched:
-    - macOS: A ``Firmware`` folder beside the .app bundle, then the bundle's folder.
-    - Windows & Linux: In the sp_flash_tool directory of the application
-      (e.g. tools/SP_Flash_Tool, INSTALL_DIR/SP_Flash_Tool, or next to binary).
-      Release details come from ``fw_package.ini`` beside the application executable,
+    - macOS: A ``Firmware`` or ``SP_Flash_Tool`` folder beside the .app bundle, then the bundle's folder.
+    - Linux AppImage: A ``Firmware`` or ``SP_Flash_Tool`` folder in the same folder as the .AppImage,
+      or the neighbouring directory itself.
+    - Windows & Linux: A ``Firmware`` or ``SP_Flash_Tool`` folder in the same folder as the binary
+      (e.g. INSTALL_DIR/Firmware, INSTALL_DIR/SP_Flash_Tool, or next to binary).
+      Release details come from ``fw_package.ini`` beside the application executable or AppImage,
       falling back to the one in the package folder.
 
     Returns an FwPackage if exactly one *scatter*.txt file is found and all declared
@@ -587,30 +602,44 @@ def find_bundled_firmware(app_dir=None) -> Optional[FwPackage]:
     """
     candidates: list[Path] = []
     base = Path(app_dir).resolve() if app_dir is not None else Path(INSTALL_DIR).resolve()
+    appimage_dir = get_appimage_dir()
 
     if IS_MAC:
-        # macOS: a Firmware folder beside the .app is the portable layout (the
+        # macOS: a Firmware or SP_Flash_Tool folder beside the .app is the portable layout (the
         # macOS equivalent of Windows/Linux putting ROM files in a copy of the SP
         # Flash Tool directory). Older packs put the firmware beside the bundle
         # directly, and a dev checkout runs from the repo root.
         app_parent = _macos_app_parent(Path(sys.executable))
         if app_parent and app_parent.is_dir():
-            candidates.append(app_parent / MACOS_FIRMWARE_FOLDER)
+            for sub in PACKAGE_SUBFOLDER_NAMES:
+                candidates.append(app_parent / sub)
             candidates.append(app_parent)
         base_app_parent = _macos_app_parent(base)
         if base_app_parent and base_app_parent.is_dir():
-            candidates.append(base_app_parent / MACOS_FIRMWARE_FOLDER)
+            for sub in PACKAGE_SUBFOLDER_NAMES:
+                candidates.append(base_app_parent / sub)
             candidates.append(base_app_parent)
-        candidates.append(base / MACOS_FIRMWARE_FOLDER)
+        for sub in PACKAGE_SUBFOLDER_NAMES:
+            candidates.append(base / sub)
     else:
-        # Windows & Linux: Search sp_flash_tool directory candidates
+        # Linux AppImage: check neighbouring Firmware or SP_Flash_Tool folder beside the AppImage
+        if appimage_dir and appimage_dir.is_dir():
+            for sub in PACKAGE_SUBFOLDER_NAMES:
+                candidates.append((appimage_dir / sub).resolve())
+            candidates.append(appimage_dir.resolve())
+
+        # Windows & Linux: check neighbouring Firmware or SP_Flash_Tool folder beside the binary
+        for sub in PACKAGE_SUBFOLDER_NAMES:
+            candidates.append((base / sub).resolve())
+        candidates.append(base.resolve())
+
+        # Check SP Flash Tool directory candidates
         sp_found = find_sp_flash_tool()
         if sp_found:
             candidates.append(Path(sp_found).resolve())
 
-        sp_subnames = ["SP_Flash_Tool", "sp_flash_tool", "_SP_flash_tool", "_sp_flash_tool"]
-        for sub in sp_subnames:
-            candidates.append((base / sub).resolve())
+        # Dev checkouts and repo tools
+        for sub in PACKAGE_SUBFOLDER_NAMES:
             candidates.append((REPO_ROOT / sub).resolve())
             candidates.append((REPO_ROOT / "tools" / sub).resolve())
 
@@ -637,7 +666,11 @@ def find_bundled_firmware(app_dir=None) -> Optional[FwPackage]:
 def find_installed_package(app_dir=None) -> Optional[FwPackage]:
     """Look for a package beside the app executable, then in its parent folder."""
     base = Path(app_dir) if app_dir is not None else Path(INSTALL_DIR)
-    for folder in (base, base.parent):
+    folders = [base, base.parent]
+    appimage_dir = get_appimage_dir()
+    if appimage_dir and appimage_dir.is_dir():
+        folders.insert(0, appimage_dir)
+    for folder in folders:
         pkg = read_package(folder, require_ini=True, app_dir=base)
         if pkg is not None:
             return pkg
