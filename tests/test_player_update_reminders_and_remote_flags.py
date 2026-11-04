@@ -319,6 +319,6 @@ def test_completion_screen_layout_and_post_install_buttons(app, monkeypatch):
         assert fp._completion_guide_hint.isHidden()
         assert not fp._appeal_body.isHidden()
         assert fp._appeal_body_below.isHidden()
-        assert fp._coffee_btn.text() == "Buy us a coffee"
+        assert fp._coffee_btn.text() == "Donate on Ko-Fi"
     finally:
         fp.deleteLater()

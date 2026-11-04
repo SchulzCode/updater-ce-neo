@@ -507,22 +507,6 @@ def main():
     app.setApplicationName(config.get_app_name())
     app.setOrganizationName("innioasis")
 
-    # Every file from innioasis.app (catalogue, notices, donors, blocklist) is
-    # read from the copies shipped in the app and replaced in the background
-    # only when stale, so the first window never waits on the network.
-    try:
-        from . import online_data
-
-        online_data.refresh_all_async()
-    except Exception:
-        logging.getLogger(__name__).debug("Online data refresh could not start", exc_info=True)
-    try:
-        from . import player_update_check
-
-        player_update_check.sync_sp_donation_marker()
-    except Exception:
-        logging.getLogger(__name__).debug("Donation marker check failed", exc_info=True)
-
     import sys as _sys
     if _sys.platform != "darwin":
         # On Windows and Linux, set the window/taskbar icon explicitly.
@@ -573,6 +557,24 @@ def main():
 
     if not ensure_single_instance(app):
         sys.exit(0)
+
+    # Only the copy that owns the app touches the shared online copies
+    # (catalogue, notices, donors, blocklist) or the donation marker. They are
+    # refreshed in the background and only when stale, so the first window still
+    # never waits on the network — but a launch that was refused above never
+    # writes to the cache the running copy is reading.
+    try:
+        from . import online_data
+
+        online_data.refresh_all_async()
+    except Exception:
+        logging.getLogger(__name__).debug("Online data refresh could not start", exc_info=True)
+    try:
+        from . import player_update_check
+
+        player_update_check.sync_sp_donation_marker()
+    except Exception:
+        logging.getLogger(__name__).debug("Donation marker check failed", exc_info=True)
 
     # PREPARE LINUX SYSTEM FOR SP FLASH TOOL before showing the window
     # (only when SP Flash Tool is the selected engine; MTKclient needs no prep)

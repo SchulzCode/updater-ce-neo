@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QSizePolicy,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -53,6 +54,17 @@ from .widgets import (
     fade_in,
 )
 from .dark import T, apply_explicit_foreground, link_html, page_top_margin
+
+
+#: The pre-install heading — ``Get your <model> ready to install
+#: <software>`` or ``Get ready to install <software>``. It is the install
+#: card's opening copy, never a title to read back from a card while the
+#: package is being downloaded or written.
+_READY_HEADING = re.compile(
+    r"^get\s+your\s+(?P<model>.+?)\s+ready\s+to\s+install\s+(?P<software>.+)$"
+    r"|^get\s+ready\s+to\s+install\s+(?P<software_alt>.+)$",
+    re.IGNORECASE,
+)
 
 
 def _themed_link(href: str, text: str) -> str:
@@ -1684,10 +1696,19 @@ class FlashPage(QWidget):
         self._wait_cancel_btn.setToolTip(tr("flash_btn_cancel_wait"))
         self._wait_cancel_btn.clicked.connect(self._on_cancel_wait)
 
+        # The firmware question the keep-data prompt asks takes the progress
+        # band's own place in the card head, right beside the Next/Cancel chips,
+        # so the eye runs dropdown -> steps text -> chip. The bar is still there
+        # underneath for every state that is working, not asking.
+        self._wait_head_stack = QStackedWidget()
+        self._wait_head_stack.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        self._wait_head_stack.addWidget(self._wait_progress_bar)
         self._wait_card, self._wait_head, copy = self._new_progress_card(
             self._wait_icon,
             self._wait_pkg_label,
-            self._wait_progress_bar,
+            self._wait_head_stack,
             [self._wait_cancel_btn, self._wait_continue_btn],
         )
         self._wait_row = self._wait_head.box
@@ -1710,9 +1731,13 @@ class FlashPage(QWidget):
         self._keep_data_cb.setVisible(False)
         copy.addWidget(self._keep_data_cb)
         self._keep_data_choice = QComboBox()
-        self._keep_data_choice.setVisible(False)
-        self._keep_data_choice.setMinimumWidth(240)
-        copy.addWidget(self._keep_data_choice)
+        self._keep_data_choice.setMinimumWidth(200)
+        self._keep_data_choice.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
+        # Lives in the head stack, not in the copy column: it replaces the band.
+        self._wait_head_stack.addWidget(self._keep_data_choice)
+        self._wait_head_stack.setCurrentWidget(self._wait_progress_bar)
         self._keep_data_hint = QLabel("")
         self._keep_data_hint.setWordWrap(True)
         self._keep_data_hint.setProperty("cssClass", "hint")
@@ -2029,12 +2054,19 @@ class FlashPage(QWidget):
         self._coffee_btn.setCursor(Qt.PointingHandCursor)
         self._coffee_btn.setStyleSheet("")
         self._coffee_btn.clicked.connect(self._open_coffee_page)
+        # The second donation destination, right beside the first: a completed
+        # install always offers both, guide or not.
+        self._bmc_btn = QPushButton(tr("donate_buy_me_a_coffee"))
+        self._bmc_btn.setCursor(Qt.PointingHandCursor)
+        self._bmc_btn.setStyleSheet("")
+        self._bmc_btn.clicked.connect(self._open_bmc_page)
         self._not_now_btn = QPushButton(tr("donate_not_now"))
         self._not_now_btn.setCursor(Qt.PointingHandCursor)
         self._not_now_btn.setStyleSheet("")
         self._not_now_btn.clicked.connect(self._on_not_now)
         actions.addWidget(self._view_guide_btn)
         actions.addWidget(self._coffee_btn)
+        actions.addWidget(self._bmc_btn)
         actions.addWidget(self._not_now_btn)
         actions.addStretch(1)
         appeal_layout.addLayout(actions)
@@ -3755,7 +3787,7 @@ class FlashPage(QWidget):
         self._keep_data_choice.addItems(names)
         if selected and selected in names:
             self._keep_data_choice.setCurrentText(selected)
-        self._keep_data_choice.setVisible(len(names) > 1)
+        self._show_keep_data_choice(len(names) > 1)
         self._keep_data_hint.setText(hint or "")
         self._keep_data_hint.setVisible(bool(hint))
         if hasattr(self, "_keep_data_microsd_note"):
@@ -3783,8 +3815,7 @@ class FlashPage(QWidget):
         self._prompt_only = True
         self._wait_prompt_label.setText(question or "")
         self._keep_data_cb.setVisible(False)
-        if hasattr(self, "_keep_data_choice"):
-            self._keep_data_choice.setVisible(False)
+        self._show_keep_data_choice(False)
         if hasattr(self, "_keep_data_warning"):
             self._keep_data_warning.setVisible(False)
         self._keep_data_hint.setText(explainer or "")
@@ -3833,6 +3864,16 @@ class FlashPage(QWidget):
             btn.setToolTip(label)
             btn.setAccessibleName(label)
 
+    def _show_keep_data_choice(self, active: bool) -> None:
+        """Swap the card head between the progress band and the firmware dropdown."""
+        stack = getattr(self, "_wait_head_stack", None)
+        choice = getattr(self, "_keep_data_choice", None)
+        if stack is None or choice is None:
+            return
+        wanted = choice if active else self._wait_progress_bar
+        choice.setVisible(bool(active))
+        stack.setCurrentWidget(wanted)
+
     def keep_data_confirm_choice(self) -> str:
         return self._keep_data_choice.currentText() if hasattr(self, "_keep_data_choice") else ""
 
@@ -3841,8 +3882,7 @@ class FlashPage(QWidget):
         self._keep_data_erase_confirm_active = False
         self._keep_data_force_hidden = False
         self._set_yes_no_glyphs(False)
-        if hasattr(self, "_keep_data_choice"):
-            self._keep_data_choice.setVisible(False)
+        self._show_keep_data_choice(False)
         if hasattr(self, "_keep_data_hint"):
             self._keep_data_hint.setVisible(False)
         if hasattr(self, "_keep_data_microsd_note"):
@@ -3990,7 +4030,7 @@ class FlashPage(QWidget):
         if hasattr(self, "_appeal_dont"):
             self._appeal_dont.setText(self._dont_ask_html())
             self._appeal_dont.setToolTip(
-                tr("portable_dont_ask_hint") if getattr(self, "_portable_run", False) else ""
+                tr("portable_dont_ask_hint") if self._portable_storage_blocked() else ""
             )
         if hasattr(self, "_theme_recover_link"):
             self._theme_recover_link.setText(
@@ -3998,7 +4038,7 @@ class FlashPage(QWidget):
             )
 
     def _dont_ask_html(self) -> str:
-        if getattr(self, "_portable_run", False):
+        if self._portable_storage_blocked():
             # Dimmed, not removed: the coffee and Not now buttons stay. The
             # setting cannot be kept because a portable run stores nothing.
             from html import escape
@@ -4072,6 +4112,8 @@ class FlashPage(QWidget):
                 self._coffee_btn.setText(tr("donate_completion_coffee_guide"))
             else:
                 self._coffee_btn.setText(tr("donate_completion_coffee"))
+        if hasattr(self, "_bmc_btn"):
+            self._bmc_btn.setText(tr("donate_buy_me_a_coffee"))
 
     # -- post-install guide -------------------------------------------------
 
@@ -4233,6 +4275,13 @@ class FlashPage(QWidget):
         else:
             open_browser(DONATION_LINKS["kofi"])
 
+    def _open_bmc_page(self) -> None:
+        """Buy Me a Coffee: always the project's own page, guide or not."""
+        from ..browser import open_browser
+        from ..config import DONATION_LINKS
+
+        open_browser(DONATION_LINKS["bmc"])
+
     def _render_appeal_copy(self) -> None:
         """(Re)write the appeal's words for this language, install and model.
 
@@ -4365,9 +4414,24 @@ class FlashPage(QWidget):
         if callable(callback):
             callback()
 
+    def _portable_storage_blocked(self) -> bool:
+        """True when this portable run cannot keep a preference at all.
+
+        A run with no installed copy stores nothing the next launch could
+        read, so preferences are refused. Once Updater CE is installed the
+        run writes to that install's own settings store, and the choice is
+        kept for the app the user actually runs.
+        """
+        if not getattr(self, "_portable_run", False):
+            return False
+        try:
+            return not paths.installed_app_present()
+        except Exception:
+            return True
+
     def _on_appeal_dont_ask(self) -> None:
         """Turn donations off. The caller returns to the compact completion screen."""
-        if getattr(self, "_portable_run", False):
+        if self._portable_storage_blocked():
             # A portable run cannot persist the choice, so the link explains
             # that instead of pretending to save it. Shown like the Type tip.
             from PySide6.QtGui import QToolTip
@@ -4485,6 +4549,18 @@ class FlashPage(QWidget):
         A package with no detected release title names its target device instead.
         """
         name = (getattr(self, "_package_name", "") or "").strip()
+        heading = _READY_HEADING.match(name)
+        if heading is not None:
+            # The heading claimed the install had not started yet, even on
+            # a card halfway through the write. Name the software and its
+            # device instead, which is true at every stage of the run.
+            software = (heading.group("software") or heading.group("software_alt") or "").strip()
+            if software.casefold() == "software":
+                return self._generic_install_title()
+            from ..catalog import format_install_card_title
+
+            model = (heading.group("model") or getattr(self, "_model", "") or "").strip()
+            name = format_install_card_title(software, "", model) or name
         lower = name.casefold()
         if (
             not name

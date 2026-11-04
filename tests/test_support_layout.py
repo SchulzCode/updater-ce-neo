@@ -1,6 +1,6 @@
 """The Support Us card must show all of its copy at any window width.
 
-The appeal is a wrapped paragraph and the donation methods are four labelled
+The appeal is a wrapped paragraph and the donation methods are five labelled
 buttons: both used to be squeezed into the height and width the card happened
 to have, cutting the last lines off the paragraph and the first letters off
 every button label.
@@ -63,8 +63,10 @@ def test_every_method_button_keeps_its_full_label():
 
 
 def test_the_method_row_is_one_line_when_it_fits():
-    page = _page(1100)
-    assert _rows(page) == 1, "four buttons fit on one row in a wide window"
+    # Five labelled buttons need a wider card than the four this page used to
+    # show; below that the FlowLayout wraps them (and the card grows for it).
+    page = _page(1300)
+    assert _rows(page) == 1, "five buttons fit on one row in a wide window"
     page.close()
 
 
@@ -120,13 +122,15 @@ def test_the_card_grows_when_the_button_row_wraps():
     Translated labels are longer than the English ones, which is what wraps
     the row on a window the app already allows.
     """
-    page = _page(1000)
+    page = _page(1500)
     rows = _rows(page)
+    assert rows == 1, "start from one row at a wide window"
     height = page._card.height()
     for button, key in page._method_buttons:
         button.setText(
             {
                 "donate_kofi": "Unterstützen Sie uns auf Ko-fi",
+                "donate_buy_me_a_coffee": "Kauf mir einen Kaffee (Buy Me a Coffee)",
                 "donate_paypal": "Spenden Sie über PayPal",
                 "donate_revolut": "Spenden Sie über Revolut",
                 "donate_patreon": "Auf Patreon unterstützen",

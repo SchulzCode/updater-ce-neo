@@ -248,6 +248,30 @@ def test_transparent_scroll_area_keeps_its_scrollbars_painted(no_glass):
         area.deleteLater()
 
 
+def test_scroll_page_does_not_paint_a_base_plate(no_glass):
+    """The page behind a scroll area's cards must not refill with Base on show.
+
+    ``QScrollArea`` re-enables the viewport's background fill when it polishes
+    the view, which put a solid ``QPalette::Base`` plate — white in light mode,
+    near-black in dark — behind the Select Software and Settings content.
+    """
+    from PySide6.QtWidgets import QApplication, QScrollArea
+
+    from src.ui.scrollbars import configure_scroll_area
+
+    host = QWidget()
+    area = QScrollArea(host)
+    area.setWidget(QWidget())
+    configure_scroll_area(area, transparent=True)
+    host.show()
+    QApplication.processEvents()
+    try:
+        assert area.viewport().autoFillBackground() is False
+    finally:
+        host.close()
+        host.deleteLater()
+
+
 def test_donation_bar_hosts_can_erase_without_glass(no_glass):
 
     from src.donation_dialog import DonationStatusBar

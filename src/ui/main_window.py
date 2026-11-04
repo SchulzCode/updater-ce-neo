@@ -2166,6 +2166,7 @@ class MainWindow(QMainWindow):
         self._settings_page.flash_method_changed.connect(self._on_method_changed)
         self._settings_page.card_focus_finished.connect(self._on_card_focus_finished)
         self._settings_page.linux_prep_completed.connect(self._on_linux_prep_completed)
+        self._settings_page.install_app_requested.connect(self._offer_portable_app_install)
         # The app's own no-progress countdown, shown on the install card.
         self.service.attempt_timeout.connect(self._flash_page.set_attempt_timeout)
         # Time remaining, measured from the install's own write rate (the
@@ -6712,7 +6713,7 @@ class MainWindow(QMainWindow):
 
     def _on_completion_dont_ask(self):
         """Hide donations, then the compact completion screen without the appeal."""
-        if getattr(self, "_bundled_firmware_run", False):
+        if getattr(self, "_bundled_firmware_run", False) and not self._portable_app_installed():
             # The card already explains why a portable run cannot keep this
             # preference; nothing may be written for a one-off run.
             return
@@ -6794,6 +6795,20 @@ class MainWindow(QMainWindow):
         )
         self._present_inline(dialog, label)
 
+    def _offer_portable_app_install(self) -> None:
+        """A portable switch that needs the app installed opens its install screen.
+
+        Run in Background and Notifications cannot be kept by a run that
+        removes its own files when it quits. The attempt opens the app
+        install (or update) screen instead; while a flash owns the window
+        its card is the install screen, and its completion offers the same
+        install.
+        """
+        if self._install_run_active():
+            self._nav_to_page(_PAGE_FLASH)
+            return
+        self._install_portable_app()
+
     def _quit_after_portable_app(self) -> None:
         """The install package is on disk: clean the portable run up and leave."""
         if self._portable_cleanup_required():
@@ -6801,6 +6816,18 @@ class MainWindow(QMainWindow):
             return
         self._force_quit = True
         self.close()
+
+    def _portable_app_installed(self) -> bool:
+        """True when a real Updater CE install can read what this run stores.
+
+        A portable run shares the installed app's settings store, so a
+        preference saved here is the one the app reads on its next launch.
+        Without an install the run is a one-off and must write nothing.
+        """
+        try:
+            return bool(paths.installed_app_present())
+        except Exception:
+            return False
 
     def _portable_cleanup_required(self) -> bool:
         return bool(
@@ -7564,6 +7591,8 @@ class MainWindow(QMainWindow):
 
             self._portable_session = portable_run.PortableSession()
             self._bundled_firmware_run = True
+            if hasattr(self, "_settings_page"):
+                self._settings_page.set_portable_run(True)
             # 1. Parse scatter, stage firmware files into working directory
             staged_scatter = stage_bundled_firmware(pkg)
 
@@ -8708,7 +8737,7 @@ class MainWindow(QMainWindow):
         Nothing on screen reads them, so a hidden window stops polling. Only
         the install and tray paths keep their own timers.
         """
-        for name in ("_chrome_watchdog", "_sp_history_timer"):
+        for name in ("_chrome_watchdog", "_sp_history_timer", "_online_refresh_timer"):
             timer = getattr(self, name, None)
             if timer is None:
                 continue

@@ -78,6 +78,12 @@ sys.argv = [arg for arg in sys.argv if not arg.startswith("-psn")]
 
 if __name__ == "__main__":
     try:
+        # Before anything else spawns a helper: a window that flashes open
+        # during launch makes the app look broken, and imports below can start
+        # processes.
+        from src import quiet_subprocess
+
+        quiet_subprocess.install()
         from src.app import main
         main()
     except Exception as exc:

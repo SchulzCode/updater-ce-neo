@@ -242,6 +242,110 @@ def find_sp_flash_tool():
     return None
 
 
+#: Inno Setup's uninstall-key suffix for Updater CE (scripts/build_windows_installer.iss).
+_WIN_CE_APP_ID = "{C78F982D-7B5F-48A1-8E23-DF3A0210A2B9}_is1"
+
+
+def _windows_ce_installed() -> bool:
+    """True when an Innioasis Updater CE install is registered on Windows."""
+    try:
+        from .store_package import is_packaged
+
+        if is_packaged():
+            return True
+    except Exception:
+        pass
+    try:
+        import winreg
+    except Exception:
+        return False
+    roots = (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE)
+    sub_keys = (
+        r"Software\Microsoft\Windows\CurrentVersion\Uninstall",
+        r"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+    )
+    for root in roots:
+        for sub_key in sub_keys:
+            try:
+                with winreg.OpenKey(root, sub_key) as key:
+                    count = winreg.QueryInfoKey(key)[0]
+                    names = [winreg.EnumKey(key, index) for index in range(count)]
+            except OSError:
+                continue
+            for name in names:
+                if name == _WIN_CE_APP_ID:
+                    return True
+                try:
+                    with winreg.OpenKey(root, sub_key + "\\" + name) as entry:
+                        display, _kind = winreg.QueryValueEx(entry, "DisplayName")
+                except OSError:
+                    continue
+                if "updater ce" in str(display or "").casefold():
+                    return True
+    return False
+
+
+def _mac_ce_installed() -> bool:
+    """True when an Innioasis Updater CE bundle sits in an Applications folder."""
+    for folder in (Path("/Applications"), Path.home() / "Applications"):
+        try:
+            bundles = list(folder.glob("*.app"))
+        except OSError:
+            continue
+        for bundle in bundles:
+            words = bundle.stem.casefold().split()
+            if "updater" in words and "ce" in words:
+                return True
+    return False
+
+
+def _linux_ce_installed() -> bool:
+    """True when a desktop entry for Innioasis Updater CE is installed."""
+    share = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+    folders = (
+        share / "applications",
+        Path("/usr/share/applications"),
+        Path("/usr/local/share/applications"),
+    )
+    for folder in folders:
+        try:
+            entries = list(folder.glob("*.desktop"))
+        except OSError:
+            continue
+        for entry in entries:
+            try:
+                content = entry.read_text(encoding="utf-8", errors="replace").casefold()
+            except OSError:
+                continue
+            if "name=" in content and "updater ce" in content:
+                return True
+    return False
+
+
+def installed_app_present() -> bool:
+    """True when a real Innioasis Updater CE install exists on this computer.
+
+    A portable (bundled firmware) run shares the app's settings store and its
+    application-support/cache folders with an installed copy. When one is
+    present those files belong to the installed app, so preferences saved
+    during the run persist and the run's cleanup leaves them alone. The
+    pre-3.0 Chinese updater does not count: it is a different app with its
+    own install and its own settings.
+
+    Detection never raises and answers ``False`` when it cannot tell. That is
+    the safe answer: a run with no installed copy then removes only the
+    working files it created itself.
+    """
+    try:
+        if sys.platform == "win32":
+            return _windows_ce_installed()
+        if sys.platform == "darwin":
+            return _mac_ce_installed()
+        return _linux_ce_installed()
+    except Exception:
+        return False
+
+
 def find_unrar() -> str:
     """Locate an UnRAR / unar executable across platforms."""
     candidates = [

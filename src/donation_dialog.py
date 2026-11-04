@@ -1116,14 +1116,26 @@ class DonationDialog(QDialog):
             self._dont_ask = QCheckBox(tr("donate_dont_ask"))
             layout.addWidget(self._dont_ask)
 
-        # Coffee is the only donation action.
+        # Two donation actions, side by side: the Ko-fi page, and Buy Me a
+        # Coffee beside it. No other payment method is offered here.
+        actions = QHBoxLayout()
+        actions.setSpacing(8)
         coffee = QPushButton(tr("donate_buy_coffee"))
         coffee.setCursor(Qt.ArrowCursor)
         coffee.setStyleSheet("")
         coffee.clicked.connect(lambda _=False: open_browser(DONATION_LINKS["kofi"]))
         self._pay_buttons.append(coffee)
-        self._last_button = coffee
-        layout.addWidget(coffee, 0, Qt.AlignLeft)
+        actions.addWidget(coffee, 0, Qt.AlignLeft)
+
+        bmc = QPushButton(tr("donate_buy_me_a_coffee"))
+        bmc.setCursor(Qt.ArrowCursor)
+        bmc.setStyleSheet("")
+        bmc.clicked.connect(lambda _=False: open_browser(DONATION_LINKS["bmc"]))
+        self._pay_buttons.append(bmc)
+        self._last_button = bmc
+        actions.addWidget(bmc, 0, Qt.AlignLeft)
+        actions.addStretch(1)
+        layout.addLayout(actions)
 
         # 7. Bottom row with status message & Close button
         bottom_row = QHBoxLayout()

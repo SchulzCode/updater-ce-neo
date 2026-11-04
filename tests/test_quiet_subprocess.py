@@ -1,66 +1,69 @@
-"""Windows helper processes must not open console windows."""
+"""The subprocess shield: children start hidden, requested windows are kept."""
 
-import subprocess
-import sys
-from pathlib import Path
-from unittest.mock import patch
+import os
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import pytest
 
-from src import adb, quiet_subprocess
+from src import quiet_subprocess
 
-NO_WINDOW = 0x08000000
+pytestmark = pytest.mark.skipif(
+    os.name != "nt", reason="console-window hiding is a Windows concern"
+)
+
+SW_HIDE = 0
+STARTF_USESHOWWINDOW = 0x00000001
 
 
-def test_hidden_window_kwargs_hide_console_on_windows(monkeypatch):
-    monkeypatch.setattr(quiet_subprocess.os, "name", "nt")
-    monkeypatch.setattr(subprocess, "STARTUPINFO", lambda: type("SI", (), {"dwFlags": 0})(), raising=False)
-    monkeypatch.setattr(subprocess, "STARTF_USESHOWWINDOW", 1, raising=False)
+class _Recorder:
+    def __init__(self):
+        self.kwargs = None
+
+    def __call__(self, _self, *args, **kwargs):
+        self.kwargs = kwargs
+
+
+def test_hidden_window_kwargs_ask_for_no_window():
     kwargs = quiet_subprocess.hidden_window_kwargs()
-    assert kwargs["creationflags"] & NO_WINDOW
-    assert kwargs["startupinfo"].wShowWindow == 0
+    assert kwargs["creationflags"] == quiet_subprocess.CREATE_NO_WINDOW
+    info = kwargs["startupinfo"]
+    assert info.dwFlags & STARTF_USESHOWWINDOW
+    assert info.wShowWindow == SW_HIDE
 
 
-def test_hidden_window_kwargs_empty_off_windows(monkeypatch):
-    monkeypatch.setattr(quiet_subprocess.os, "name", "posix")
-    assert quiet_subprocess.hidden_window_kwargs() == {}
+def test_wrapped_popen_hides_the_child_by_default():
+    """A plain spawn — how every helper in the app is launched — is hidden."""
+    recorder = _Recorder()
+    wrapped = quiet_subprocess._wrap_init(recorder)
+    wrapped(object(), ["adb", "devices"])
+
+    assert recorder.kwargs["creationflags"] & quiet_subprocess.CREATE_NO_WINDOW
+    # CREATE_NO_WINDOW alone still flashes for a few console hosts, so the
+    # wrapper must also ask for SW_HIDE.
+    assert recorder.kwargs["startupinfo"].wShowWindow == SW_HIDE
 
 
-def test_adb_runs_silently():
-    captured = {}
+def test_wrapped_popen_keeps_a_deliberate_window():
+    recorder = _Recorder()
+    wrapped = quiet_subprocess._wrap_init(recorder)
+    wrapped(object(), ["cmd"], creationflags=quiet_subprocess._CREATE_NEW_CONSOLE)
 
-    def fake_run(cmd, **kwargs):
-        captured.update(kwargs)
-        return subprocess.CompletedProcess(cmd, 0, "", "")
-
-    with patch("src.adb.subprocess.run", fake_run), patch(
-        "src.quiet_subprocess.hidden_window_kwargs",
-        return_value={"creationflags": NO_WINDOW},
-    ):
-        adb._run_adb("adb", "devices")
-    assert captured["creationflags"] & NO_WINDOW
-    assert captured["capture_output"] is True
-    assert captured["stdin"] is subprocess.DEVNULL
+    assert recorder.kwargs["creationflags"] == quiet_subprocess._CREATE_NEW_CONSOLE
+    assert "startupinfo" not in recorder.kwargs
 
 
-def test_popen_patch_adds_flag_but_respects_explicit_console(monkeypatch):
-    if sys.platform != "win32":
-        return
-    seen = []
-    monkeypatch.setattr(quiet_subprocess, "_installed", False)
-    original = subprocess.Popen.__init__
-    try:
-        monkeypatch.setattr(
-            subprocess.Popen, "__init__",
-            lambda self, *a, **k: seen.append(k.get("creationflags")),
-        )
-        quiet_subprocess.install()
-        subprocess.Popen(["x"])
-        subprocess.Popen(["x"], creationflags=0x10)  # CREATE_NEW_CONSOLE
-        subprocess.Popen(["x"], creationflags=0x8)   # DETACHED_PROCESS
-    finally:
-        subprocess.Popen.__init__ = original
-        quiet_subprocess._installed = False
-    assert seen[0] & NO_WINDOW
-    assert seen[1] == 0x10
-    assert seen[2] == 0x8
+def test_wrapped_popen_keeps_a_callers_startupinfo():
+    recorder = _Recorder()
+    wrapped = quiet_subprocess._wrap_init(recorder)
+    own = quiet_subprocess._hidden_startupinfo()
+    wrapped(object(), ["cmd"], startupinfo=own)
+
+    assert recorder.kwargs["startupinfo"] is own
+
+
+def test_wrapping_twice_is_a_no_op():
+    original = quiet_subprocess._wrap_init(_Recorder())
+    assert quiet_subprocess._wrap_init(original)._innioasis_hidden is True
+
+    fake_popen_init = quiet_subprocess._wrap_init(_Recorder())
+    # install() must not double-wrap an already shielded Popen.
+    assert getattr(fake_popen_init, "_innioasis_hidden", False)

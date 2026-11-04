@@ -1447,11 +1447,10 @@ QMessageBox {{
 QMessageBox QLabel {{
     color: {text_color};
 }}
-QCheckBox {{
-    color: {text_color};
-    background: transparent;
-    border: none;
-}}
+/* No rule for the toggles on purpose. A rule for one hands that widget to
+   QStyleSheetStyle, which then draws part of it itself: on Windows the box
+   vanished when ticked and only the tick was left. The host style draws both
+   states, and the themed palette supplies the label colour. */
 
 /* Cards paint their rounded surface in Card.paintEvent. Do not give the
    frame a stylesheet background: it fills the entire rectangle behind the

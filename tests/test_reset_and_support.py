@@ -70,8 +70,9 @@ def test_support_page_narratives_and_methods(qapp):
         translator().set_language(old_language)
         page.retranslate()
 
-    # Test primary payment methods are created (Ko-fi, PayPal, Revolut, Patreon)
-    assert len(page._method_buttons) == 4
+    # Test primary payment methods are created
+    # (Ko-fi, Buy Me a Coffee, PayPal, Revolut, Patreon)
+    assert len(page._method_buttons) == 5
     assert hasattr(page, "_honeygain_link")
     assert page._crypto_drawer.isHidden()
     page._toggle_crypto_drawer()

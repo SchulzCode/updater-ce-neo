@@ -158,6 +158,7 @@ class SupportPage(QWidget):
 
         primary_methods = [
             ("donate_kofi", "kofi"),
+            ("donate_buy_me_a_coffee", "bmc"),
             ("donate_paypal", "paypal"),
             ("donate_revolut", "revolut"),
             ("donate_patreon", "patreon"),

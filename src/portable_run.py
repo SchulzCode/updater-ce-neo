@@ -11,6 +11,13 @@ what was already in those folders; everything that appears afterwards belongs
 to this run and is removed when the user finishes (the completion card offers
 to install the app properly first). Pre-existing files — an installed copy's
 cache, a firmware the user downloaded earlier — are never touched.
+
+An installed copy changes only what cleanup keeps. The run and the
+installed app share one settings store, one cache and one working
+folder, so when ``paths.installed_app_present`` finds a real Updater CE
+install the cache is the app's: preferences saved during the run
+survive, and the pass removes this run's staged firmware and temporary
+work directories only.
 """
 
 from __future__ import annotations
@@ -131,8 +138,15 @@ def _clean_tree(folder: Path, before: set[str]) -> list[str]:
 class PortableSession:
     """The working files a portable run may create, and their cleanup."""
 
-    def __init__(self, started_at: Optional[float] = None):
+    def __init__(
+        self,
+        started_at: Optional[float] = None,
+        app_installed: Optional[bool] = None,
+    ):
         self.started_at = float(started_at if started_at is not None else time.time())
+        # ``None`` asks the machine at cleanup time: a run that installs the
+        # app itself must keep the files it has just written.
+        self._app_installed = app_installed
         self._downloads = _downloads_dir()
         self._cache = _cache_dir()
         self._temp = _temp_dir()
@@ -142,25 +156,44 @@ class PortableSession:
         self._cache_before = _tree_entries(self._cache)
         self._temp_before = _names(self._temp)
 
+    def app_data_kept(self) -> bool:
+        """True when an installed copy owns the folders this run wrote into.
+
+        The snapshot protects files that already existed, but an installed
+        app keeps reading its own cache and shares this run's settings
+        store, so a run that leaves that install behind must not prune it.
+        Answered at call time so a run that installs the app is covered.
+        """
+        if self._app_installed is not None:
+            return bool(self._app_installed)
+        try:
+            from .paths import installed_app_present
+
+            return bool(installed_app_present())
+        except Exception:
+            return False
+
     def targets(self) -> list[Path]:
         """Everything cleanup would remove, without removing it."""
         targets = {
             self._downloads / str(relative)
             for relative in _tree_entries(self._downloads) - self._downloads_before
         }
-        targets.update(
-            self._cache / str(relative)
-            for relative in _tree_entries(self._cache) - self._cache_before
-        )
+        if not self.app_data_kept():
+            targets.update(
+                self._cache / str(relative)
+                for relative in _tree_entries(self._cache) - self._cache_before
+            )
         return sorted(targets)
 
     def cleanup(self, progress: Optional[Progress] = None) -> list[str]:
-        """Remove this run's working files, reporting three progress steps."""
-        steps = (
-            ("portable_cleanup_downloads", self._clean_downloads),
-            ("portable_cleanup_cache", self._clean_cache),
-            ("portable_cleanup_temp", self._clean_temp),
-        )
+        """Remove this run's working files, reporting each step it takes."""
+        steps = [("portable_cleanup_downloads", self._clean_downloads)]
+        # An installed copy keeps its cache: the run refreshed files the app
+        # reads on its next launch, which makes them the app's, not litter.
+        if not self.app_data_kept():
+            steps.append(("portable_cleanup_cache", self._clean_cache))
+        steps.append(("portable_cleanup_temp", self._clean_temp))
         removed: list[str] = []
         for index, (key, step) in enumerate(steps, start=1):
             try:
@@ -189,7 +222,10 @@ class PortableSession:
                 continue
             if _remove(self._temp / name):
                 removed.append(str(self._temp / name))
-        removed.extend(self._clean_shells())
+        # The folders themselves hold the app's data, so only a run that
+        # created them for itself drops them again.
+        if not self.app_data_kept():
+            removed.extend(self._clean_shells())
         return removed
 
     def _clean_shells(self) -> list[str]:

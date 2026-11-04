@@ -125,11 +125,14 @@ def test_donation_dialog_toned_down_and_themed():
     assert dlg.width() == 710
     assert dlg.height() == 460
     assert hasattr(dlg, "_close_btn")
-    assert hasattr(dlg, "_pay_buttons") and len(dlg._pay_buttons) == 1
-    coffee = dlg._pay_buttons[0]
-    assert coffee.text() == "Buy us a coffee"
+    assert hasattr(dlg, "_pay_buttons") and len(dlg._pay_buttons) == 2
+    coffee, bmc = dlg._pay_buttons
+    assert coffee.text() == "Donate on Ko-Fi"
+    assert bmc.text() == "Buy Me a Coffee"
     assert not coffee.styleSheet()
+    assert not bmc.styleSheet()
     assert coffee.cursor().shape() == Qt.ArrowCursor
+    assert bmc.cursor().shape() == Qt.ArrowCursor
     assert not hasattr(dlg, "_crypto_toggle")
     joined = " ".join(
         child.text() for child in dlg.findChildren(QWidget) if hasattr(child, "text")
@@ -2009,7 +2012,8 @@ def test_completion_check_mark_and_opt_out():
         pitch = page._appeal_label.text()
         assert "All done" in pitch
         assert "thank" in pitch
-        assert page._coffee_btn.text() == "Buy me a coffee"
+        assert page._coffee_btn.text() == "Donate on Ko-Fi"
+        assert page._bmc_btn.text() == "Buy Me a Coffee"
         assert page._appeal.isVisible()
         with_note = window.height()
         assert with_note < DEFAULT_WINDOW_HEIGHT - 40
@@ -2023,7 +2027,7 @@ def test_completion_check_mark_and_opt_out():
         assert not page._appeal.isVisible()
         coffee = window._settings_page._settings_coffee_btn
         assert not coffee.isHidden()
-        assert coffee.text() == "Buy me a coffee"
+        assert coffee.text() == "Donate on Ko-Fi"
         assert window._settings_page.switch_caption(
             window._settings_page._cb_hide_donations
         ) == tr("settings_show_donations")
@@ -2349,7 +2353,8 @@ def test_post_install_support_appeal():
         assert window._select_page._title.text() == "Install complete"
         assert page._appeal.isVisible()
         assert page._done_mark.isVisible()
-        assert page._coffee_btn.text() == "Buy me a coffee"
+        assert page._coffee_btn.text() == "Donate on Ko-Fi"
+        assert page._bmc_btn.text() == "Buy Me a Coffee"
         assert page._coffee_btn.cursor().shape() == Qt.ArrowCursor
         assert page._not_now_btn.text() == "Not now"
         assert page._not_now_btn.cursor().shape() == Qt.ArrowCursor

@@ -736,7 +736,6 @@ Source: "{#MyRepoRoot}tools\DriverInstall.exe"; DestDir: "{tmp}"; Flags: ignorev
 
 [Icons]
 Name: "{userprograms}\Innioasis Updater"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: startmenuicon; Check: ShouldInstallMainApp
-Name: "{userprograms}\SP Flash Tool"; Filename: "{app}\SP_Flash_Tool\flash_tool.exe"; WorkingDir: "{app}\SP_Flash_Tool"; IconFilename: "{app}\SP_Flash_Tool\flash_tool.exe"; Tasks: startmenuicon; Check: HasSpFlashTool
 Name: "{userprograms}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"; Tasks: startmenuicon
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; Check: ShouldInstallMainApp
 

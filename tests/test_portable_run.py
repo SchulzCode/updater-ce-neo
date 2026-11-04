@@ -36,7 +36,7 @@ def test_cleanup_removes_only_files_created_after_the_session_started(folders):
     keep_cache = cache / "packages.json"
     keep_cache.write_text("{}")
 
-    session = portable_run.PortableSession()
+    session = portable_run.PortableSession(app_installed=False)
 
     staged = downloads / "staged_firmware" / "stage_abc"
     staged.mkdir(parents=True)
@@ -64,7 +64,7 @@ def test_cleanup_reaches_inside_a_pre_existing_working_folder(folders):
     older.mkdir(parents=True)
     (older / "keep.img").write_text("older")
 
-    session = portable_run.PortableSession()
+    session = portable_run.PortableSession(app_installed=False)
 
     current = staged_parent / "stage_current"
     current.mkdir()
@@ -85,7 +85,7 @@ def test_cleanup_removes_app_temporary_work(folders, tmp_path, monkeypatch):
     other_app = temp / "unrelated-tool"
     other_app.mkdir()
 
-    session = portable_run.PortableSession()
+    session = portable_run.PortableSession(app_installed=False)
 
     wrapped = temp / "preloader_wrapped_abc.bin"
     wrapped.write_text("boot header")
@@ -101,7 +101,7 @@ def test_cleanup_removes_app_temporary_work(folders, tmp_path, monkeypatch):
 
 
 def test_cleanup_reports_every_step_and_ends_at_one_hundred(folders):
-    session = portable_run.PortableSession()
+    session = portable_run.PortableSession(app_installed=False)
     steps = []
 
     session.cleanup(lambda percent, key: steps.append((percent, key)))
@@ -120,7 +120,7 @@ def test_a_missing_folder_is_not_created_or_reported(folders, monkeypatch):
     downloads, cache = folders
     # Remove the cache folder before the session: nothing should be created.
     cache.rmdir()
-    session = portable_run.PortableSession()
+    session = portable_run.PortableSession(app_installed=False)
     assert not cache.exists()
 
     session.cleanup()
@@ -131,7 +131,7 @@ def test_a_missing_folder_is_not_created_or_reported(folders, monkeypatch):
 
 def test_targets_lists_working_files_without_removing_them(folders):
     downloads, cache = folders
-    session = portable_run.PortableSession()
+    session = portable_run.PortableSession(app_installed=False)
     staged = downloads / "staged_firmware"
     staged.mkdir()
     (cache / "packages.json").write_text("{}")

@@ -857,6 +857,7 @@ def test_guided_power_off_and_keep_data_flow(qapp):
         assert fp._wait_continue_btn._symbol == "check"
         assert fp._wait_cancel_btn._symbol == "cancel"
         assert fp._keep_data_choice.isHidden()
+        assert fp._wait_head_stack.currentWidget() is fp._wait_progress_bar
         assert "Rondo" in fp._wait_prompt_label.text()
 
         # Cancel confirmation -> goes to erase confirmation
@@ -882,6 +883,10 @@ def test_guided_power_off_and_keep_data_flow(qapp):
         assert fp._wait_cancel_btn._symbol == "cancel"
         assert not fp._keep_data_choice.isHidden()
         assert fp._keep_data_choice.count() > 1
+        # The firmware question takes the progress band's place in the card
+        # head, beside the Next/Cancel chips, rather than a row of its own.
+        assert fp._wait_head_stack.currentWidget() is fp._keep_data_choice
+        assert fp._keep_data_hint.isVisible()
     finally:
         win.close()
 

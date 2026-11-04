@@ -112,6 +112,9 @@ class SettingsPage(QWidget):
     # The in-beta themes auto-install toggle flipped; the window starts or
     # stops the passive sync to match.
     themes_auto_install_changed = Signal(bool)
+    # A portable run cannot keep background running or notifications; the
+    # switch asks the window for the screen that installs the app itself.
+    install_app_requested = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -577,6 +580,10 @@ class SettingsPage(QWidget):
         self._settings_coffee_btn.setCursor(Qt.ArrowCursor)
         self._settings_coffee_btn.setStyleSheet("")
         self._settings_coffee_btn.clicked.connect(self._open_settings_coffee)
+        self._settings_bmc_btn = QPushButton(tr("donate_buy_me_a_coffee"))
+        self._settings_bmc_btn.setCursor(Qt.ArrowCursor)
+        self._settings_bmc_btn.setStyleSheet("")
+        self._settings_bmc_btn.clicked.connect(self._open_settings_bmc)
         self._settings_discord_btn = QPushButton(tr("community_discord"))
         self._settings_discord_btn.setCursor(Qt.ArrowCursor)
         self._settings_discord_btn.setStyleSheet("")
@@ -605,6 +612,7 @@ class SettingsPage(QWidget):
             lambda _href: self._on_dismiss_donations_section()
         )
         actions.addWidget(self._settings_coffee_btn, 0, Qt.AlignVCenter)
+        actions.addWidget(self._settings_bmc_btn, 0, Qt.AlignVCenter)
         actions.addWidget(self._settings_discord_btn, 0, Qt.AlignVCenter)
         actions.addWidget(self._settings_reddit_btn, 0, Qt.AlignVCenter)
         actions.addStretch(1)
@@ -864,6 +872,7 @@ class SettingsPage(QWidget):
         self._shortcuts_card.setVisible(
             shortcut_manager.supported() and self._may_show_card(self._shortcuts_card)
         )
+        self._sync_shortcut_row_visibility()
         self.refresh_shortcut_state()
 
         # --- Card: Advanced Settings ---
@@ -1147,6 +1156,23 @@ class SettingsPage(QWidget):
             self._method_combo.setVisible(not is_win_x86)
         if hasattr(self, "_rockbox_card"):
             self._update_rockbox_visibility()
+        self._sync_shortcut_row_visibility()
+
+    def _sync_shortcut_row_visibility(self) -> None:
+        """Show the tool's shortcut rows only behind Show Advanced Settings.
+
+        The app's own desktop and Start Menu shortcuts are everyday choices;
+        SP Flash Tool's are for the guided install's advanced path, so they
+        stay out of the way until that switch is on. Nothing changes on disk:
+        only the two switches are hidden.
+        """
+        show_tools = bool(getattr(self, "_advanced_revealed", False))
+        if hasattr(self, "_cb_advanced_settings"):
+            show_tools = self._cb_advanced_settings.isChecked()
+        for (shortcut_id, _kind), switch in getattr(self, "_shortcut_switches", {}).items():
+            if shortcut_id == shortcut_manager.TOOL_ID:
+                switch.setVisible(show_tools)
+        self.refresh_shortcut_state()
 
     def reveal_advanced_methods(self):
         """Reveal advanced install methods and cards (M or D while running)."""
@@ -1323,11 +1349,22 @@ class SettingsPage(QWidget):
         )
 
     def refresh_shortcut_state(self):
-        """Set each checkbox from the real shortcut files on disk."""
+        """Set each checkbox from the real shortcut files on disk.
+
+        The tool's rows are hidden until Show Advanced Settings is on, so their
+        files are only read once those rows are on screen: reading unrecognised
+        shortcut targets starts a shell, which startup should not pay for.
+        """
         if not hasattr(self, "_shortcut_switches"):
             return
-        state = shortcut_manager.get_state()
+        show_tools = bool(getattr(self, "_advanced_revealed", False))
+        if hasattr(self, "_cb_advanced_settings"):
+            show_tools = self._cb_advanced_settings.isChecked()
+        skip = () if show_tools else (shortcut_manager.TOOL_ID,)
+        state = shortcut_manager.get_state(skip=skip)
         for (sid, kind), sw in self._shortcut_switches.items():
+            if sid in skip:
+                continue
             sw.blockSignals(True)
             sw.setChecked(state.get(sid, {}).get(kind, False))
             sw.blockSignals(False)
@@ -1818,6 +1855,36 @@ class SettingsPage(QWidget):
     # ------------------------------------------------------------------
     # Misc actions
     # ------------------------------------------------------------------
+    def set_portable_run(self, enabled: bool) -> None:
+        """Record that this run installs bundled firmware and stores nothing."""
+        self._portable_run = bool(enabled)
+
+    def _redirect_keep_alive_preference(self, *boxes) -> bool:
+        """Send a portable run's keep-the-app switch to the install screen.
+
+        Turning on background running or notifications promises the app will
+        still be here tomorrow. A portable run with nothing installed cannot
+        keep that promise (it removes its own files when it quits), so the
+        switch returns to off and the app opens the screen that installs it.
+        With a real install the switches behave as usual.
+        """
+        if not getattr(self, "_portable_run", False):
+            return False
+        try:
+            if paths.installed_app_present():
+                return False
+        except Exception:
+            pass
+        for box in boxes:
+            if box is None:
+                continue
+            box.blockSignals(True)
+            box.setChecked(False)
+            box.blockSignals(False)
+        self._sync_notification_controls()
+        self.install_app_requested.emit()
+        return True
+
     def _on_offline_mode_toggled(self, checked: bool):
         from PySide6.QtCore import QSettings
         QSettings("Innioasis", "UpdaterCE").setValue("offline_mode", checked)
@@ -1828,6 +1895,10 @@ class SettingsPage(QWidget):
         self.offline_mode_changed.emit(checked)
 
     def _on_run_in_background_toggled(self, checked: bool):
+        if checked and self._redirect_keep_alive_preference(
+            getattr(self, "_cb_run_in_background", None)
+        ):
+            return
         from ..tray import RUN_IN_BACKGROUND_KEY
         from ..login_item import set_login_item
         QSettings("innioasis", "updater").setValue(RUN_IN_BACKGROUND_KEY, bool(checked))
@@ -1849,6 +1920,10 @@ class SettingsPage(QWidget):
             self._sync_notification_controls()
 
     def _on_notifications_background_toggled(self, checked: bool):
+        if checked and self._redirect_keep_alive_preference(
+            getattr(self, "_cb_notifications_background", None)
+        ):
+            return
         """Link background notifications to the background-running opt-in."""
         from ..tray import RUN_IN_BACKGROUND_KEY
         from ..login_item import set_login_item
@@ -1875,6 +1950,10 @@ class SettingsPage(QWidget):
     # Notifications
     # ------------------------------------------------------------------
     def _on_notifications_toggled(self, checked: bool):
+        if checked and self._redirect_keep_alive_preference(
+            getattr(self, "_cb_notifications", None)
+        ):
+            return
         from ..notice_alerts import set_notifications_enabled
 
         set_notifications_enabled(bool(checked))
@@ -2057,6 +2136,12 @@ class SettingsPage(QWidget):
         from ..browser import open_browser
         open_browser("https://ko-fi.com/teamslide")
 
+    def _open_settings_bmc(self) -> None:
+        from ..browser import open_browser
+        from ..config import DONATION_LINKS
+
+        open_browser(DONATION_LINKS["bmc"])
+
     def _community_icon(self, name: str):
         """Render a bundled community SVG in the current interface foreground color."""
         from PySide6.QtCore import QByteArray, QRectF
@@ -2107,7 +2192,12 @@ class SettingsPage(QWidget):
             or device_tracking.is_donation_ui_disabled()
             or device_tracking.is_donation_install_prompt_disabled()
         )
-        for name in ("_settings_coffee_btn", "_settings_discord_btn", "_settings_reddit_btn"):
+        for name in (
+            "_settings_coffee_btn",
+            "_settings_bmc_btn",
+            "_settings_discord_btn",
+            "_settings_reddit_btn",
+        ):
             button = getattr(self, name, None)
             if button is not None:
                 button.setVisible(True)
@@ -2500,6 +2590,8 @@ class SettingsPage(QWidget):
             self._lbl_hide_tip.setText(tr("settings_hide_donations_tip"))
         if hasattr(self, "_settings_coffee_btn"):
             self._settings_coffee_btn.setText(tr("donate_coffee_btn"))
+        if hasattr(self, "_settings_bmc_btn"):
+            self._settings_bmc_btn.setText(tr("donate_buy_me_a_coffee"))
         if hasattr(self, "_settings_discord_btn"):
             self._settings_discord_btn.setText(tr("community_discord"))
         if hasattr(self, "_settings_reddit_btn"):

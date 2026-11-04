@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, QObject, QTimer, Qt
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QAbstractScrollArea, QApplication, QFrame, QWidget
 
@@ -130,6 +130,49 @@ def _keep_scrollbars_opaque(area: QAbstractScrollArea) -> None:
     refresh_scrollbar_palettes(area)
 
 
+class _ViewportFillKeeper(QObject):
+    """Stop the viewport painting its Base plate once Qt re-polishes the view.
+
+    ``QScrollArea`` re-enables the viewport's own background fill — and hands it
+    back the application palette — when it polishes the widget, so the
+    transparency ``make_transparent`` applies at construction was undone by the
+    first show. The page then painted a solid ``QPalette::Base`` block behind its
+    cards: pure white in light mode, near-black in dark, spanning the whole
+    content column. Re-asserting the fill on the events that precede that paint
+    is what keeps the page reading as one surface.
+    """
+
+    def __init__(self, area: QAbstractScrollArea):
+        super().__init__(area)
+        self._area = area
+
+    def eventFilter(self, obj, event):  # noqa: N802 (Qt naming)
+        if event.type() in (
+            QEvent.Type.Polish,
+            QEvent.Type.Show,
+            QEvent.Type.StyleChange,
+            QEvent.Type.PaletteChange,
+        ):
+            # Qt re-enables the fill as part of the same show/polish pass, so
+            # clear it on the next turn of the loop rather than inside it.
+            QTimer.singleShot(0, self._clear)
+        return False
+
+    def _clear(self) -> None:
+        viewport = self._area.viewport() if hasattr(self._area, "viewport") else None
+        if viewport is not None and viewport.autoFillBackground():
+            viewport.setAutoFillBackground(False)
+
+
+def _keep_viewport_unfilled(area: QAbstractScrollArea) -> None:
+    viewport = area.viewport() if hasattr(area, "viewport") else None
+    if viewport is None or getattr(viewport, "_viewport_fill_keeper", None) is not None:
+        return
+    keeper = _ViewportFillKeeper(area)
+    viewport._viewport_fill_keeper = keeper
+    viewport.installEventFilter(keeper)
+
+
 def make_transparent(area: QAbstractScrollArea) -> None:
     """Leave the scroll area on its native style and erase to the parent card.
 
@@ -178,10 +221,30 @@ def make_transparent(area: QAbstractScrollArea) -> None:
             _keep_scrollbars_opaque(area)
     except Exception:
         pass
+    _keep_viewport_unfilled(area)
     inner = area.widget() if hasattr(area, "widget") else None
     if isinstance(inner, QWidget):
         inner.setAutoFillBackground(False)
         inner.setAttribute(Qt.WA_TranslucentBackground, False)
+        from .surfaces import glass_surfaces_enabled
+
+        if not glass_surfaces_enabled():
+            # QScrollArea hands its content widget a Base-role background, and the
+            # app's Base is pure white (light) or near-black (dark) while the page
+            # surface is the window colour. Left alone, that painted a rectangle
+            # behind every page's cards — the white/black block on Select
+            # Software and Settings. Clear it the same way as the viewport.
+            clear = QColor(0, 0, 0, 0)
+            palette = inner.palette()
+            for group in (
+                QPalette.ColorGroup.Active,
+                QPalette.ColorGroup.Inactive,
+                QPalette.ColorGroup.Disabled,
+            ):
+                palette.setColor(group, QPalette.ColorRole.Base, clear)
+                palette.setColor(group, QPalette.ColorRole.Window, clear)
+            inner.setPalette(palette)
+            inner.setAutoFillBackground(False)
 
 
 def _windows_hides_scrollbars() -> bool:

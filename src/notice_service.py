@@ -14,10 +14,20 @@ Notices support:
 - Dismissals are per notice, not per file: a changed notice.xml shows its new
   notices and keeps the ones the user already dismissed out of the list.
 
-Contextual targeting (Select Software card only; the Notices list, the pop-out
-list and the notification tray always receive every active notice):
+Targeting (every attribute set must match; the Notices list, the pop-out list
+and the notification tray apply the date window and the platform/architecture
+filters, while the contextual axes below only narrow the Select Software card):
 - models: comma-separated target models (``Y1,Y2``).
 - device_type: comma-separated hardware revisions (``A`` / ``B``).
+- platform / os: the operating system(s) the notice is about (``mac``,
+  ``windows``, ``linux``). ``os=`` is the same axis under a friendlier name;
+  ``macos``/``osx``/``darwin`` and ``win``/``win32`` are normalised.
+- arch: the CPU architecture(s) the *app* runs on (``arm64``, ``x86_64``,
+  ``x86``, ``armv7``; ``aarch64``/``amd64``/``x64`` accepted, ``universal``
+  matches every machine). Together with ``os`` this names one platform build:
+  a Type B Y1 running Rockbox 0.1 on macOS arm64 is
+  ``models="Y1" device_type="B" firmware_repo="rockbox-y1/rockbox"
+  firmware_version="0.1" os="macos" arch="arm64"``.
 - firmware_repo: the GitHub repository a notice is about, matching ``repo`` in
   ``slidia_manifest.xml`` (``rockbox-y1/rockbox``). Wildcards are allowed.
 - firmware_version: release tag(s) the notice is about (``v3.2.0``, ``v3.2.*``),
@@ -35,6 +45,7 @@ import hashlib
 import json
 import logging
 import os
+import platform as _platform
 import re
 import sys
 import threading
@@ -44,7 +55,7 @@ from pathlib import Path
 from typing import Optional
 import xml.etree.ElementTree as ET
 
-from PySide6.QtCore import QObject, QSettings, Signal
+from PySide6.QtCore import QObject, QSettings, Qt, Signal
 
 from .paths import app_cache_dir
 
@@ -80,7 +91,11 @@ class Notice:
     until_date: Optional[date] = None
     models: tuple[str, ...] = ()
     # CSV of platforms this notice targets (``mac,windows``); empty means all.
+    # ``os=`` in the feed is the same axis and is merged in here.
     platforms: tuple[str, ...] = ()
+    # CSV of CPU architectures (``arm64``, ``x86_64``); empty means all. This
+    # narrows to the machine the app runs on, e.g. Apple silicon Macs only.
+    arches: tuple[str, ...] = ()
     # Context targets beyond the model: the hardware revision(s) (``A``/``B``),
     # the firmware repository the notice is about (the same ``repo`` value
     # ``slidia_manifest.xml`` uses), and the release tag(s) it applies to.
@@ -101,6 +116,8 @@ class Notice:
             or self.device_types
             or self.firmware_repo
             or self.firmware_versions
+            or self.platforms
+            or self.arches
         )
 
     @property
@@ -135,11 +152,21 @@ class Notice:
         if self.until_date and today > self.until_date:
             return False
         if self.platforms:
-            wanted = {p.strip().lower() for p in self.platforms if p.strip()}
+            wanted = {_normalise_os(p) for p in self.platforms if str(p).strip()}
+            wanted.discard("")
             if "none" in wanted:
                 return False
-            if platform and platform.strip().lower() not in wanted:
+            if platform and _normalise_os(platform) not in wanted:
                 return False
+        if self.arches:
+            wanted_arches = {normalise_arch(a) for a in self.arches if str(a).strip()}
+            wanted_arches.discard("")
+            # ``universal`` covers both sides of a universal binary; an
+            # unreadable machine field must not hide the notice from anyone.
+            if wanted_arches and "universal" not in wanted_arches:
+                here = current_arch()
+                if here and here not in wanted_arches:
+                    return False
         return True
 
     def is_active_for(
@@ -213,6 +240,10 @@ class Notice:
         if self.device_types:
             score += 2
         if self.models:
+            score += 1
+        if self.arches:
+            # A notice naming the reader's exact build is more specific than one
+            # that only names their model, so it takes the card first.
             score += 1
         return score
 
@@ -317,6 +348,77 @@ def _version_matches(patterns: tuple[str, ...], version: str) -> bool:
             if wanted.startswith("v") and fnmatch.fnmatchcase(candidate, wanted[1:]):
                 return True
     return False
+
+
+#: Moveable spellings of the machine field, resolved to the two names the
+#: feed is written in (plus any architecture the reader's machine reports).
+_ARCH_ALIASES = {
+    "aarch64": "arm64",
+    "arm64": "arm64",
+    "arm64e": "arm64",
+    "apple silicon": "arm64",
+    "amd64": "x86_64",
+    "x86_64": "x86_64",
+    "x64": "x86_64",
+    "x86-64": "x86_64",
+    "i386": "x86",
+    "i686": "x86",
+    "x86": "x86",
+    "win32": "x86",
+    "armv7l": "armv7",
+    "armv7": "armv7",
+    "armhf": "armv7",
+    "universal": "universal",
+    "universal2": "universal",
+    "fat": "universal",
+    "any": "universal",
+    "all": "universal",
+    "*": "universal",
+}
+
+#: The same for operating systems, so ``platform`` and ``os`` agree.
+_OS_ALIASES = {
+    "mac": "mac",
+    "macos": "mac",
+    "macosx": "mac",
+    "osx": "mac",
+    "os x": "mac",
+    "darwin": "mac",
+    "apple": "mac",
+    "windows": "windows",
+    "win": "windows",
+    "win32": "windows",
+    "win64": "windows",
+    "linux": "linux",
+    "gnu/linux": "linux",
+    "none": "none",
+}
+
+
+def normalise_arch(value: str) -> str:
+    """Canonical architecture name for ``arch=`` and for this machine.
+
+    Unknown names are passed through unchanged, so a future architecture can be
+    targeted by naming it the way ``platform.machine()`` reports it.
+    """
+    text = str(value or "").strip().casefold().replace(" ", "")
+    if not text:
+        return ""
+    return _ARCH_ALIASES.get(text, text)
+
+
+def current_arch() -> str:
+    """This build's CPU architecture, canonicalised for ``arch=``."""
+    try:
+        return normalise_arch(_platform.machine())
+    except Exception:
+        return ""
+
+
+def _normalise_os(value: str) -> str:
+    """Canonical operating-system name for ``os=`` / ``platform=``."""
+    text = str(value or "").strip().casefold()
+    return _OS_ALIASES.get(text, text)
 
 
 def _parse_device_types(value: str | None) -> tuple[str, ...]:
@@ -480,9 +582,22 @@ def parse_notice_xml(xml_content: str) -> list[Notice]:
 
         models_raw = el.get("models", "")
         models = tuple(m.strip() for m in models_raw.split(",") if m.strip())
-        platforms_raw = el.get("platform", "")
+        # ``os=`` and ``platform=`` are one axis: merge them so a feed can use
+        # whichever spelling reads better, or both.
+        platforms_raw = ",".join(
+            part for part in (el.get("platform"), el.get("os")) if part
+        )
         platforms = tuple(
-            p.strip().lower() for p in platforms_raw.split(",") if p.strip()
+            dict.fromkeys(
+                _normalise_os(p) for p in platforms_raw.split(",") if p.strip()
+            )
+        )
+        arches = tuple(
+            dict.fromkeys(
+                normalise_arch(a)
+                for a in (el.get("arch") or "").replace(";", ",").split(",")
+                if a.strip()
+            )
         )
         # Contextual targeting: hardware revision, firmware repository and
         # release tag(s). They only narrow the Select Software card; the
@@ -508,6 +623,7 @@ def parse_notice_xml(xml_content: str) -> list[Notice]:
             until_date=until_d,
             models=models,
             platforms=platforms,
+            arches=arches,
             device_types=device_types,
             firmware_repo=firmware_repo,
             firmware_versions=firmware_versions,
@@ -531,6 +647,10 @@ class NoticeService(QObject):
     # run a throbber for exactly as long as one is in flight.
     refresh_started = Signal()
     refresh_finished = Signal()
+    # A refresh runs on a worker thread. Emitting the notice signals there is
+    # fine (widgets receive them queued), but the card's rotation timer belongs
+    # to this service's thread, so its sync is queued separately.
+    _rotation_sync_requested = Signal(int)
 
     _instance: NoticeService | None = None
 
@@ -559,6 +679,9 @@ class NoticeService(QObject):
         self._rotation_timer = None
         self._fetch_lock = threading.Lock()
         self._fetch_inflight = False
+        self._rotation_sync_requested.connect(
+            self._sync_rotation_timer, Qt.ConnectionType.QueuedConnection
+        )
         try:
             snapshot = self._snapshot_text()
             if snapshot:
@@ -1057,10 +1180,19 @@ class NoticeService(QObject):
         self.notice_ready.emit(candidates[self._rotation_index])
 
     def _sync_rotation_timer(self, count: int) -> None:
-        """Rotate only while more than one notice applies."""
-        from PySide6.QtCore import QCoreApplication, QTimer
+        """Rotate only while more than one notice applies.
+
+        A background refresh reaches this from its worker thread, where Qt
+        refuses to create or start the timer (and the card then stayed on one
+        notice for the rest of the session). Queueing the sync puts it back on
+        the thread that owns the timer.
+        """
+        from PySide6.QtCore import QCoreApplication, QThread, QTimer
 
         if QCoreApplication.instance() is None:
+            return
+        if QThread.currentThread() != self.thread():
+            self._rotation_sync_requested.emit(int(count))
             return
         if count < 2:
             if self._rotation_timer is not None:
