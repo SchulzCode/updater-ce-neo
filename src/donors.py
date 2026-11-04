@@ -204,6 +204,110 @@ GOAL_MONTHLY_OPENING_DAYS = 5
 GOAL_MONTHLY_CLOSING_DAYS = 7
 
 
+#: A week of the month's running costs: one quarter of the $200 figure, so
+#: the weekly ask is always the same $50 rather than drifting with the length
+#: of the month.
+WEEKLY_GOAL_USD = MONTHLY_GOAL_USD / 4.0
+DAILY_GOAL_USD = 10.0
+
+
+def get_user_currency() -> tuple[str, str]:
+    """Detect whether user should see GBP (£), EUR (€), or USD ($).
+
+    Transposed 1:1 without conversion for users in the UK or Europe.
+    Returns (symbol, currency_code), e.g. ('£', 'GBP'), ('€', 'EUR'), or ('$', 'USD').
+    """
+    import os
+
+    # Check environment override first (convenient for testing or explicit config)
+    env_curr = os.environ.get("UPDATER_CURRENCY", "").upper()
+    if env_curr == "GBP":
+        return ("£", "GBP")
+    if env_curr == "EUR":
+        return ("€", "EUR")
+    if env_curr == "USD":
+        return ("$", "USD")
+
+    locale_name = ""
+    territory_name = ""
+    try:
+        from PySide6.QtCore import QLocale
+
+        loc = QLocale.system()
+        locale_name = loc.name().lower()
+        try:
+            territory_name = loc.territory().name.lower()
+        except Exception:
+            try:
+                territory_name = loc.country().name.lower()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    env_locale = (
+        os.environ.get("LC_ALL", "")
+        or os.environ.get("LC_MONETARY", "")
+        or os.environ.get("LANG", "")
+    ).lower()
+
+    tz_name = ""
+    try:
+        import time
+
+        tz_name = (time.tzname[0] if time.tzname else "").lower()
+    except Exception:
+        pass
+    try:
+        tzinfo = datetime.now().astimezone().tzinfo
+        if tzinfo:
+            tz_name = f"{tz_name} {str(tzinfo)}".lower()
+    except Exception:
+        pass
+
+    combined_locale = f"{locale_name} {territory_name} {env_locale}".lower()
+
+    # United Kingdom check
+    if (
+        "gb" in combined_locale
+        or "uk" in combined_locale
+        or "unitedkingdom" in territory_name
+        or "london" in tz_name
+        or "bst" in tz_name
+        or ("gmt" in tz_name and ("en_gb" in combined_locale or "gb" in combined_locale))
+    ):
+        return ("£", "GBP")
+
+    # Europe check
+    european_countries = (
+        "france", "germany", "spain", "italy", "netherlands", "belgium",
+        "ireland", "austria", "portugal", "finland", "greece", "poland",
+        "sweden", "denmark", "norway", "switzerland", "czech", "hungary",
+        "romania", "bulgaria", "slovakia", "croatia", "slovenia", "estonia",
+        "latvia", "lithuania", "cyprus", "malta", "luxembourg", "iceland",
+    )
+    european_locales = (
+        "fr_", "de_", "es_", "it_", "nl_", "pt_", "pl_", "sv_", "da_", "nb_",
+        "nn_", "fi_", "el_", "cs_", "hu_", "ro_", "bg_", "sk_", "hr_", "sl_",
+        "et_", "lv_", "lt_", "ga_", "is_",
+    )
+    if (
+        any(c in territory_name for c in european_countries)
+        or any(
+            combined_locale.startswith(loc_prefix)
+            or f"_{loc_prefix}" in combined_locale
+            or f" {loc_prefix}" in combined_locale
+            for loc_prefix in european_locales
+        )
+        or ("europe/" in tz_name and "london" not in tz_name)
+        or "cest" in tz_name
+        or "cet" in tz_name
+    ):
+        return ("€", "EUR")
+
+    return ("$", "USD")
+
+
 def days_in_month(now=None) -> int:
     """Number of days in ``now``'s calendar month."""
     now = now or datetime.now()
@@ -215,9 +319,10 @@ def days_in_month(now=None) -> int:
 
 
 def goal_scope(now=None) -> str:
-    """``"monthly"`` on the month's edge days, ``"weekly"`` on the days between.
+    """``"monthly"`` on the month's edge days, ``"daily"`` on Tuesdays and
+    Wednesdays between them, and ``"weekly"`` on the remaining days.
 
-    The two are mutually exclusive by design: a reader is shown one funding
+    The scopes are mutually exclusive: a reader is shown one funding
     figure, for the period that is short right now.
     """
     now = now or datetime.now()
@@ -225,29 +330,40 @@ def goal_scope(now=None) -> str:
         return "monthly"
     if now.day > days_in_month(now) - GOAL_MONTHLY_CLOSING_DAYS:
         return "monthly"
+    if now.weekday() in (1, 2):  # Tuesday = 1, Wednesday = 2
+        return "daily"
     return "weekly"
 
 
 def goal_period_start(now=None) -> datetime:
     """First day of the period the goal names.
 
-    The weekly phase opens on day 6, so its periods are seven-day blocks from
-    there (6-12, 13-19, ...). Each block counts from zero: donations from the
-    opening days were already shown against the monthly figure, and counting
-    them again would hide the week that is actually short.
+    The monthly phase starts on day 1. The daily phase (Tuesdays and
+    Wednesdays mid-month) names that specific day. The weekly phase opens on
+    day 6, so its periods are seven-day blocks from there (6-12, 13-19, ...).
+    Each block counts from zero: donations from earlier days were already
+    shown against their periods, and counting them again would hide the time
+    that is actually short.
     """
     now = now or datetime.now()
-    if goal_scope(now) == "monthly":
+    scope = goal_scope(now)
+    if scope == "monthly":
         return datetime(now.year, now.month, 1)
+    if scope == "daily":
+        return datetime(now.year, now.month, now.day)
     block = (now.day - GOAL_MONTHLY_OPENING_DAYS - 1) // 7
     start_day = GOAL_MONTHLY_OPENING_DAYS + 1 + block * 7
     return datetime(now.year, now.month, start_day)
 
 
 def weekly_goal_usd(now=None) -> float:
-    """The month's costs spread across its days, seven days at a time."""
-    now = now or datetime.now()
-    return MONTHLY_GOAL_USD * 7.0 / max(1, days_in_month(now))
+    """One quarter of the monthly running costs ($200 / 4 = $50)."""
+    return WEEKLY_GOAL_USD
+
+
+def daily_goal_usd(now=None) -> float:
+    """Daily costs target ($10) for slower days (Tuesdays and Wednesdays)."""
+    return DAILY_GOAL_USD
 
 
 def format_goal_amount(amount) -> str:
@@ -260,14 +376,20 @@ def get_goal_stats(donations, now=None):
     """Raised against the target this day of the month's display should name.
 
     Returns ``{"scope", "raised", "remaining", "percent", "target",
-    "period_start", "reached", "month_raised", "month_reached"}``.
+    "period_start", "reached", "month_raised", "month_reached",
+    "currency_symbol", "currency_code"}``.
     ``reached`` reports a complete goal and ``month_reached`` a covered month:
     either one means no goal may be named, because a finished target is never
     mentioned, only an outstanding one.
     """
     now = now or datetime.now()
     scope = goal_scope(now)
-    target = float(MONTHLY_GOAL_USD if scope == "monthly" else weekly_goal_usd(now))
+    if scope == "monthly":
+        target = float(MONTHLY_GOAL_USD)
+    elif scope == "daily":
+        target = float(daily_goal_usd(now))
+    else:
+        target = float(weekly_goal_usd(now))
     start = goal_period_start(now)
     start_day = start.date()
     raised = 0.0
@@ -290,6 +412,7 @@ def get_goal_stats(donations, now=None):
         if day >= start_day:
             raised += amount
     percent = min(100.0, max(0.0, (raised / target) * 100.0)) if target > 0 else 0.0
+    sym, code = get_user_currency()
     return {
         "scope": scope,
         "raised": raised,
@@ -297,12 +420,14 @@ def get_goal_stats(donations, now=None):
         "percent": percent,
         "target": target,
         "period_start": start,
-        # The month's own total travels with the week's: it is one pot of costs,
-        # so a covered month has nothing outstanding to name even in a week
-        # that has not seen a donation yet.
+        # The month's own total travels with the week's: it is one pot of
+        # costs, so a covered month has nothing outstanding to name even in a
+        # week that has not seen a donation yet.
         "month_raised": month_raised,
         "month_reached": month_raised >= MONTHLY_GOAL_USD,
         "reached": raised >= target,
+        "currency_symbol": sym,
+        "currency_code": code,
     }
 
 

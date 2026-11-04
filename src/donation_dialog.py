@@ -240,15 +240,21 @@ def _goal_line(stats, short: bool):
 
     Weekly and monthly are mutually exclusive: only the scope this day of the
     month names is rendered, so the week's costs and the month's never appear
-    side by side.
+    side by side. The figures are transposed 1:1 into the reader's currency
+    (\u00a3/\u20ac/$), never converted.
     """
-    if stats["scope"] == "weekly":
+    sym = stats.get("currency_symbol", "$")
+    if stats["scope"] == "daily":
+        key = "donate_goal_day_status_fmt" if short else "donate_goal_day_fmt"
+    elif stats["scope"] == "weekly":
         key = "donate_goal_week_status_fmt" if short else "donate_goal_week_fmt"
     else:
         key = "donate_goal_status_fmt" if short else "donate_goal_fmt"
-    text = tr(key).format(
+    raw = tr(key)
+    text = raw.replace("$", sym).format(
         raised=format_goal_amount(stats["raised"]),
         target=float(stats["target"]),
+        sym=sym,
     )
     return text, int(round(float(stats["percent"]) * 10))
 

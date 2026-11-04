@@ -76,38 +76,92 @@ def test_goal_scope_is_monthly_on_the_months_edge_days_only():
 
     donations = [
         {"amount": 30.0, "dt": datetime(2026, 2, 2)},   # opening days
-        {"amount": 10.0, "dt": datetime(2026, 2, 9)},   # first week block
+        {"amount": 10.0, "dt": datetime(2026, 2, 9)},   # first week block (Monday)
     ]
-    # February 2026 has 28 days: monthly on 1-5 and 22-28, weekly from 6 to 21.
+    # February 2026 has 28 days: monthly on 1-5 and 22-28.
+    # Between day 6 and 21: Tuesdays and Wednesdays are daily ($10), others are weekly ($50).
     assert get_goal_stats(donations, now=datetime(2026, 2, 5, 12, 0))["scope"] == "monthly"
-    assert get_goal_stats(donations, now=datetime(2026, 2, 6, 12, 0))["scope"] == "weekly"
-    assert get_goal_stats(donations, now=datetime(2026, 2, 21, 12, 0))["scope"] == "weekly"
+    assert get_goal_stats(donations, now=datetime(2026, 2, 6, 12, 0))["scope"] == "weekly"  # Friday
+    assert get_goal_stats(donations, now=datetime(2026, 2, 10, 12, 0))["scope"] == "daily"   # Tuesday
+    assert get_goal_stats(donations, now=datetime(2026, 2, 11, 12, 0))["scope"] == "daily"   # Wednesday
+    assert get_goal_stats(donations, now=datetime(2026, 2, 21, 12, 0))["scope"] == "weekly"  # Saturday
     assert get_goal_stats(donations, now=datetime(2026, 2, 22, 12, 0))["scope"] == "monthly"
 
     opening = get_goal_stats(donations, now=datetime(2026, 2, 3, 12, 0))
     assert opening["raised"] == 30.0 and opening["target"] == 200.0
 
-    week = get_goal_stats(donations, now=datetime(2026, 2, 9, 12, 0))
+    week = get_goal_stats(donations, now=datetime(2026, 2, 9, 12, 0))  # Monday
     # The opening days' $30 belongs to the month, not to this week.
     assert week["raised"] == 10.0
-    assert week["target"] == weekly_goal_usd(datetime(2026, 2, 9, 12, 0))
-    assert 0 < week["target"] < 200.0
+    # A week is a quarter of the month's costs, so it is $50 in every month.
+    assert week["target"] == 50.0 and week["target"] == weekly_goal_usd(week["period_start"])
+
+    # Tuesday: daily target of $10, only today's donations counted
+    tuesday_stats = get_goal_stats(donations, now=datetime(2026, 2, 10, 12, 0))
+    assert tuesday_stats["scope"] == "daily"
+    assert tuesday_stats["target"] == 10.0
+    assert tuesday_stats["raised"] == 0.0
 
     closing = get_goal_stats(donations, now=datetime(2026, 2, 24, 12, 0))
     assert closing["scope"] == "monthly" and closing["raised"] == 40.0
 
     # A met goal reports itself as met, so the display can drop it entirely.
     met = get_goal_stats(
-        [{"amount": 60.0, "dt": datetime(2026, 2, 9)}], now=datetime(2026, 2, 10, 12, 0)
+        [{"amount": 15.0, "dt": datetime(2026, 2, 10)}], now=datetime(2026, 2, 10, 12, 0)
     )
     assert met["reached"] is True
 
 
-def test_status_bar_names_only_the_weeks_costs_mid_month(qapp):
+def test_currency_transposition(monkeypatch):
+    from datetime import datetime
+    from src.donors import get_goal_stats
+
+    donations = [{"amount": 25.0, "dt": datetime(2026, 2, 3)}]
+
+    monkeypatch.setenv("UPDATER_CURRENCY", "GBP")
+    stats_gbp = get_goal_stats(donations, now=datetime(2026, 2, 3, 12, 0))
+    assert stats_gbp["currency_symbol"] == "£"
+    assert stats_gbp["currency_code"] == "GBP"
+
+    monkeypatch.setenv("UPDATER_CURRENCY", "EUR")
+    stats_eur = get_goal_stats(donations, now=datetime(2026, 2, 3, 12, 0))
+    assert stats_eur["currency_symbol"] == "€"
+    assert stats_eur["currency_code"] == "EUR"
+
+    monkeypatch.setenv("UPDATER_CURRENCY", "USD")
+    stats_usd = get_goal_stats(donations, now=datetime(2026, 2, 3, 12, 0))
+    assert stats_usd["currency_symbol"] == "$"
+    assert stats_usd["currency_code"] == "USD"
+
+
+def test_goal_line_is_shown_in_the_readers_currency(qapp, monkeypatch):
     from datetime import datetime
 
     from src.i18n import translator
 
+    translator().set_language("en")
+    try:
+        donations = [{"amount": 30.0, "name": "Alice", "dt": datetime(2026, 11, 2)}]
+        for currency, symbol in (("USD", "$"), ("GBP", "\u00a3"), ("EUR", "\u20ac")):
+            monkeypatch.setenv("UPDATER_CURRENCY", currency)
+            bar = DonationStatusBar(donations=donations)
+            _draw_goal_at(bar, datetime(2026, 11, 4, 12, 0))
+            text = bar._goal_label.text()
+            # Transposed 1:1, never converted: the same 30 of 200, in the
+            # reader's own currency.
+            assert symbol + "30" in text
+            assert symbol + "200" in text
+            bar.deleteLater()
+    finally:
+        translator().set_language("en")
+
+
+def test_status_bar_names_only_the_weeks_costs_mid_month(qapp, monkeypatch):
+    from datetime import datetime
+
+    from src.i18n import translator
+
+    monkeypatch.setenv("UPDATER_CURRENCY", "USD")
     translator().set_language("en")
     try:
         donations = [{"amount": 30.0, "name": "Alice", "dt": datetime(2026, 11, 2)}]
@@ -149,7 +203,7 @@ def test_goal_is_dropped_once_the_month_is_covered_even_mid_week(qapp):
 
     translator().set_language("en")
     try:
-        # The month's $200 was met on day 2. On day 10 this week has seen no
+        # The month's $200 was met on day 2. On day 12 this week has seen no
         # donation at all, but the costs it would cover are already paid for,
         # so no goal may be mentioned: donor lines and encouragement only.
         donations = [
@@ -157,7 +211,7 @@ def test_goal_is_dropped_once_the_month_is_covered_even_mid_week(qapp):
             {"amount": 50.0, "name": "Bob", "dt": datetime(2026, 11, 2)},
         ]
         bar = DonationStatusBar(donations=donations)
-        _draw_goal_at(bar, datetime(2026, 11, 10, 12, 0))
+        _draw_goal_at(bar, datetime(2026, 11, 12, 12, 0))  # Thursday mid-month
         assert bar._goal_scope == "weekly"
         assert bar._goal_reached is False   # the week itself is still short...
         assert bar._goal_suppressed is True  # ...but the month is covered
@@ -229,9 +283,10 @@ def test_donation_appeals_and_community_labels_have_all_catalog_translations():
         assert all(_STRINGS[key].get(code) for code in ("en", "zh-CN", "fr", "es", "de", "ja"))
 
 
-def test_dismissing_donations_does_not_make_settings_window_wider(qapp):
+def test_dismissing_donations_does_not_make_settings_window_wider(qapp, monkeypatch):
     from src import device_tracking
 
+    monkeypatch.setenv("UPDATER_REDUCE_MOTION", "1")
     settings = QSettings("innioasis", "updater")
     old_dismissed = device_tracking.is_settings_donations_section_dismissed(settings)
     old_disabled = device_tracking.is_donation_ui_disabled(settings)
@@ -361,10 +416,12 @@ def test_reset_on_r_restores_battery_reminder(qapp):
         qapp.processEvents()
 
 
-def test_donation_status_bar_rotation_and_centering(qapp):
+def test_donation_status_bar_rotation_and_centering(qapp, monkeypatch):
     from datetime import datetime
+    import random
     from src.ui.main_window import compact_install_height, COMPACT_INSTALL_MIN_HEIGHT, COMPACT_INSTALL_MIN_HEIGHT_NO_DONATIONS
 
+    monkeypatch.setattr(random, "random", lambda: 0.5)
     donations = [{"amount": 25.0, "name": "Charlie", "dt": datetime.now()}]
     bar = DonationStatusBar(donations=donations)
     bar.show()

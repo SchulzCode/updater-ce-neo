@@ -1158,6 +1158,8 @@ _STRINGS: dict = {
         "en": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
         "fr": "Cette version contient plusieurs fichiers scatter : Updater ne peut pas déterminer la disposition dont votre lecteur a besoin. Le développeur de {software} doit mettre à jour ses versions de firmware pour n'inclure qu'un seul fichier scatter.",
         "es": "Esta versión contiene más de un archivo scatter, así que Actualizador no puede saber qué distribución necesita tu reproductor. El desarrollador de {software} tendría que actualizar sus versiones de firmware para incluir un solo archivo scatter.",
+        "de": "Dieses Release enthält mehrere Scatter-Dateien, daher kann Updater nicht erkennen, welches Layout Ihr Player benötigt. Der Entwickler von {software} müsste seine Firmware-Releases aktualisieren, sodass sie nur eine einzige Scatter-Datei enthalten.",
+        "ja": "このリリースには複数の scatter ファイルが含まれているため、Updater はプレーヤーに必要なレイアウトを特定できません。{software} の開発者は、scatter ファイルを 1 つだけ含めるようファームウェアのリリースを更新する必要があります。",
     },
     "app_name_mediatek_installer": {
         "zh-CN": "MediaTek 安装工具",
@@ -3287,6 +3289,24 @@ _STRINGS: dict = {
         "es": "<b>Nos has ayudado a recaudar ${raised} de nuestros ${target:.0f} de costes esta semana</b>",
         "de": "<b>Diese Woche: ${raised} / ${target:.0f}</b>",
         "ja": "<b>今週：${raised} / ${target:.0f}</b>",
+    },
+    # The daily goal display: Tuesdays and Wednesdays mid-month name that day's
+    # own costs target ($10), optimized for urgency on generally slow days.
+    "donate_goal_day_fmt": {
+        "zh-CN": "<b>您已帮助我们筹集了今天 ${target:.0f} 美元中的 ${raised} 美元</b>",
+        "en": "<b>You've helped us raise ${raised} of our ${target:.0f} for today</b>",
+        "fr": "<b>Vous nous avez aidés à collecter ${raised} sur nos ${target:.0f} pour aujourd'hui</b>",
+        "es": "<b>Nos has ayudado a recaudar ${raised} de nuestros ${target:.0f} para hoy</b>",
+        "de": "<b>Du hast uns geholfen, ${raised} unserer ${target:.0f} für heute zu sammeln</b>",
+        "ja": "<b>本日の目標 ${target:.0f} のうち ${raised} のご支援をいただきました</b>",
+    },
+    "donate_goal_day_status_fmt": {
+        "zh-CN": "<b>今天你已帮我们筹集 ${raised}，目标成本 ${target:.0f}</b>",
+        "en": "<b>You've helped us raise ${raised} of our ${target:.0f} costs today</b>",
+        "fr": "<b>Vous nous avez aidé à collecter ${raised} sur nos ${target:.0f} de frais aujourd'hui</b>",
+        "es": "<b>Nos has ayudado a recaudar ${raised} de nuestros ${target:.0f} de costes hoy</b>",
+        "de": "<b>Heute: ${raised} / ${target:.0f}</b>",
+        "ja": "<b>本日：${raised} / ${target:.0f}</b>",
     },
     "err_usb_disconnected_recovery": {
         "en": "Your {model} got disconnected. Please disconnect the USB and use a paperclip / pin to press the button between headphone jack and USB Port, then press next.",
