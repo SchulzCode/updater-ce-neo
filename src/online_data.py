@@ -23,6 +23,7 @@ held up, and a connection that comes and goes simply keeps the last good copy.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import threading
@@ -35,6 +36,9 @@ from pathlib import Path
 from typing import Callable, Iterable, Optional
 
 from .config import (
+    INNIOASIS_RAW_FALLBACK_PREFIX,
+    INNIOASIS_RAW_PREFIX,
+    INNIOASIS_SITE_PREFIX,
     RELEASE_CACHE_TTL_SECONDS,
     github_fallback_url,
     site_source_urls,
@@ -66,13 +70,18 @@ class OnlineFile:
     name: str
     urls: tuple[str, ...]
     ttl: int = DEFAULT_TTL_SECONDS
-    kind: str = "text"  # "xml" | "csv" | "text"
+    kind: str = "text"  # "xml" | "csv" | "json" | "text"
 
     def alternate_urls(self) -> tuple[str, ...]:
         """Every URL to try, including each one's GitHub-repository fallback."""
         out: list[str] = []
         for url in self.urls:
-            for candidate in (*site_source_urls(url.rsplit("/", 1)[-1]), github_fallback_url(url)):
+            rel_path = url.rsplit("/", 1)[-1]
+            for prefix in (INNIOASIS_RAW_PREFIX, INNIOASIS_SITE_PREFIX, INNIOASIS_RAW_FALLBACK_PREFIX):
+                if url.startswith(prefix):
+                    rel_path = url[len(prefix):]
+                    break
+            for candidate in (*site_source_urls(rel_path), github_fallback_url(url)):
                 if candidate and candidate not in out:
                     out.append(candidate)
         return tuple(out)
@@ -97,6 +106,16 @@ FILES: dict[str, OnlineFile] = {
     ),
     "release_blocklist.csv": OnlineFile(
         name="release_blocklist.csv", urls=site_source_urls("release_blocklist.csv"), kind="csv"
+    ),
+    "releases_backup.json": OnlineFile(
+        name="releases_backup.json",
+        urls=site_source_urls("feeds/releases.json"),
+        kind="json",
+    ),
+    "releases.xml": OnlineFile(
+        name="releases.xml",
+        urls=site_source_urls("feeds/releases.xml"),
+        kind="xml",
     ),
 }
 
@@ -204,6 +223,15 @@ def _is_usable(spec: OnlineFile, text: str) -> bool:
     if spec.kind == "csv":
         # A header-only file is legitimate (no donations yet, nothing blocked).
         return bool(text.splitlines())
+    if spec.kind == "json":
+        try:
+            parsed = json.loads(text)
+        except Exception as e:
+            logger.debug("%s is not valid JSON: %s", spec.name, e)
+            return False
+        if isinstance(parsed, dict):
+            return bool(parsed.get("repos") or parsed)
+        return isinstance(parsed, list) and len(parsed) > 0
     return True
 
 
@@ -267,6 +295,14 @@ def _worth_seeding(spec: OnlineFile, text: str) -> bool:
     if spec.kind == "csv":
         rows = [line for line in text.splitlines() if line.strip()]
         return len(rows) > 1
+    if spec.kind == "json":
+        try:
+            parsed = json.loads(text)
+        except Exception:
+            return False
+        if isinstance(parsed, dict):
+            return bool(parsed.get("repos"))
+        return isinstance(parsed, list) and len(parsed) > 0
     return True
 
 

@@ -42,6 +42,30 @@ class ThemesJourney:
         self.folder_dialog = None
 
     # ------------------------------------------------------------------
+    # Keeping the host awake
+    # ------------------------------------------------------------------
+    @property
+    def _sleep_key(self) -> str:
+        """This stage's own hold name, distinct from a firmware flash's."""
+        return f"themes:{id(self)}"
+
+    def _hold_awake(self) -> None:
+        try:
+            from .sleep_inhibit import hold_sleep
+
+            hold_sleep(self._sleep_key)
+        except Exception:
+            pass
+
+    def _release_awake(self) -> None:
+        try:
+            from .sleep_inhibit import release_sleep
+
+            release_sleep(self._sleep_key)
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------
     # Stage state
     # ------------------------------------------------------------------
     @property
@@ -129,6 +153,9 @@ class ThemesJourney:
 
     def begin(self, model: str, *, automatic: bool = False) -> None:
         """Start a stage from a clean slate."""
+        # From here until finish() the stage may write to the player over ADB;
+        # a host that suspends mid-transfer leaves a half-placed pack.
+        self._hold_awake()
         self._model = (model or "Y1")
         self._automatic = bool(automatic)
         self._active = True
@@ -144,11 +171,13 @@ class ThemesJourney:
 
     def finish(self) -> None:
         """The transfer left the card: completed, given up, or abandoned."""
+        self._release_awake()
         self._active = False
         self._transfer_running = False
         self._prompt_pending = False
 
     def mark_placement_failed(self) -> None:
+        self._release_awake()
         self._active = False
         self._transfer_running = False
         self._placement_failed = True

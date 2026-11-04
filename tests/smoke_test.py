@@ -13,6 +13,9 @@ from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("UPDATER_MTK_INPROCESS", "1")
+# Donor and goal copy follow the reader's currency; pin it so the assertions
+# below describe the copy rather than the machine's locale.
+os.environ.setdefault("UPDATER_CURRENCY", "USD")
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 

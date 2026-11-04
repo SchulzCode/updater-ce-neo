@@ -1764,6 +1764,9 @@ class UpdateAvailableDialog(QDialog):
         self._translated = None  # (name, body) once Google Translate returns
         self._translate_worker = None
         self._is_translating = False
+        # One local notice per session when the translation services stop
+        # answering, so a failed translate explains itself.
+        self._translation_notice_posted = False
         self._translate_label = QLabel()
         self._translate_label.setTextFormat(Qt.RichText)
         self._translate_label.setOpenExternalLinks(False)
@@ -1897,6 +1900,14 @@ class UpdateAvailableDialog(QDialog):
             return
         t = T()
         lang = (translator().lang or "en").strip()
+        # Dimmed + pin-hint while every provider is on cooldown; a dialog would
+        # be far too much ceremony for a disabled link beside the notes.
+        try:
+            from ..translate import is_translation_available
+
+            translation_ready = is_translation_available()
+        except Exception:
+            translation_ready = True
         # Open the release page itself in Google's translator (the same host
         # rewrite the Select Software links use), not the default Y1 repo.
         page = self._info.html_url or ""
@@ -1929,18 +1940,53 @@ class UpdateAvailableDialog(QDialog):
             parts = [badge, show_link, open_link]
         else:
             trans_txt = tr("translate_notes")
-            trans_link = f'<a href="action:translate_in_app" style="{link_style}">{trans_txt}</a>'
+            if translation_ready:
+                trans_link = f'<a href="action:translate_in_app" style="{link_style}">{trans_txt}</a>'
+            else:
+                trans_link = f'<span style="{link_style}">{trans_txt}</span>'
             parts = [trans_link, open_link]
         sep = " &nbsp;\u00b7&nbsp; "
         text = sep.join(p for p in parts if p)
         self._translate_label.setText(f'<span style="color:{t.fg};">{text}</span>')
         self._translate_label.setVisible(True)
+        from .widgets import install_pinned_hint
+
+        if translation_ready:
+            self._translate_label.setEnabled(True)
+            install_pinned_hint(self._translate_label, "")
+        else:
+            self._translate_label.setEnabled(False)
+            install_pinned_hint(
+                self._translate_label, tr("translate_unavailable_hint")
+            )
         if not self._is_translating:
             self._translate_throbber.stop()
 
-    def _start_translation(self) -> None:
-        from ..translate import ReleaseTranslateWorker
+    def _note_translation_unavailable(self) -> None:
+        """Explain an unavailable translation service once, and on the control."""
+        self._is_translating = False
+        self._update_translate_label()
+        if getattr(self, "_translation_notice_posted", False):
+            return
+        self._translation_notice_posted = True
+        try:
+            from ..notice_service import NoticeService
 
+            NoticeService.instance().post_local_notice(
+                "translation-unavailable",
+                tr("translate_unavailable_notice_title"),
+                tr("translate_unavailable_notice_body"),
+                severity="warning",
+            )
+        except Exception:
+            pass
+
+    def _start_translation(self) -> None:
+        from ..translate import ReleaseTranslateWorker, is_translation_available
+
+        if not is_translation_available():
+            self._note_translation_unavailable()
+            return
         lang = (translator().lang or "en").strip()
         rel = {"tag_name": self._info.tag, "name": self._info.name, "body": self._info.body}
         self._is_translating = True
@@ -1955,6 +2001,13 @@ class UpdateAvailableDialog(QDialog):
             return
         self._is_translating = False
         self._translated = (name, body)
+        try:
+            from ..notice_service import NoticeService
+
+            NoticeService.instance().remove_local_notice("translation-unavailable")
+            self._translation_notice_posted = False
+        except Exception:
+            pass
         self._render_notes()
         self._update_translate_label()
 
@@ -1962,7 +2015,7 @@ class UpdateAvailableDialog(QDialog):
         if rel.get("tag_name") != self._info.tag:
             return
         self._is_translating = False
-        self._update_translate_label()
+        self._note_translation_unavailable()
 
     def _on_translate_link(self, link: str) -> None:
         if link == "action:translate_in_app":

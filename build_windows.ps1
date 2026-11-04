@@ -45,6 +45,35 @@ if (Test-Path $ConfigFile) {
     }
 }
 
+# Fresh clones have no virtualenv and no packages: build the same .venv-build
+# every other platform uses (scripts\bootstrap_build_env.py) instead of failing
+# later on a missing PyInstaller/PySide6 import. Skipped for -SkipPyInstaller,
+# which only repackages an existing build.
+if (-not $SkipPyInstaller) {
+    $BootstrapScript = Join-Path $ProjectRoot "scripts\bootstrap_build_env.py"
+    if (Test-Path $BootstrapScript) {
+        $BootstrapLauncher = $null
+        foreach ($c in @("py", "python", "python3")) {
+            $bootstrapCmd = Get-Command $c -ErrorAction SilentlyContinue
+            if ($bootstrapCmd) { $BootstrapLauncher = $bootstrapCmd.Source; break }
+        }
+        if (-not $BootstrapLauncher) {
+            Write-Error "Python 3.10+ is required. Install it from https://www.python.org/downloads/windows/ (or: winget install -e --id Python.Python.3.12), then run this build again."
+            exit 1
+        }
+        $BootstrapOutput = & $BootstrapLauncher $BootstrapScript 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            $BootstrapOutput | ForEach-Object { Write-Host $_ }
+            Write-Error "Could not prepare the Python build environment (see the messages above)."
+            exit 1
+        }
+        $BootstrapPython = $BootstrapOutput | Select-String -Pattern '^PYTHON=' | Select-Object -Last 1
+        if ($BootstrapPython) {
+            $env:PYTHON = ($BootstrapPython.Line -replace '^PYTHON=', '')
+        }
+    }
+}
+
 # Locate Python / PyInstaller
 $PythonExe = $null
 $isExplicitArm64 = ($Arch -match "arm64|aarch64")
@@ -278,13 +307,17 @@ try {
             Write-Host "  -> Created friendly entry point: '2. Install Firmware.exe' -> $appSlug.exe" -ForegroundColor Green
 
             # Stage UnRAR.exe into tools/ folder beside the executable for .rar unpacking compatibility
-            $unrarSource = Join-Path $ProjectRoot "tools\windows\UnRAR.exe"
+            $unrarArchDir = if ($isArm64) { "arm64" } else { "x64" }
+            $unrarSource = Join-Path $ProjectRoot "tools\windows\$unrarArchDir\UnRAR.exe"
+            if (-not (Test-Path $unrarSource)) {
+                $unrarSource = Join-Path $ProjectRoot "tools\windows\UnRAR.exe"
+            }
             $unrarTargetDir = Join-Path $stagedAppDir "tools"
             $unrarTarget = Join-Path $unrarTargetDir "UnRAR.exe"
             if (Test-Path $unrarSource) {
                 if (-not (Test-Path $unrarTargetDir)) { New-Item -ItemType Directory -Force -Path $unrarTargetDir | Out-Null }
                 Copy-Item -Path $unrarSource -Destination $unrarTarget -Force
-                Write-Host "  -> Bundled 'tools\UnRAR.exe' for cross-platform .rar extraction" -ForegroundColor Green
+                Write-Host "  -> Bundled 'tools\UnRAR.exe' ($unrarArchDir) for cross-platform .rar extraction" -ForegroundColor Green
             }
 
             Write-StepBanner 3 $totalSteps "Staging Portable Folder" "Syncing compiled distribution files into $DistDir\$appSlug..."

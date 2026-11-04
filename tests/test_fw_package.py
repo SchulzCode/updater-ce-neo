@@ -116,10 +116,56 @@ def test_read_package_rejects_disabled_or_absent_ini(tmp_path):
     assert read_package(_firmware(tmp_path / "none", ini=None)) is None
 
 
-def test_read_package_rejects_two_scatters(tmp_path):
+def test_read_package_ignores_other_scatter_naming_beside_the_android_scatter(tmp_path):
+    """A release's own ``*_Android_scatter.txt`` outranks any other scatter."""
     fw = _firmware(tmp_path / "fw")
     (fw / "other_scatter.txt").write_text(SCATTER, encoding="utf-8")
+    pkg = read_package(fw)
+    assert pkg is not None
+    assert pkg.scatter.name == "MT6572_Android_scatter.txt"
+
+
+def test_read_package_rejects_two_packages_in_one_folder(tmp_path):
+    """Two Android scatters are two models, not one package with a variant."""
+    fw = _firmware(tmp_path / "fw")
+    (fw / "MT6580_Android_scatter.txt").write_text(SCATTER, encoding="utf-8")
     assert read_package(fw) is None
+
+
+def test_pick_scatter_prefers_the_android_scatter_over_variants(tmp_path):
+    root = tmp_path / "pkg"
+    root.mkdir()
+    (root / "MT6582_Android_scatter.txt").write_text(SCATTER, encoding="utf-8")
+    (root / "MT6582_Android_scatter_preserve_data.txt").write_text(SCATTER, encoding="utf-8")
+    (root / "rom_scatter.txt").write_text(SCATTER, encoding="utf-8")
+    assert fw_package.pick_scatter(root).name == "MT6582_Android_scatter.txt"
+
+
+def test_pick_scatter_prefers_a_preserve_variant_over_a_generic_name(tmp_path):
+    root = tmp_path / "pkg"
+    root.mkdir()
+    (root / "MT6582_Android_scatter_preserve_data.txt").write_text(SCATTER, encoding="utf-8")
+    (root / "rom_scatter.txt").write_text(SCATTER, encoding="utf-8")
+    assert fw_package.pick_scatter(root).name == "MT6582_Android_scatter_preserve_data.txt"
+
+
+def test_pick_scatter_accepts_a_lone_scatter_whatever_its_name(tmp_path):
+    root = tmp_path / "pkg"
+    root.mkdir()
+    (root / "oddly named scatter file.txt").write_text(SCATTER, encoding="utf-8")
+    assert fw_package.pick_scatter(root).name == "oddly named scatter file.txt"
+
+
+def test_pick_scatter_rejects_scatters_for_two_different_models(tmp_path):
+    root = tmp_path / "pkg"
+    root.mkdir()
+    scatter_y1 = "platform: MT6572\nproject: eastaeon72_wet_jb3\n"
+    scatter_y2 = "platform: MT6582\nproject: eastaeon82_wet_kk\n"
+    (root / "MT6572_Android_scatter.txt").write_text(scatter_y1, encoding="utf-8")
+    (root / "rom_scatter.txt").write_text(scatter_y2, encoding="utf-8")
+    # Even though MT6572_Android_scatter.txt has higher rank name, they are for different models,
+    # so neither is auto-selected and pick_scatter returns None.
+    assert fw_package.pick_scatter(root) is None
 
 
 def test_preserve_scatter_is_a_variant_not_the_package_scatter(tmp_path):
@@ -365,24 +411,21 @@ def test_cached_extract_is_never_deleted_and_is_restored_in_place(tmp_path, monk
     (extract_dir / "keep.txt").write_text("cached")
     (extract_dir / "boot.img").unlink()
 
-    # The archive is removed right after extraction; the cached folder is what remains.
-    assert not archive.exists()
+    # The archive is kept: it is the only copy a retry can work from.
+    assert archive.exists()
 
-    # A cached folder that is missing a declared image cannot be flashed, and
-    # the archive is gone: the attempt reports the cache as missing so the
-    # caller downloads the release again. It does not delete what is left.
-    with pytest.raises(RuntimeError, match="CACHE_FILE_MISSING"):
-        ExtractWorker._extract(stub, str(archive))
-    assert not (extract_dir / "boot.img").exists()
-    assert (extract_dir / "keep.txt").exists()
+    # A cached folder that is missing a declared image is healed from that
+    # archive in place, without touching anything else in the folder. This is
+    # what used to surface CACHE_FILE_MISSING mid-install once extraction
+    # deleted the archive behind the cache.
+    ExtractWorker._extract(stub, str(archive))
+    assert (extract_dir / "boot.img").exists()
 
-    # A forced re-extract over the cache rewrites files in place when the archive is still present.
-    with zipfile.ZipFile(archive, "w") as zf:
-        for f in staging.iterdir():
-            zf.write(f, f.name)
+    # A forced re-extract over the cache rewrites files in place too.
+    (extract_dir / "boot.img").unlink()
     ExtractWorker._extract(stub, str(archive), force=True)
     assert (extract_dir / "boot.img").exists()
-    assert not archive.exists()
+    assert archive.exists()
 
 
 def test_prune_does_nothing_without_a_valid_package(tmp_path):
@@ -592,14 +635,58 @@ def test_find_bundled_firmware_macos_firmware_folder(tmp_path, monkeypatch):
     assert pkg.image == (fw / "updater.png").resolve()
 
 
-def test_find_bundled_firmware_rejects_multiple_scatters(tmp_path, monkeypatch):
+def test_find_bundled_firmware_rejects_two_packages_in_one_folder(tmp_path, monkeypatch):
     sp_dir = tmp_path / "tools" / "SP_Flash_Tool"
     _firmware(sp_dir)
-    (sp_dir / "second_scatter.txt").write_text(SCATTER, encoding="utf-8")
+    (sp_dir / "MT6580_Android_scatter.txt").write_text(SCATTER, encoding="utf-8")
 
     monkeypatch.setattr(fw_package, "find_sp_flash_tool", lambda: sp_dir)
     pkg = fw_package.find_bundled_firmware(app_dir=tmp_path)
     assert pkg is None
+
+
+def test_find_scatter_prefers_the_android_scatter_across_folders(tmp_path):
+    """The stock scatter wins over its preserve copy and any other naming."""
+    from src.flash_service import _find_scatter
+
+    pkg = tmp_path / "rom"
+    pkg.mkdir()
+    android = pkg / "MT6582_Android_scatter.txt"
+    android.write_text(SCATTER, encoding="utf-8")
+    (pkg / "MT6582_Android_scatter_preserve_data.txt").write_text(SCATTER, encoding="utf-8")
+    other = tmp_path / "other"
+    other.mkdir()
+    (other / "rom_scatter.txt").write_text(SCATTER, encoding="utf-8")
+
+    assert _find_scatter(tmp_path) == android
+
+
+def test_find_scatter_still_reports_two_packages(tmp_path):
+    from src.flash_service import ScatterDiscoveryError, _find_scatter
+
+    for folder_name, chip in (("rom_a", "MT6572"), ("rom_b", "MT6580")):
+        folder = tmp_path / folder_name
+        folder.mkdir()
+        (folder / f"{chip}_Android_scatter.txt").write_text(SCATTER, encoding="utf-8")
+
+    with pytest.raises(ScatterDiscoveryError):
+        _find_scatter(tmp_path)
+
+
+def test_online_release_multiple_scatters_message_names_the_software(tmp_path):
+    """An online release cannot be repacked by the reader, so name its developer."""
+    from src.i18n import translator
+
+    _app()
+    translator().set_language("en")
+    page = SelectPackagePage()
+    page._current_package_name = "Rockbox 2.5"
+    page._current_installed_release_info = {"software_name": "Rockbox"}
+    text = page._multiple_scatters_message()
+    assert "Rockbox" in text
+    assert "single scatter" in text
+    assert "{software}" not in text
+    page.close()
 
 
 def test_prime_sp_tool_history_ini(tmp_path):

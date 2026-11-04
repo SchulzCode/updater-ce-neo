@@ -143,12 +143,26 @@ def unseen_notices(notices) -> list:
     return [n for n in (notices or []) if getattr(n, "id", "") not in seen]
 
 
-def notify_notice(notice, tray=None, route: str = "notices") -> bool:
-    """Send one notice as a system notification, if its category is on."""
-    if notice is None or not category_enabled(notice_category(notice)):
+def notify_new_notices(notices, tray=None, route: str = "notices") -> bool:
+    """Announce a batch of new notices as one counted notification.
+
+    A feed that publishes three items must not raise three banners: the user
+    gets a single "3 New Community Notices" and opening it shows the list. Only
+    notices still unseen are passed in, and only categories the user kept on
+    are counted, so a category switched off never inflates the number.
+    """
+    from .i18n import tr
+
+    fresh = [n for n in (notices or []) if category_enabled(notice_category(n))]
+    if not fresh:
         return False
-    title = str(getattr(notice, "title", "") or getattr(notice, "id", "") or "")
-    body = str(getattr(notice, "content", "") or "")
+    if len(fresh) == 1:
+        title = tr("notices_summary_title_one")
+        # The notice's own headline says more than a bare count would here.
+        body = str(getattr(fresh[0], "title", "") or tr("notices_summary_body"))
+    else:
+        title = tr("notices_summary_title_many").format(count=len(fresh))
+        body = tr("notices_summary_body")
     return deliver(title, body, tray=tray, route=route)
 
 

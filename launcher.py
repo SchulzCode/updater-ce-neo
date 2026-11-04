@@ -10,6 +10,12 @@ import os
 import sys
 from pathlib import Path
 
+# Never write __pycache__ beside the shipped bytecode: the app bundle is
+# code-signed, and a writable .app would otherwise change a sealed resource on
+# its first run. The launcher sets this for the packaged app; this covers a
+# source checkout started straight from launcher.py too.
+sys.dont_write_bytecode = True
+
 SRC = Path(__file__).resolve().parent / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
@@ -101,13 +107,20 @@ if __name__ == "__main__":
             pass
 
         if sys.platform == "darwin":
+            # The alert belongs to this process. Routing it through a script
+            # host would put Script Editor in front of the user instead: an app
+            # they never opened, asking them to trust the message. Without
+            # AppKit the crash log written above is the report.
             try:
-                import subprocess
-                clean_msg = str(exc).replace('"', '\\"')
-                subprocess.run([
-                    "osascript", "-e",
-                    f'display alert "Innioasis Updater Error" message "{clean_msg}"'
-                ], timeout=5)
+                from AppKit import NSAlert, NSApplication
+
+                NSApplication.sharedApplication()
+                alert = NSAlert.alloc().init()
+                alert.setMessageText_("Innioasis Updater Error")
+                alert.setInformativeText_(
+                    str(exc) or "The application stopped unexpectedly."
+                )
+                alert.runModal()
             except Exception:
                 pass
         sys.exit(1)

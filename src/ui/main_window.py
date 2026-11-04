@@ -271,6 +271,30 @@ _WRITE_STEPS = (STEP_DOWNLOAD_DA, STEP_DOWNLOAD_BL, STEP_WRITE)
 _RETRY_GUIDANCE_CODES = ("CONNECTION_FAILED", "MTK_INIT_FAILED")
 _CACHE_MISSING_MARKERS = ("filenotfounderror", "no such file or directory", "cannot find the file")
 
+# Failures the MTKClient engine reports on its own paths. The player is left
+# half-initialised by these, so the next attempt needs a real power cycle: the
+# card asks for it (with the paperclip reset tip) instead of showing a dead end.
+_MTK_FAILURE_CODES = frozenset(
+    {
+        "MTK_INIT_FAILED",
+        "MTK_IMPORT_FAILED",
+        "MTK_NO_DEVICE",
+        "MTK_DA_FAILED",
+        "MTK_INSTALL_FAILED",
+        "MTK_STALL",
+        "WRITE_FAILED",
+        "CONNECTION_FAILED",
+    }
+)
+
+
+def _is_mtk_install_failure(error_code) -> bool:
+    """True for a failure that leaves the player needing a power cycle."""
+    text = str(error_code or "").strip().upper()
+    if not text:
+        return False
+    return text.startswith("MTK_") or text in _MTK_FAILURE_CODES
+
 # States in which a flash run is under way: the sidebar's first entry becomes
 # "Install Software" and holds the accent highlight until the run finishes.
 _INSTALL_RUN_STATES = (
@@ -557,6 +581,21 @@ def compact_install_height(
     if donations_disabled:
         return max(COMPACT_INSTALL_MIN_HEIGHT_NO_DONATIONS, page_h + prompt_h + header_h)
     return max(COMPACT_INSTALL_MIN_HEIGHT, page_h + prompt_h + status_h + header_h)
+
+
+def waiting_for_device_card(page) -> bool:
+    """True while the install card is only asking for the player.
+
+    The connect prompt and the power-off step draw one short card; a card that
+    is showing install progress keeps the wizard's tall preferred frame. The
+    window uses this to hug the prompt instead of leaving an empty band below
+    it (see ``_adjust_window_geometry``).
+    """
+    try:
+        remaining = int(getattr(page, "_attempt_remaining", 0) or 0)
+    except (TypeError, ValueError):
+        remaining = 0
+    return bool(getattr(page, "_prompt_only", False) or remaining > 0)
 
 
 def install_wizard_height(content_height: int, width: int) -> int:
@@ -850,6 +889,7 @@ class MainWindow(QMainWindow):
         # True once this install has already fallen back to the other backend:
         # one automatic switch per run, so a bad cable cannot ping-pong.
         self._fallback_attempted = False
+        self._sp_flash_tool_tried = False
         self._sp_1013_seen = False
         self._reboot_suggestion_shown = False
         self._power_off_prompt = False
@@ -2200,6 +2240,8 @@ class MainWindow(QMainWindow):
         self.service.device_lost.connect(self._on_device_lost)
         if hasattr(self.service, "usb_disconnected"):
             self.service.usb_disconnected.connect(self._on_device_lost)
+        if hasattr(self.service, "getting_ready"):
+            self.service.getting_ready.connect(self._on_getting_ready)
         self.service.monitor_error.connect(self._on_monitor_error)
 
     def _on_download_started(self, name, model):
@@ -3690,10 +3732,16 @@ class MainWindow(QMainWindow):
                 # Downloading and extraction keep their deliberately short
                 # cards. The flashing screen is the one that must look like a
                 # compact installer while it runs (and while it completes).
+                # While the card is only asking for the player (connect
+                # prompt, power-off step) the window hugs that one card: the
+                # wizard's tall preferred frame left a band of empty window
+                # below it. A card showing real progress keeps the wizard size.
+                waiting_for_device = waiting_for_device_card(page)
                 if (
                     getattr(page, "_stack", None) is not None
                     and page._stack.currentWidget()
                     is getattr(page, "_flashing_view", None)
+                    and not waiting_for_device
                 ):
                     content_h = install_wizard_height(content_h, target_w)
                 target_h = max(
@@ -5041,11 +5089,6 @@ class MainWindow(QMainWindow):
         self.themes.set_apk(apk_path, apk_url)
         self._is_360p_rockbox = is_360p_rockbox or bool(apk_path or apk_url)
 
-        try:
-            from ..sleep_inhibit import acquire_sleep_inhibition
-            acquire_sleep_inhibition("Firmware installation in progress")
-        except Exception as e:
-            logger.debug("Could not acquire sleep inhibition: %s", e)
 
         self._flash_page.set_package_name(self._package_name)
         self._flash_page.set_model(self._package_model)
@@ -5099,6 +5142,8 @@ class MainWindow(QMainWindow):
         self._saw_all_command_exec = False
         self._completion_notified = False
         self._used_sp_backend = (backend_method(self._flash_method) == METHOD_SP)
+        if self._used_sp_backend:
+            self._sp_flash_tool_tried = True
         if hasattr(self, "_failure_grace_timer") and self._failure_grace_timer.isActive():
             self._failure_grace_timer.stop()
         self.service.start_flash(
@@ -5259,10 +5304,21 @@ class MainWindow(QMainWindow):
         # Rockbox and 0-100% for standard releases, so percent is passed through
         # directly without double-scaling.
         self._last_progress = percent
+        if percent is not None and percent > 12.5:
+            if hasattr(self, "_flash_page") and getattr(self._flash_page, "_getting_ready", False):
+                self._flash_page.set_getting_ready(False)
         self._flash_page.update_progress(percent)
         self._retry_page.update_progress(percent)
 
+    def _on_getting_ready(self, active: bool) -> None:
+        if hasattr(self, "_flash_page") and self._flash_page is not None:
+            self._flash_page.set_getting_ready(active)
+
     def _on_log_message(self, msg):
+        from ..flash_service import is_mtk_checksum_line
+        if is_mtk_checksum_line(msg):
+            if hasattr(self, "_flash_page") and self._flash_page is not None:
+                self._flash_page.set_getting_ready(True)
         # Backend/tool channel: a tool that prints a line and also reports it
         # through its callback would otherwise store the same event twice.
         self._append_log(msg, dedupe=True)
@@ -5532,11 +5588,6 @@ class MainWindow(QMainWindow):
             self._kill_process_timer.timeout.connect(lambda: self._kill_flashing_process("usb disconnected"))
         self._kill_process_timer.start(5000)
 
-        try:
-            from ..sleep_inhibit import release_sleep_inhibition
-            release_sleep_inhibition()
-        except Exception:
-            pass
         self._install_failed = True
         self._power_off_prompt = False
         self._install_complete = False
@@ -5790,11 +5841,6 @@ class MainWindow(QMainWindow):
                     "[Rockbox Themes] Themes and fonts auto-install is off in Settings; "
                     "the install finishes without the themes stage."
                 )
-            try:
-                from ..sleep_inhibit import release_sleep_inhibition
-                release_sleep_inhibition()
-            except Exception:
-                pass
             self._install_complete = True
             self._compact_install_screen = False
             self._power_off_prompt = False
@@ -5934,11 +5980,6 @@ class MainWindow(QMainWindow):
         self.themes.mark_completion_shown()
         self.themes.finish()
         self._sync_install_nav_entry()
-        try:
-            from ..sleep_inhibit import release_sleep_inhibition
-            release_sleep_inhibition()
-        except Exception:
-            pass
         self._install_complete = True
         self._compact_install_screen = False
         self._power_off_prompt = False
@@ -6102,13 +6143,8 @@ class MainWindow(QMainWindow):
         self._update_header_title()
 
     def _handle_flash_failure(self, error_code):
-        try:
-            from ..sleep_inhibit import release_sleep_inhibition
-            release_sleep_inhibition()
-        except Exception:
-            pass
         self._download_active = False
-        from ..flash_service import is_connect_failure, is_disconnection_error, is_mtk_device_connected, is_storage_full_error
+        from ..flash_service import is_attempt_timeout_error, is_connect_failure, is_disconnection_error, is_mtk_device_connected, is_storage_full_error
         if is_storage_full_error(error_code):
             try:
                 from ..downloads import clear_firmware_cache, downloads_dir
@@ -6168,10 +6204,76 @@ class MainWindow(QMainWindow):
             self._append_log(f"Flash failed due to device disconnection ({error_code}).")
             self._on_flash_disconnected()
             return
+        if is_attempt_timeout_error(error_code):
+            # The connect window ended with nothing attached. That is not a
+            # failed method, so the same engine is offered again: the user is
+            # sent back to the disconnect / power-off step, the killed run is
+            # already stopped, and Continue starts the same method afresh.
+            # Timeouts may repeat as often as needed; only a real install
+            # failure switches engines.
+            self._append_log(
+                f"No device inside the connect window ({error_code}); "
+                f"returning to the power-off step with {_method_label(self._flash_method)}."
+            )
+            self._return_to_power_off_stage(self._flash_method)
+            return
+        if not cache_failure and error_code == "MTK_CHECKSUM_STALLED":
+            if hasattr(self, "_flash_page") and self._flash_page is not None:
+                self._flash_page.set_getting_ready(False)
+            from ..flash_service import is_sp_flash_tool_supported_for_host, backend_method, METHOD_SP, METHOD_MTK
+            sp_already_tried = (
+                getattr(self, "_fallback_attempted", False)
+                or getattr(self, "_sp_flash_tool_tried", False)
+                or getattr(self, "_used_sp_backend", False)
+                or (backend_method(self._flash_method) == METHOD_SP)
+            )
+            if not sp_already_tried and is_sp_flash_tool_supported_for_host():
+                self._fallback_attempted = True
+                self._sp_flash_tool_tried = True
+                self._append_log("Checksum stall persisted for 2 minutes; switching to SP Flash Tool to recover the player.")
+                self._return_to_power_off_stage(
+                    METHOD_SP,
+                    recovery=True,
+                    prompt_key="err_checksum_stall_sp_failover",
+                    prompt_kwargs={
+                        "failed": _method_label(METHOD_MTK),
+                        "next": _method_label(METHOD_SP),
+                    },
+                )
+                return
+            try:
+                self.sm.transition_to(FlashState.S5_FAILED)
+            except ValueError:
+                self.sm.force_state(FlashState.S5_FAILED)
+            self._show_install_failure("MTK_CHECKSUM_STALLED")
+            return
         # A backend that never got going is not the end of the install on a
         # host that has the other engine: hand the user back to the power-off
         # step and start the other one from there.
         if not cache_failure and self._offer_backend_failover(error_code):
+            return
+        from ..flash_service import is_mtk_method
+
+        if (
+            not cache_failure
+            and is_mtk_method(self._flash_method)
+            and _is_mtk_install_failure(error_code)
+        ):
+            from ..config import device_label_for_model
+
+            # The engine stopped with the player mid-download. Ask for the
+            # unplug / power-off (paperclip reset if needed) confirmation, then
+            # Continue starts a fresh run of the same method.
+            self._append_log(
+                f"MTKClient install failed ({error_code}); asking for a power cycle "
+                f"with {_method_label(self._flash_method)}."
+            )
+            self._return_to_power_off_stage(
+                self._flash_method,
+                recovery=True,
+                prompt_key="install_disconnect_guidance_fmt",
+                prompt_kwargs={"label": device_label_for_model(self._package_model)},
+            )
             return
         if not cache_failure and getattr(self.service, "_mtk_stall_prompt_text", lambda: None)():
             self._show_mtk_stall_restart_prompt()
@@ -6238,6 +6340,15 @@ class MainWindow(QMainWindow):
         """
         self.service.cancel_flash()
         self.service.stop_device_monitor()
+        # The killed command's children must be gone too: a leftover mtk.py /
+        # console SP Flash Tool run holds the USB port, and the retry the user
+        # confirms next would then fail on a busy device.
+        try:
+            from ..flash_service import terminate_sp_sessions
+
+            terminate_sp_sessions()
+        except Exception:
+            logger.debug("Could not stop leftover flashing sessions", exc_info=True)
         self._elapsed_timer.stop()
         self._install_failed = False
         self._power_off_prompt = True
@@ -6282,6 +6393,11 @@ class MainWindow(QMainWindow):
         one switch is made per install, so an exhausted pair of engines ends
         as an explained failure instead of a loop.
         """
+        from ..flash_service import is_attempt_timeout_error
+
+        if is_attempt_timeout_error(error_code):
+            # Nothing was there to flash: retry the same method, never switch.
+            return False
         if getattr(self, "_fallback_attempted", False):
             return False
         if is_wrong_model_error(error_code) or is_sp_driver_error(error_code):
@@ -6542,11 +6658,6 @@ class MainWindow(QMainWindow):
             from .. import process_guard
             for _ in process_guard.end_install_session(reason="restart prompt accepted"):
                 pass
-            try:
-                from ..sleep_inhibit import release_sleep_inhibition
-                release_sleep_inhibition()
-            except Exception:
-                pass
             QApplication.quit()
 
     def _show_com_port_reboot_suggestion(self, error_code):
@@ -6588,12 +6699,6 @@ class MainWindow(QMainWindow):
 
             for _ in process_guard.end_install_session(reason="restart computer suggestion accepted"):
                 pass
-            try:
-                from ..sleep_inhibit import release_sleep_inhibition
-
-                release_sleep_inhibition()
-            except Exception:
-                pass
             QApplication.quit()
 
     def _on_method_changed(self, method):
@@ -6620,11 +6725,20 @@ class MainWindow(QMainWindow):
     def _stop_running_install(self) -> None:
         """Stop a download or flash so it does not keep running in the background."""
         self._download_active = False
+        # Abandoning a run ends the window in which a backend may hold the USB
+        # port, and with it the system-awake hold: nothing is touching the
+        # player from here. Cancel first so the sweep cannot take a live writer
+        # with it, and let the sweep run off the GUI thread.
+        self.themes.finish()
         try:
-            from ..sleep_inhibit import release_sleep_inhibition
-            release_sleep_inhibition()
+            self.service.cancel_flash()
+            self.service.stop_device_monitor()
         except Exception:
-            pass
+            logger.debug("Stopping the install run failed", exc_info=True)
+        from .. import process_guard
+
+        process_guard.end_install_session(reason="install stopped", sweep=False)
+        process_guard.sweep_async(reason="install stopped", on_done=self.sweep_report.emit)
         if hasattr(self, "_flash_page") and hasattr(self._flash_page, "stop_theme_workers"):
             self._flash_page.stop_theme_workers()
         page = getattr(self, "_select_page", None)
@@ -8184,10 +8298,12 @@ class MainWindow(QMainWindow):
         btn.setEnabled(visible)
 
     def _notify_about_notices(self, notices) -> None:
-        """Announce each genuinely new notice whose category is switched on.
+        """Announce the new notices as one counted notification.
 
-        Notices are marked seen whether or not a notification was sent, so
-        turning a category on later never replays old announcements.
+        One banner for the batch, never one per notice: a feed that publishes
+        three items must not raise three alerts. Notices are marked seen whether
+        or not a notification was sent, so turning a category on later never
+        replays old announcements.
         """
         from .. import notice_alerts
 
@@ -8196,10 +8312,9 @@ class MainWindow(QMainWindow):
             return
         logger.info("Notices: %d new since the last run", len(fresh))
         notice_alerts.mark_notices_seen(n.id for n in fresh)
-        tray = self._notification_tray()
-        for notice in fresh:
-            if notice_alerts.category_enabled(notice_alerts.notice_category(notice)):
-                notice_alerts.notify_notice(notice, tray=tray, route="notices")
+        notice_alerts.notify_new_notices(
+            fresh, tray=self._notification_tray(), route="notices"
+        )
 
     def _on_notification_clicked(self, route=None) -> None:
         """Route a clicked system notification to the view it announces."""
@@ -8457,6 +8572,9 @@ class MainWindow(QMainWindow):
     def _on_donations_updated(self, donations):
         if donations:
             self._donations = donations
+            page = getattr(self, "_support_page", None)
+            if page is not None:
+                page.set_donations(donations)
 
     def _on_support_clicked(self):
         """Open Support Us in the window. A finished install keeps Install Software selected.
@@ -8486,7 +8604,7 @@ class MainWindow(QMainWindow):
         dlg = QDialog(self)
         dlg.setWindowTitle(tr("nav_donate"))
         dlg.setModal(True)
-        page = SupportPage(dlg)
+        page = SupportPage(dlg, donations=getattr(self, "_donations", None))
         layout = QVBoxLayout(dlg)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.addWidget(page)
@@ -8654,19 +8772,9 @@ class MainWindow(QMainWindow):
                     self.service.cancel_flash()
                 except Exception:
                     pass
-            try:
-                from ..sleep_inhibit import release_sleep_inhibition
-                release_sleep_inhibition()
-            except Exception:
-                pass
         elif hasattr(self, "service") and self.service:
             try:
                 self.service.cancel_flash()
-            except Exception:
-                pass
-            try:
-                from ..sleep_inhibit import release_sleep_inhibition
-                release_sleep_inhibition()
             except Exception:
                 pass
 
@@ -8719,15 +8827,20 @@ class MainWindow(QMainWindow):
 
     def _hide_to_tray(self, event) -> None:
         """Close the window but keep the process and its tray icon alive."""
+        from ..tray import hold_off_automatic_termination
+
         self.hide()
         event.ignore()
         tray = self._ensure_background_tray()
         tray.show()
-        if not tray.is_visible():
+        if not tray.is_available():
             # No menu bar/tray on this host: an invisible process with no
             # window and no icon is unreachable, so leave cleanly instead.
             self._schedule_app_quit()
             return
+        # AppKit reaps an idle, windowless app within seconds and takes the
+        # menu bar item with it; the hold stays until the window comes back.
+        hold_off_automatic_termination(True)
         self._start_background_update_timer()
         self._set_window_polling(False)
 
@@ -8748,7 +8861,10 @@ class MainWindow(QMainWindow):
 
     def _hide_to_tray_at_launch(self) -> None:
         """Start-at-login: the tray is up and the window is never shown."""
+        from ..tray import hold_off_automatic_termination
+
         self._ensure_background_tray().show()
+        hold_off_automatic_termination(True)
         self._start_background_update_timer()
 
     def _start_background_update_timer(self) -> None:
@@ -8770,10 +8886,10 @@ class MainWindow(QMainWindow):
         tray = getattr(self, "_background_tray", None)
         if tray is None:
             from PySide6.QtGui import QIcon
-            from ..tray import BackgroundTray
+            from ..tray import create_background_tray
 
             fallback = QIcon(str(paths.RESOURCES_DIR / "icon.png"))
-            tray = BackgroundTray(
+            tray = create_background_tray(
                 QApplication.instance(),
                 self._show_from_tray,
                 self._quit_from_tray,
@@ -8785,7 +8901,9 @@ class MainWindow(QMainWindow):
 
     def _show_from_tray(self) -> None:
         from ..notifications import bring_window_to_front
+        from ..tray import hold_off_automatic_termination
 
+        hold_off_automatic_termination(False)
         bring_window_to_front(self)
         self._set_window_polling(True)
 

@@ -74,7 +74,9 @@ asset. `repair` targets the broken tags and leaves Windows/Linux assets alone.
 ## Schedule
 
 Install a launchd job that checks every six hours, dispatches stale syncs, and
-posts a notification if anything still needs attention:
+posts a notification if anything still needs attention (through the app's own
+Notification Center entry, so install the job from the packaged app; a run from
+`run.sh` has no bundle identity and only logs):
 
 ```bash
 ./housekeeping/run.sh schedule install --interval 6

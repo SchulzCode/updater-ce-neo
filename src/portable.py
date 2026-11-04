@@ -183,37 +183,177 @@ def clear_cache() -> None:
     _INDEX_CACHE.clear()
 
 
-def load_index(repo: str, fetch=None, now: Optional[float] = None, branch: str = DEFAULT_BRANCH):
+def strip_portable_suffix(name: str) -> str:
+    """Strip a portable platform suffix from a zip filename if present.
+
+    E.g. ``rom-macos.zip`` -> ``rom.zip``,
+    ``Y2Linux-1.0-windows-arm64.zip`` -> ``Y2Linux-1.0.zip``.
+    """
+    raw = str(name or "").strip()
+    lower = raw.lower()
+    for suffix in sorted(KNOWN_SUFFIXES.values(), key=len, reverse=True):
+        if lower.endswith(suffix) and len(raw) > len(suffix):
+            return raw[: -len(suffix)] + ".zip"
+    return raw
+
+
+def _normalize_index_data(data, repo: str = "") -> Optional[dict]:
+    """Normalize either a packager ``index.json`` (``schema: 1``, ``releases``
+    list) or an ``innioasis.app`` feed mirror entry (``version: 1``,
+    ``releases`` dict) into the standard ``load_index`` dictionary."""
+    if not isinstance(data, dict):
+        return None
+    if data.get("schema") == INDEX_SCHEMA and isinstance(data.get("releases"), list):
+        return data
+
+    releases_map = data.get("releases")
+    if not isinstance(releases_map, dict):
+        return None
+
+    m_repo = normalize_repo(str(data.get("mirror_repo") or repo or ""))
+    platforms_seen: list[str] = []
+    releases_list: list[dict] = []
+
+    for tag_key, rel_info in releases_map.items():
+        if not isinstance(rel_info, dict):
+            continue
+        orig_tag = str(rel_info.get("original_tag") or tag_key).strip()
+        mirror_tag = str(rel_info.get("mirror_tag") or orig_tag).strip()
+        if not orig_tag:
+            continue
+        assets_list: list[dict] = []
+        mirror_originals: dict[str, dict] = {}
+        assets_map = rel_info.get("assets")
+        if isinstance(assets_map, dict):
+            for orig_asset_name, asset_info in assets_map.items():
+                if not isinstance(asset_info, dict):
+                    continue
+                src_name = str(orig_asset_name or "").strip()
+                if not src_name:
+                    continue
+                mirror_orig_url = str(asset_info.get("mirror_original_url") or "").strip()
+                if not mirror_orig_url and m_repo and mirror_tag:
+                    mirror_orig_url = _download_url(m_repo, mirror_tag, src_name)
+                mirror_originals[src_name] = {
+                    "name": src_name,
+                    "original_url": str(asset_info.get("original_url") or ""),
+                    "size": int(asset_info.get("original_size") or 0),
+                    "mirror_original_url": mirror_orig_url,
+                }
+                pkgs = asset_info.get("packages")
+                if isinstance(pkgs, dict):
+                    for plat_key, pkg_info in pkgs.items():
+                        if not isinstance(pkg_info, dict):
+                            continue
+                        p_key = str(plat_key or "").strip()
+                        p_name = str(pkg_info.get("name") or "").strip()
+                        p_url = str(pkg_info.get("url") or "").strip()
+                        if not p_name and p_url:
+                            p_name = p_url.rsplit("/", 1)[-1]
+                        if not p_url and m_repo and mirror_tag and p_name:
+                            p_url = _download_url(m_repo, mirror_tag, p_name)
+                        if not p_key or not p_name or not p_url:
+                            continue
+                        if p_key not in platforms_seen:
+                            platforms_seen.append(p_key)
+                        assets_list.append({
+                            "name": p_name,
+                            "source_asset": src_name,
+                            "platform": p_key,
+                            "size": int(pkg_info.get("size") or 0),
+                            "sha256": str(pkg_info.get("sha256") or ""),
+                            "url": p_url,
+                        })
+        releases_list.append({
+            "tag": orig_tag,
+            "mirror_tag": mirror_tag,
+            "release_name": str(rel_info.get("release_name") or orig_tag),
+            "published_at": str(rel_info.get("published_at") or ""),
+            "assets": assets_list,
+            "mirror_originals": mirror_originals,
+        })
+
+    platforms_table = []
+    for p_key in platforms_seen:
+        os_key, arch = PLATFORM_SPECS.get(p_key, (p_key.split("-")[0], "x86_64"))
+        platforms_table.append({
+            "key": p_key,
+            "os": os_key,
+            "arch": arch,
+            "suffix": KNOWN_SUFFIXES.get(p_key, f"-{p_key}.zip"),
+        })
+
+    out = {
+        "schema": INDEX_SCHEMA,
+        "source_repo": str(data.get("source_repo") or ""),
+        "mirror_repo": m_repo,
+        "platforms": platforms_table,
+        "releases": releases_list,
+    }
+    if isinstance(data.get("raw_releases"), list):
+        out["raw_releases"] = data["raw_releases"]
+    return out
+
+
+def load_index(
+    repo: str,
+    fetch=None,
+    now: Optional[float] = None,
+    branch: str = DEFAULT_BRANCH,
+    force_refresh: bool = False,
+):
     """The mirror's ``index.json``, or ``None`` when it cannot be used.
 
-    A failed fetch keeps serving the last good copy, so a flaky connection
-    does not silently downgrade users to the plain firmware zip on every
-    lookup.
+    A failed fetch falls back to ``innioasis.app/feeds/firmware-releases.json``
+    (or ``firmware-feed.xml``) and then keeps serving the last good copy, so a
+    flaky connection does not silently downgrade users on every lookup.
     """
     repo = normalize_repo(repo)
     if not repo:
         return None
     current = time.time() if now is None else now
     cached = _INDEX_CACHE.get(repo)
-    if cached and current - cached[0] < INDEX_TTL_SECONDS:
+    if not force_refresh and cached and current - cached[0] < INDEX_TTL_SECONDS:
         return cached[1]
 
     fetcher = fetch or _fetch_text
     stale = cached[1] if cached else None
+    raw_data = None
     try:
-        data = json.loads(fetcher(index_url(repo, branch)))
+        raw_data = json.loads(fetcher(index_url(repo, branch)))
     except Exception as error:
         logger.debug("Portable mirror index unavailable for %s: %s", repo, error)
+
+    data = _normalize_index_data(raw_data, repo) if raw_data is not None else None
+
+    if data is None and fetch is None:
+        try:
+            from . import feed_fallback
+
+            feed_mirror = feed_fallback.get_mirror_from_feed(repo, force_refresh=force_refresh)
+            if feed_mirror is not None:
+                data = _normalize_index_data(feed_mirror, repo)
+        except Exception as e:
+            logger.debug("Fallback feed mirror index lookup failed for %s: %s", repo, e)
+
+    if data is None:
         return stale
-    if (
-        not isinstance(data, dict)
-        or data.get("schema") != INDEX_SCHEMA
-        or not isinstance(data.get("releases"), list)
-    ):
-        logger.debug("Portable mirror index for %s is not schema %s", repo, INDEX_SCHEMA)
-        return stale
+
     _INDEX_CACHE[repo] = (current, data)
     return data
+
+
+def fetch_mirror_index(
+    repo: str,
+    *,
+    force_refresh: bool = False,
+    fetch=None,
+    now: Optional[float] = None,
+    branch: str = DEFAULT_BRANCH,
+):
+    """Fetch a mirror repository's index, falling back to the ``innioasis.app``
+    static feed when ``raw.githubusercontent.com`` or GitHub API is unreachable."""
+    return load_index(repo, fetch=fetch, now=now, branch=branch, force_refresh=force_refresh)
 
 
 def platform_candidates(index, platform: Optional[str] = None) -> list[str]:
@@ -316,6 +456,108 @@ def resolve(mirrors, tag: str, source_asset: str, platform: Optional[str] = None
     return None
 
 
+resolve_portable_asset = resolve
+
+
+def resolve_mirror_candidates(
+    mirrors,
+    tag: str,
+    source_asset: str,
+    platform: Optional[str] = None,
+    fetch=None,
+) -> Optional[dict]:
+    """Resolve all mirror download options for ``(tag, source_asset)``:
+
+    - ``exact_portable``: portable zip built for the current host ``platform`` (or ``None``)
+    - ``any_portable``: ``exact_portable`` if available, else the first available OS portable zip
+      (since any OS portable zip contains the same ``Firmware/`` or ``SP_Flash_Tool/`` files)
+    - ``all_portable_urls``: ordered list of all portable package URLs across all OSes
+    - ``mirror_original_url``: unmodified original zip URL on the mirror release
+    - ``mirror_repo``: mirror repository name
+    """
+    repos = parse_mirror_repos(mirrors)
+    if not repos or not tag or not source_asset:
+        return None
+    key = platform or platform_key()
+    source_name = str(source_asset).strip()
+    base = source_name[:-4] if source_name.lower().endswith(".zip") else source_name
+
+    for repo in repos:
+        index = load_index(repo, fetch=fetch)
+        if not index:
+            continue
+        release = None
+        for candidate in index.get("releases") or []:
+            if isinstance(candidate, dict) and (
+                str(candidate.get("tag") or "") == str(tag)
+                or str(candidate.get("mirror_tag") or "") == str(tag)
+            ):
+                release = candidate
+                break
+        if release is None:
+            continue
+
+        mirror_tag = str(release.get("mirror_tag") or release.get("tag") or tag)
+        mirror_originals = release.get("mirror_originals")
+        mirror_original_url = ""
+        if isinstance(mirror_originals, dict):
+            orig_info = mirror_originals.get(source_name)
+            if orig_info is None:
+                for k, v in mirror_originals.items():
+                    if str(k).lower() == source_name.lower():
+                        orig_info = v
+                        break
+            if isinstance(orig_info, dict):
+                mirror_original_url = str(orig_info.get("mirror_original_url") or "").strip()
+        if not mirror_original_url:
+            mirror_original_url = _download_url(repo, mirror_tag, source_name)
+
+        exact = find_asset(index, repo, str(tag), source_name, key) if key else None
+        all_assets: list[dict] = []
+        for asset in release.get("assets") or []:
+            if not isinstance(asset, dict):
+                continue
+            a_name = str(asset.get("name") or "").strip()
+            a_plat = str(asset.get("platform") or "").strip()
+            if not a_name or not a_plat:
+                continue
+            declared = str(asset.get("source_asset") or "").strip()
+            if declared:
+                if declared != source_name and declared.lower() != source_name.lower():
+                    continue
+            else:
+                expected = base + _platform_suffix(index, a_plat)
+                if expected == base or a_name != expected:
+                    continue
+            a_url = str(asset.get("url") or "").strip() or _download_url(repo, mirror_tag, a_name)
+            all_assets.append({
+                "repo": repo,
+                "platform": a_plat,
+                "name": a_name,
+                "size": int(asset.get("size") or 0),
+                "sha256": str(asset.get("sha256") or ""),
+                "url": a_url,
+            })
+
+        any_portable = exact or (all_assets[0] if all_assets else None)
+        all_urls: list[str] = []
+        if exact and exact.get("url"):
+            all_urls.append(exact["url"])
+        for a in all_assets:
+            if a["url"] and a["url"] not in all_urls:
+                all_urls.append(a["url"])
+
+        return {
+            "mirror_repo": repo,
+            "mirror_tag": mirror_tag,
+            "mirror_original_url": mirror_original_url,
+            "exact_portable": exact,
+            "any_portable": any_portable,
+            "all_portable_urls": all_urls,
+        }
+    return None
+
+
 def mirrors_for_repo(repo: str) -> list[str]:
     """Mirror repositories a catalogue entry for ``repo`` names.
 
@@ -404,3 +646,45 @@ def resolve_download_link(url: str, platform: Optional[str] = None, fetch=None) 
     fetcher = fetch or (lambda index_url: _fetch_text(index_url, LINK_TIMEOUT))
     match = resolve(mirrors, tag, asset, platform=key, fetch=fetcher)
     return str(match.get("url") or "") if match else ""
+
+
+def fallback_urls_for(url: str, platform: Optional[str] = None, fetch=None) -> list[str]:
+    """Mirror download URLs to try after a source release download fails.
+
+    A publisher can delete a repository, or a network can block it, long after
+    ``slidia_manifest.xml`` named it. The mirror keeps the same release tag and
+    the same original zip, so a failed download continues from the mirror
+    instead of ending the install. Order: the portable package built for this
+    machine, any other portable package (they all carry the same
+    ``Firmware/`` or ``SP_Flash_Tool/`` layout), then the mirror's unmodified
+    copy of the original asset.
+
+    Never raises; an unresolvable link returns ``[]`` and the caller keeps the
+    original URL and its error.
+    """
+    try:
+        repo, tag, asset = _release_asset_from_url(url)
+        if not repo or not tag or not asset:
+            return []
+        mirrors = mirrors_for_repo(repo)
+        if not mirrors:
+            return []
+        key = platform_key() if platform is None else platform
+        candidates = resolve_mirror_candidates(mirrors, tag, asset, platform=key, fetch=fetch)
+        if not candidates:
+            return []
+        ordered: list[str] = []
+        exact = candidates.get("exact_portable") or {}
+        for candidate in (
+            str(exact.get("url") or ""),
+            str((candidates.get("any_portable") or {}).get("url") or ""),
+            str(candidates.get("mirror_original_url") or ""),
+            *(candidates.get("all_portable_urls") or []),
+        ):
+            candidate = str(candidate or "").strip()
+            if candidate and candidate != url and candidate not in ordered:
+                ordered.append(candidate)
+        return ordered
+    except Exception:
+        logger.debug("Could not resolve mirror fallbacks for %s", url, exc_info=True)
+        return []

@@ -132,9 +132,16 @@ int main(int argc, char **argv, char **envp) {
         snprintf(launcher_script, sizeof(launcher_script), "%s/launcher.py", app_dir);
     }
 
+    // The interpreter is installed under the app's own name (see
+    // write_interpreter_identity): macOS names a process after the executable it
+    // was launched as, so a bare python3.11 announced itself in the Dock and in
+    // the login-item banner as "python3.11".
     char python_bin[1024];
-    snprintf(python_bin, sizeof(python_bin), "%s/bin/python3.11", python_dir);
+    snprintf(python_bin, sizeof(python_bin), "%s/bin/@@APP_EXECUTABLE@@", python_dir);
 
+    if (access(python_bin, X_OK) != 0) {
+        snprintf(python_bin, sizeof(python_bin), "%s/bin/python3.11", python_dir);
+    }
     if (access(python_bin, X_OK) != 0) {
         snprintf(python_bin, sizeof(python_bin), "%s/bin/python3", python_dir);
     }
@@ -154,6 +161,11 @@ int main(int argc, char **argv, char **envp) {
 
     // Ensure terminal/GUI output is unbuffered
     setenv("PYTHONUNBUFFERED", "1", 1);
+
+    // The bundle is code-signed. A writable .app (dist/, a copy in Downloads)
+    // lets CPython drop __pycache__ beside the shipped bytecode, which changes
+    // a sealed resource and invalidates the signature on the very first run.
+    setenv("PYTHONDONTWRITEBYTECODE", "1", 1);
 
     // Set dynamic linker paths
     char dyld[4096];
@@ -247,6 +259,10 @@ def ensure_cached_assets():
         "pyobjc_core.whl": "https://files.pythonhosted.org/packages/95/df/d2b290708e9da86d6e7a9a2a2022b91915cf2e712a5a82e306cb6ee99792/pyobjc_core-12.1-cp311-cp311-macosx_10_9_universal2.whl",
         "pyobjc_framework_cocoa.whl": "https://files.pythonhosted.org/packages/3f/07/5760735c0fffc65107e648eaf7e0991f46da442ac4493501be5380e6d9d4/pyobjc_framework_cocoa-12.1-cp311-cp311-macosx_10_9_universal2.whl",
         "pyobjc_framework_quartz.whl": "https://files.pythonhosted.org/packages/b7/ef/dcd22b743e38b3c430fce4788176c2c5afa8bfb01085b8143b02d1e75201/pyobjc_framework_quartz-12.1-cp311-cp311-macosx_10_9_universal2.whl",
+        # UserNotifications: the only macOS channel that takes part in the
+        # host's permission and presentation settings, so notices appear as
+        # banners. The older NSUserNotification API files them silently.
+        "pyobjc_framework_usernotifications.whl": "https://files.pythonhosted.org/packages/d1/96/aa25bb0727e661a352d1c52e7288e25c12fe77047f988bb45557c17cf2d7/pyobjc_framework_usernotifications-12.1-cp311-cp311-macosx_10_9_universal2.whl",
         "capstone.whl": "https://files.pythonhosted.org/packages/da/f3/43f4dbfc36c7740d512621a9d42b276ac21bb6ca7cb974d4c8a19060d387/capstone-5.0.9-py3-none-macosx_10_9_universal2.whl",
     }
     pure_deps = [
@@ -321,11 +337,17 @@ def ensure_cached_assets():
                     shutil.copyfileobj(resp, f)
 
 
+def launcher_source() -> str:
+    """The launcher C source with this build's interpreter name baked in."""
+    name = APP_DISPLAY_NAME.replace("\\", "\\\\").replace('"', '\\"')
+    return LAUNCHER_C.replace("@@APP_EXECUTABLE@@", name)
+
+
 def compile_universal_launcher(out_path: Path):
     with tempfile.TemporaryDirectory() as td:
         tdp = Path(td)
         c_file = tdp / "launcher.c"
-        c_file.write_text(LAUNCHER_C)
+        c_file.write_text(launcher_source())
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         if sys.platform == "darwin":
@@ -478,6 +500,54 @@ def install_universal_packages(site_packages: Path, dest_python: Path):
             qpdf_plugin.unlink()
 
 
+def write_interpreter_identity(python_dir: Path) -> None:
+    """Give the bundled interpreter the app's own bundle identity.
+
+    The launcher ``execv``s this interpreter, so the running process is that
+    executable rather than ``Contents/MacOS``. macOS names the process, and
+    attributes its notifications, to the bundle that contains it: as a bare
+    ``Resources/python/bin/python3.11`` with no Info.plist, that is "python3.11"
+    with no bundle identifier. The Dock and the login-item banner then announced
+    "python3.11", and ``NSUserNotificationCenter`` was nil, which pushed every
+    notice onto ``osascript`` and showed it under Script Editor.
+
+    A bundle needs its executable beside its own Info.plist, so the interpreter
+    is installed under the app's name as well and the launcher prefers it.
+    """
+    bin_dir = python_dir / "bin"
+    if not bin_dir.is_dir():
+        return
+    interpreter = bin_dir / "python3.11"
+    if not interpreter.exists():
+        interpreter = bin_dir / "python3"
+    if not interpreter.exists():
+        print("  ! Bundled interpreter not found; app identity not applied")
+        return
+
+    app_interpreter = bin_dir / APP_DISPLAY_NAME
+    if app_interpreter != interpreter and not app_interpreter.exists():
+        try:
+            app_interpreter.symlink_to(interpreter.name)
+        except OSError:
+            shutil.copy2(interpreter, app_interpreter)
+
+    info = {
+        "CFBundleDisplayName": APP_DISPLAY_NAME,
+        "CFBundleExecutable": app_interpreter.name,
+        "CFBundleIdentifier": BUNDLE_ID,
+        "CFBundleInfoDictionaryVersion": "6.0",
+        "CFBundleName": APP_DISPLAY_NAME,
+        "CFBundlePackageType": "APPL",
+    }
+    icon_icns = ASSETS / ("icon_generic_mtk.icns" if IS_MEDIATEK_INSTALLER_BUILD else "icon.icns")
+    if not icon_icns.exists():
+        icon_icns = ASSETS / "icon.icns"
+    if icon_icns.exists():
+        shutil.copy2(icon_icns, bin_dir / "icon.icns")
+        info["CFBundleIconFile"] = "icon.icns"
+    (bin_dir / "Info.plist").write_bytes(plistlib.dumps(info))
+
+
 def fetch_online_snapshots():
     """Refresh assets/online with the latest innioasis.app copies (best-effort).
 
@@ -514,6 +584,8 @@ def build():
 
     # 2. Build Universal 2 Python Runtime
     build_universal_python(PYTHON_DIR)
+    # 2b. The launcher execs this interpreter, so it wears the app's identity.
+    write_interpreter_identity(PYTHON_DIR)
 
     # 3. Install Universal 2 dependencies into bundled python
     install_universal_packages(SITE_PACKAGES, PYTHON_DIR)
@@ -565,6 +637,10 @@ def build():
         tools_fw.mkdir(parents=True, exist_ok=True)
         shutil.copy2(unar_src, tools_fw / "unar")
         os.chmod(tools_fw / "unar", 0o755)
+        tools_app = APP_CODE / "tools"
+        tools_app.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(unar_src, tools_app / "unar")
+        os.chmod(tools_app / "unar", 0o755)
         tools_res = RESOURCES / "tools"
         tools_res.mkdir(parents=True, exist_ok=True)
         try:

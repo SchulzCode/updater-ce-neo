@@ -1,8 +1,13 @@
 """Drag-and-drop firmware packages onto the main window.
 
 A drop is a local file, not an online release. It is never written into the
-installed-version record. The check looks for one scatter file and every
-image that scatter lists before any flash starts.
+installed-version record. The check picks the package's own scatter and then
+requires every image it lists before any flash starts.
+
+Scatter acceptance is the same as a browsed folder or a downloaded release:
+``*_Android_scatter.txt`` outranks its ``preserve_data`` variant and any other
+``*scatter*.txt``, a lone scatter is accepted whatever it is called, and only a
+tie between two models stops the install.
 """
 
 from __future__ import annotations
@@ -112,9 +117,15 @@ def package_check_error(directory: Path) -> str:
     if not directory.is_dir():
         return "missing_scatter"
     scatters = _scatter_files(directory)
-    if len(scatters) != 1:
+    # Ranked exactly as a browsed folder or a downloaded release: the package's
+    # own ``*_Android_scatter.txt`` wins over its preserve-data copy and any
+    # other ``*scatter*.txt``, and the images checked are that scatter's own.
+    from .fw_package import ranked_scatters
+
+    best = ranked_scatters(scatters)
+    if len(best) != 1:
         return "missing_scatter"
-    scatter = scatters[0]
+    scatter = best[0]
     try:
         text = scatter.read_text(encoding="utf-8", errors="replace")
     except OSError:

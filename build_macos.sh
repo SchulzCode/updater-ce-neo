@@ -9,9 +9,13 @@
 #   ./build_macos.sh --arch arm64 --dmg      # builds Apple Silicon .app and .dmg
 #
 # Requirements:
-#   - Python 3.11+ in a virtualenv (.venv)
-#   - pip install pyinstaller pyside6 requests pyqt-liquidglass pyobjc-framework-cocoa pyobjc-framework-quartz
 #   - macOS 12+ (Monterey through Golden Gate compatible, Intel & Apple Silicon)
+#   - Xcode Command Line Tools for --arch universal2 (compiles the launcher):
+#       xcode-select --install
+#   - Nothing else: a fresh clone has no virtualenv and no packages, so the first
+#     run creates .venv-build and pip-installs requirements.txt +
+#     requirements-build.txt (scripts/bootstrap_build_env.py). Set PYTHON=... to
+#     reuse an interpreter instead, or pass --check-deps to only verify it.
 #
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -19,10 +23,14 @@ cd "$(dirname "$0")"
 APP_NAME="Innioasis Updater"
 APP_ID="com.innioasis.updater"
 AUTHOR="Ryan Specter"
-# BUILD_BRAND=mediatek_installer (or --brand mediatek_installer) packages the
-# generic cross-platform MediaTek Installer instead: its own name and bundle
-# id, and an app that knows it is offline-only.
+# A run builds Updater CE only. BUILD_BRAND=mediatek_installer (or --brand
+# mediatek_installer) packages the generic cross-platform MediaTek Installer
+# instead: its own name and bundle id, and an app that knows it is offline-only.
+# --brand all builds both front ends.
 BRAND="$(printf '%s' "${BUILD_BRAND:-updater_ce}" | tr '[:upper:]-' '[:lower:]_')"
+# The brand the caller asked for through the environment, before the default.
+# The brand plan below distinguishes "nothing asked for" from "updater_ce".
+BRAND_ENV="${BUILD_BRAND:-}"
 VERSION=$(sed -n 's/.*APP_VERSION[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' src/config.py 2>/dev/null || echo "2.5.2")
 [ -z "$VERSION" ] && VERSION="2.5.2"
 DIST_DIR="dist/macos"
@@ -30,6 +38,7 @@ BUILD_DIR="build/macos"
 SPEC_FILE="macos.spec"
 BUNDLE_ICON="assets/icon.icns"
 CREATE_DMG=0
+CHECK_DEPS_ONLY=0
 TARGET_ARCH="${TARGET_ARCH:-}"
 # The brand pass re-invokes this script after the option loop has consumed
 # --arch/--dmg, so keep the original argv: the child must build the same
@@ -50,28 +59,58 @@ while [[ $# -gt 0 ]]; do
             BRAND_REQUESTED="$(printf '%s' "$2" | tr '[:upper:]-' '[:lower:]_')"
             shift 2
             ;;
+        --check-deps)
+            CHECK_DEPS_ONLY=1
+            shift
+            ;;
         *)
             shift
             ;;
     esac
 done
 
+# --- Target architecture ----------------------------------------------------
+# Default is the machine you are on: PyInstaller can only emit the architecture
+# of the Python it runs under, so silently labelling host output "universal2"
+# produced an Intel-incompatible bundle in the past. `universal2` is the one
+# cross-architecture target and it builds through scripts/build_universal_app.py.
+HOST_ARCH="$(uname -m)"
+case "$HOST_ARCH" in
+    arm64|aarch64) HOST_ARCH="arm64" ;;
+    x86_64|amd64) HOST_ARCH="x86_64" ;;
+esac
+case "${TARGET_ARCH:-}" in
+    ""|host|native|auto) TARGET_ARCH="$HOST_ARCH" ;;
+    universal|universal2) TARGET_ARCH="universal2" ;;
+    arm64|aarch64) TARGET_ARCH="arm64" ;;
+    x86_64|amd64|intel) TARGET_ARCH="x86_64" ;;
+    *)
+        echo "ERROR: unknown --arch '$TARGET_ARCH' (expected arm64, x86_64 or universal2)"
+        exit 1
+        ;;
+esac
+if [ "$(uname -s)" != "Darwin" ] && [ "$TARGET_ARCH" != "universal2" ]; then
+    echo "  -> Cross-building on $(uname -s): only the Universal 2 bundle is possible here."
+    TARGET_ARCH="universal2"
+fi
+
 # Reject a bad brand before anything is deleted: a typo must not wipe a good
 # build sitting in dist/.
 for _candidate in "${BRAND_REQUESTED:-}" "$BRAND"; do
     case "$_candidate" in
-        ""|updater_ce|mediatek_installer) ;;
+        ""|updater_ce|mediatek_installer|all|both) ;;
         *)
-            echo "ERROR: unknown brand '$_candidate' (expected updater_ce or mediatek_installer)"
+            echo "ERROR: unknown brand '$_candidate' (expected updater_ce, mediatek_installer or all)"
             exit 1
             ;;
     esac
 done
 
 # --- Brand plan -----------------------------------------------------------
-# A build produces BOTH front ends: the Updater CE app and the generic
-# MediaTek Installer app (same internals, different identity). Pass --brand to
-# build just one, which is what a quick local iteration wants.
+# A build produces the Updater CE app. The generic MediaTek Installer app (same
+# internals, different identity) is opt-in: --brand mediatek_installer builds
+# just it, --brand all builds both. Keeping it out of the default run makes a
+# release build shorter and skips a product that may never ship.
 #
 # Each brand is built by a child run of this script: that keeps the per-brand
 # path identical to the single-brand flow above and below.
@@ -105,19 +144,18 @@ list_built_apps() {
 
 if [ "${INNOASIS_BRAND_LOCK:-}" = "1" ]; then
     : # child pass: build the brand handed over in BUILD_BRAND
-elif [ -n "${BRAND_REQUESTED:-}" ]; then
-    rm -rf "$BUILD_DIR"
-    clean_brand_artifacts "$BRAND_REQUESTED"
-    INNOASIS_BRAND_LOCK=1 BUILD_BRAND="$BRAND_REQUESTED" "$0" "${ORIGINAL_ARGS[@]}" || exit $?
-    list_built_apps
-    exit 0
 else
+    case "${BRAND_REQUESTED:-$BRAND_ENV}" in
+        "") BRANDS=(updater_ce) ;;
+        all|both) BRANDS=(updater_ce mediatek_installer) ;;
+        *) BRANDS=("${BRAND_REQUESTED:-$BRAND_ENV}") ;;
+    esac
     rm -rf "$BUILD_DIR"
-    for brand in updater_ce mediatek_installer; do
+    for brand in "${BRANDS[@]}"; do
         clean_brand_artifacts "$brand"
     done
-    for brand in updater_ce mediatek_installer; do
-        INNOASIS_BRAND_LOCK=1 BUILD_BRAND="$brand" "$0" "${ORIGINAL_ARGS[@]}" || exit $?
+    for brand in "${BRANDS[@]}"; do
+        INNOASIS_BRAND_LOCK=1 BUILD_BRAND="$brand" "$0" ${ORIGINAL_ARGS[@]+"${ORIGINAL_ARGS[@]}"} || exit $?
     done
     echo ""
     echo "=== Built for macOS ==="
@@ -132,7 +170,7 @@ case "$BRAND" in
         APP_ID="com.innioasis.mediatekinstaller"
         ;;
     *)
-        echo "ERROR: unknown --brand '$BRAND' (expected updater_ce or mediatek_installer)"
+        echo "ERROR: unknown --brand '$BRAND' (expected updater_ce, mediatek_installer or all)"
         exit 1
         ;;
 esac
@@ -154,16 +192,47 @@ log_step() {
     echo "================================================================================"
 }
 
+# --- Python build environment ------------------------------------------------
+# A clone has no .venv-build and macOS still ships Python 3.9, which cannot run
+# PySide6/PyInstaller. scripts/bootstrap_build_env.py finds a 3.10+ interpreter,
+# creates .venv-build, installs the pinned requirements, verifies the imports the
+# spec needs, and prints the interpreter as PYTHON=<path>. Re-runs are offline:
+# a hash marker makes an unchanged environment a no-op.
+BOOTSTRAP_SCRIPT="scripts/bootstrap_build_env.py"
+BOOTSTRAP_ARGS=()
+[ "$CHECK_DEPS_ONLY" -eq 1 ] && BOOTSTRAP_ARGS+=(--check)
+if [ ! -f "$BOOTSTRAP_SCRIPT" ]; then
+    echo "ERROR: $BOOTSTRAP_SCRIPT is missing; this checkout is incomplete."
+    exit 1
+fi
 if [ -z "${PYTHON:-}" ]; then
-    if [ -x ".venv-build/bin/python3" ]; then
-        PYTHON=".venv-build/bin/python3"
-    elif [ -x ".venv/bin/python3" ]; then
-        PYTHON=".venv/bin/python3"
-    elif command -v python3 >/dev/null 2>&1; then
-        PYTHON="$(command -v python3)"
-    else
-        echo "ERROR: Python not found."
-        echo "       Set PYTHON env var or create a .venv first."
+    BOOTSTRAP_PYTHON=""
+    for _cand in python3 /usr/bin/python3 python; do
+        if command -v "$_cand" >/dev/null 2>&1; then
+            BOOTSTRAP_PYTHON="$_cand"
+            break
+        fi
+    done
+    if [ -z "$BOOTSTRAP_PYTHON" ]; then
+        echo "ERROR: no python3 on PATH to start the build environment bootstrap."
+        echo "       Install Python: brew install python@3.12"
+        echo "       (or download it from https://www.python.org/downloads/macos/)"
+        exit 1
+    fi
+    if ! BOOTSTRAP_OUTPUT="$("$BOOTSTRAP_PYTHON" "$BOOTSTRAP_SCRIPT" ${BOOTSTRAP_ARGS[@]+"${BOOTSTRAP_ARGS[@]}"})"; then
+        echo ""
+        echo "ERROR: could not prepare the Python build environment (see above)."
+        echo "       Fix that, then run ./build_macos.sh again."
+        exit 1
+    fi
+    PYTHON="$(printf '%s\n' "$BOOTSTRAP_OUTPUT" | sed -n 's/^PYTHON=//p' | tail -1)"
+    if [ -z "$PYTHON" ] || [ ! -x "$PYTHON" ]; then
+        echo "ERROR: the build environment bootstrap did not report an interpreter."
+        exit 1
+    fi
+else
+    # An explicitly supplied interpreter is verified, never modified.
+    if ! "$PYTHON" "$BOOTSTRAP_SCRIPT" ${BOOTSTRAP_ARGS[@]+"${BOOTSTRAP_ARGS[@]}"} >/dev/null; then
         exit 1
     fi
 fi
@@ -171,18 +240,44 @@ fi
 TOTAL_STEPS=$([ "$CREATE_DMG" -eq 1 ] && echo 5 || echo 4)
 
 log_step 1 "$TOTAL_STEPS" "Validating Environment & Dependencies" "Checking Python runtime, PySide6, and MediaTek communication libraries..."
-CHECK_MODS="usb serial Cryptodome colorama"
-if [ "$(uname -s)" = "Darwin" ]; then
-    CHECK_MODS="PyInstaller PySide6 $CHECK_MODS"
-fi
-for mod in $CHECK_MODS; do
-    if ! "$PYTHON" -c "import $mod" 2>/dev/null; then
-        echo "ERROR: Required module '$mod' not installed."
-        echo "       Run: pip install -r requirements.txt"
+echo "  -> Environment verified: $("$PYTHON" --version 2>&1) ($("$PYTHON" -c 'import platform; print(platform.machine())')) at $PYTHON"
+
+# PyInstaller can only emit the architecture of the interpreter it runs under.
+if [ "$(uname -s)" = "Darwin" ] && [ "$TARGET_ARCH" != "universal2" ]; then
+    PY_ARCH="$("$PYTHON" -c 'import platform; print(platform.machine().lower())')"
+    case "$PY_ARCH" in
+        arm64|aarch64) PY_ARCH="arm64" ;;
+        x86_64|amd64) PY_ARCH="x86_64" ;;
+    esac
+    if [ "$PY_ARCH" != "$TARGET_ARCH" ]; then
+        echo "ERROR: --arch $TARGET_ARCH needs a $TARGET_ARCH Python, but $PYTHON is $PY_ARCH."
+        echo "       Build on a $TARGET_ARCH Mac, point PYTHON at a $TARGET_ARCH python3,"
+        echo "       or use --arch universal2 to produce one bundle for both architectures."
         exit 1
     fi
-done
-echo "  -> Environment verified: $("$PYTHON" --version 2>&1)"
+fi
+
+# macOS tooling: the icon conversion, ad-hoc signing and DMG steps are part of
+# the OS, but a universal build compiles its launcher with clang from Xcode.
+if [ "$(uname -s)" = "Darwin" ]; then
+    MISSING_TOOLS=""
+    for _tool in sips iconutil codesign lipo; do
+        command -v "$_tool" >/dev/null 2>&1 || MISSING_TOOLS="$MISSING_TOOLS $_tool"
+    done
+    if [ "$CREATE_DMG" -eq 1 ] && ! command -v hdiutil >/dev/null 2>&1; then
+        MISSING_TOOLS="$MISSING_TOOLS hdiutil"
+    fi
+    if [ -n "$MISSING_TOOLS" ]; then
+        echo "ERROR: missing macOS build tools:$MISSING_TOOLS"
+        echo "       Install the Xcode Command Line Tools: xcode-select --install"
+        exit 1
+    fi
+    if [ "$TARGET_ARCH" = "universal2" ] && ! xcrun --find clang >/dev/null 2>&1; then
+        echo "ERROR: --arch universal2 compiles its launcher with clang."
+        echo "       Install the Xcode Command Line Tools: xcode-select --install"
+        exit 1
+    fi
+fi
 
 # Snapshot innioasis.app's catalogue/notices/donors/blocklist into the bundle so
 # a first launch works offline. Best-effort: existing copies are kept on failure.
@@ -241,6 +336,11 @@ if [ ! -f "$BUNDLE_ICON" ]; then
         iconutil -c icns "$ICONSET" -o "$BUNDLE_ICON" 2>/dev/null || true
         rm -rf "$TMP_ICNS_DIR"
     fi
+fi
+if [ ! -f "$BUNDLE_ICON" ]; then
+    # PyInstaller rejects a missing --icon path, so say what happened here
+    # instead of letting the bundle step fail with a FileNotFoundError.
+    echo "  ! Could not generate $BUNDLE_ICON from assets/icon.png; building without an app icon."
 fi
 
 echo "  -> Target OS: macOS 12 (Monterey) through macOS 26 (Golden Gate)"

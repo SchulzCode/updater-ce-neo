@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import plistlib
 import sys
 from pathlib import Path
 
@@ -18,7 +19,32 @@ TRAY_ARG = "--tray"
 LABEL = "com.innioasis.updater"
 
 
+def _macos_bundle_executable() -> Path | None:
+    """The launcher of the .app bundle wrapping this process, when there is one."""
+    for parent in Path(sys.executable).parents:
+        if parent.suffix != ".app":
+            continue
+        contents = parent / "Contents"
+        name = parent.stem
+        try:
+            with open(contents / "Info.plist", "rb") as handle:
+                name = plistlib.load(handle).get("CFBundleExecutable") or name
+        except Exception:
+            pass
+        launcher = contents / "MacOS" / name
+        if launcher.is_file():
+            return launcher
+    return None
+
+
 def _launch_command() -> list[str]:
+    if sys.platform == "darwin":
+        launcher = _macos_bundle_executable()
+        if launcher is not None:
+            # Launch the app, not the interpreter inside it: macOS names a login
+            # item after the program it launched, so the bare interpreter
+            # announced itself as "python3.11 is running in the background".
+            return [str(launcher), TRAY_ARG]
     if getattr(sys, "frozen", False):
         return [sys.executable, TRAY_ARG]
     main = Path(__file__).resolve().parent / "app.py"

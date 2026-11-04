@@ -28,7 +28,8 @@ def strip_html(text: str) -> str:
 
 
 class TestDonationFormattingAndExamples:
-    def test_user_examples_formatting(self, qapp):
+    def test_user_examples_formatting(self, qapp, monkeypatch):
+        monkeypatch.setenv("UPDATER_CURRENCY", "USD")
         translator().set_language("en")
         # Reference date: October 27, 2026
         now = datetime(2026, 10, 27, 12, 0, 0)
@@ -52,6 +53,10 @@ class TestDonationFormattingAndExamples:
         # 5. Lang C donated $9.07 by PayPal in June
         dt_lang = datetime(2026, 6, 7)
         assert format_donation_when(dt_lang, now=now) == "in June"
+
+        import src.donors as donors_mod
+        orig_fmt_when = donors_mod.format_donation_when
+        monkeypatch.setattr(donors_mod, "format_donation_when", lambda dt, now=now: orig_fmt_when(dt, now=now))
 
         donations = [
             {"name": "Alexis P", "amount": 90, "method": "Ko-Fi", "dt": dt_alexis, "url": "https://ko-fi.com/alexis"},
@@ -85,7 +90,8 @@ class TestDonationFormattingAndExamples:
 
         bar.deleteLater()
 
-    def test_multi_donation_aggregation(self, qapp):
+    def test_multi_donation_aggregation(self, qapp, monkeypatch):
+        monkeypatch.setenv("UPDATER_CURRENCY", "USD")
         translator().set_language("en")
         now = datetime(2026, 10, 27, 12, 0, 0)
 
@@ -118,7 +124,7 @@ class TestDonationFormattingAndExamples:
         ]
         bar = DonationStatusBar(donations=donations)
         lines = [strip_html(x) for x in bar._donor_lines]
-        assert "Jimmy G bought us 1 coffee" in lines[0]
+        assert "Jimmy G bought us a coffee" in lines[0]
         assert "coffees" not in lines[0]
         bar.deleteLater()
 

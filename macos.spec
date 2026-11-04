@@ -11,6 +11,11 @@ PROJECT_ROOT = Path(SPECPATH)  # noqa: F821
 VENDOR_MTK = PROJECT_ROOT / "vendor" / "mtkclient"
 ASSETS = PROJECT_ROOT / "assets"
 LIBUSB_DYLIB = VENDOR_MTK / "mtkclient" / "Darwin" / "libusb-1.0.dylib"
+# assets/icon.icns is generated from assets/icon.png by build_macos.sh and is
+# git-ignored, so a checkout that skipped that step must still build. PyInstaller
+# raises FileNotFoundError for an icon path that does not exist.
+ICON_FILE = ASSETS / "icon.icns"
+APP_ICON = str(ICON_FILE) if ICON_FILE.is_file() else None
 
 # --- Packaging brand --------------------------------------------------------
 # BUILD_BRAND=mediatek_installer builds the same engine as the generic
@@ -68,6 +73,10 @@ if VENDOR_MTK.exists():
 ADB_BINARY = PROJECT_ROOT / "tools" / "adb" / "macos-arm64" / "adb"
 if ADB_BINARY.is_file():
     datas.append((str(ADB_BINARY), "tools/adb"))
+
+UNAR_BINARY = PROJECT_ROOT / "tools" / "macos" / "unar"
+if UNAR_BINARY.is_file():
+    datas.append((str(UNAR_BINARY), "tools"))
 
 try:
     datas.extend(collect_data_files("libusb_package"))
@@ -194,7 +203,7 @@ exe = EXE(
     target_arch=target_arch,
     codesign_identity=None,
     entitlements_file=str(ASSETS / "entitlements.plist") if (ASSETS / "entitlements.plist").exists() else None,
-    icon="assets/icon.icns",
+    icon=APP_ICON,
 )
 
 coll = COLLECT(
@@ -211,7 +220,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name=f"{APP_DISPLAY_NAME}.app",
-    icon="assets/icon.icns",
+    icon=APP_ICON,
     bundle_identifier=BUNDLE_ID,
     info_plist={
         "CFBundleDisplayName": APP_DISPLAY_NAME,

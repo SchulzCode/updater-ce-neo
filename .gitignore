@@ -49,5 +49,12 @@ vendor/.DS_Store
 # Remote rescue and debug flags documentation
 docs/REMOTE_RESCUE_FLAGS.md
 
+# Build manager GUI and its artifacts
+build_gui.py
+scripts/build_gui.py
+tests/test_build_gui.py
+build_gui.log
+
 _dot_probe.png
 _dot_probe_cocoa.png
+/Retrace steps and ensure work completed

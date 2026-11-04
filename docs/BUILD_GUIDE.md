@@ -25,13 +25,17 @@ The codebase ships two brand targets from a single shared engine:
 ## 2. Prerequisites & Development Environment
 
 ### Common Prerequisites
-- **Python 3.10 – 3.12** (Python 3.11 recommended).
-- Virtual environment in `.venv-build/` (or activated host environment).
-- Required Python modules:
+- **Python 3.10 – 3.14**; 3.12 recommended (PySide6 6.12's `none_dealloc` fix needs 3.12+).
+- Nothing else: each build script runs `scripts/bootstrap_build_env.py`, which finds a suitable
+  interpreter, creates `.venv-build/`, installs `requirements.txt` + `requirements-build.txt` and
+  verifies the modules the PyInstaller specs import. A clone needs no manual `pip install`:
   ```bash
-  pip install -r requirements.txt
-  pip install pyinstaller pytest pytest-qt
+  python3 scripts/bootstrap_build_env.py           # set up / verify, prints PYTHON=<path>
+  python3 scripts/bootstrap_build_env.py --check   # verify only
+  python3 scripts/bootstrap_build_env.py --force   # reinstall the requirement sets
   ```
+- Set `PYTHON=/path/to/python3.12` to build with an interpreter of your own; it is verified but
+  never modified.
 
 ---
 

@@ -281,19 +281,23 @@ def test_watchdog_ticks_then_expires():
     assert ticks, "the countdown must reach the UI"
 
 
-def test_watchdog_touch_refreshes_and_disarm_ends_it():
+def test_watchdog_touch_refills_once_then_the_countdown_reaches_zero():
     expired = []
     watchdog = fs._AttemptWatchdog(lambda _s: None, lambda: expired.append(True),
                                    timeout=0.3, interval=0.05)
     watchdog.start()
-    deadline = time.time() + 1.0
-    while time.time() < deadline:
-        watchdog.touch()
+    first_deadline = watchdog._deadline
+    time.sleep(0.1)
+    watchdog.touch()  # the device was seen: one fresh window
+    refilled = watchdog._deadline
+    assert refilled > first_deadline
+    time.sleep(0.05)
+    watchdog.touch()  # chatter must not push the deadline forward again
+    assert watchdog._deadline == refilled
+    deadline = time.time() + 2.0
+    while time.time() < deadline and not expired:
         time.sleep(0.05)
-    assert expired == [], "a device being seen must keep the attempt alive"
-    watchdog.disarm()
-    time.sleep(0.4)
-    assert expired == [], "progress must switch the window off"
+    assert expired == [True], "the countdown must reach zero"
 
 
 def test_expiring_the_attempt_terminates_the_command_once():
@@ -315,6 +319,16 @@ def test_expiring_the_attempt_terminates_the_command_once():
     worker._expire_attempt()
     assert worker._attempt_expired is True
     assert worker._process.terminated == 1, "a silent backend is stopped once"
+
+
+def test_expiring_the_attempt_also_stops_leftover_tool_sessions(monkeypatch):
+    """A timed-out attempt must leave nothing behind holding the USB port."""
+    worker = fs.FlashWorker("pkg.zip", method="sp")
+    worker._log = lambda *a, **k: None
+    stopped = []
+    monkeypatch.setattr(fs, "terminate_sp_sessions", lambda: stopped.append(True) or [])
+    worker._expire_attempt()
+    assert stopped == [True]
 
 
 def test_starting_the_watchdog_expires_a_worker_that_never_reports():
@@ -649,3 +663,51 @@ def test_com_port_failure_fails_over_with_the_engine_names(monkeypatch):
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))
+
+
+@pytest.mark.skipif(sys.platform == "darwin", reason="macOS has no SP Flash Tool")
+def test_a_connect_timeout_retries_the_same_method(monkeypatch):
+    """A timeout is not a failed method: same engine, unlimited retries.
+
+    The other backend is only tried after an attempt actually fails.
+    """
+    from src import linux_sp_flash, paths
+    from src.ui.main_window import MainWindow
+
+    monkeypatch.setattr(paths, "IS_WINDOWS", False)
+    monkeypatch.setattr(paths, "IS_MAC", False)
+    monkeypatch.setattr(linux_sp_flash, "arch_supported", lambda: True)
+    app = _app()
+    window = MainWindow()
+    calls = []
+    window.service.start_flash = lambda pkg, pre="", method="auto", **kw: calls.append(method)
+    window.service.start_device_monitor = lambda: None
+    window.service.cancel_flash = lambda: None
+    window.service.stop_device_monitor = lambda: None
+    window._ensure_elevated_for_install = lambda: True
+    try:
+        window.show()
+        window._package_path = "/fake/rom.zip"
+        window._package_name = "Rockbox (Y1)"
+        window._package_model = "Y1"
+        window._flash_method = "sp"
+        window._flash_page.set_method("sp")
+
+        window._handle_flash_failure("ERR_ATTEMPT_TIMEOUT")
+        assert window._flash_method == "sp", "a timeout must not switch engines"
+        assert window._fallback_attempted is False
+        assert window._power_off_prompt is True
+        assert window._offer_backend_failover("ERR_ATTEMPT_TIMEOUT") is False
+
+        # Continue starts the same method again...
+        window._on_power_off_continue()
+        assert calls[-1] == "sp"
+
+        # ...and a second timeout is allowed, with no switch either.
+        window._handle_flash_failure("ERR_ATTEMPT_TIMEOUT")
+        assert window._flash_method == "sp"
+        assert window._fallback_attempted is False
+        assert window._power_off_prompt is True
+    finally:
+        window.close()
+        app.processEvents()

@@ -1,5 +1,18 @@
 # AGENTS.md
 
+## AI skills (all agents and assistants)
+- Reusable, agent-neutral procedures live in **`.agents/skills/`** (open Agent Skills layout):
+  `flash-innioasis-device` (automate a firmware install end to end), `guide-updater-ce-install`
+  (walk a user through the app or a portable ROM.zip pack) and `develop-y1-y2-firmware`
+  (target existing firmware images, `slidia_manifest.xml`, packaging, mirrors, archive rules).
+  `updater-ce-workflow` stays the developer/verification runbook for this repo.
+- `scripts/sync_agent_skills.py` mirrors `.agents/skills/` into `.claude/skills/`, `.cline/skills/`
+  and `.github/skills/` for tools that only read their own directory. **Edit the canonical copy
+  only**, then run it; `--check` validates frontmatter and fails on a stale mirror.
+- `docs/AI_SKILLS.md` indexes the skills, lists where each agent looks, and records the facts all
+  Innioasis repositories must agree on (catalogue URL, archive, donation rule, Download Only).
+  Keep sibling repos' copies identical rather than writing a second procedure.
+
 ## Local dev environment
 - Dependencies live in **`.venv-build/`** (not `.venv/`, despite `.gitignore` listing it); the system
   `python3` has no `requests`/`PySide6`, so tests silently fail on import if you use it.
@@ -8,8 +21,9 @@
 - `scripts/build_universal_app.py` **deletes and rebuilds `dist/*.app` in place**: a rebuild wipes any
   already-running app's bundle, so never build while the user is testing from `dist/`.
 - Build entry points are `./build_macos.sh [--arch arm64|x86_64|universal2] [--dmg] [--brand …]`,
-  `build_windows.{bat,ps1}` and `./build_appimage.sh --arch …`; a run builds **both** front ends
-  unless `--brand` names one. Per-arch commands are in `BUILD_TARGETS.md`.
+  `build_windows.{bat,ps1}` and `./build_appimage.sh --arch …`; a run builds **Updater CE only**,
+  and `--brand mediatek_installer` (or `--brand all`, `-Brand both` on Windows) adds the MediaTek
+  Installer. Per-arch commands are in `BUILD_TARGETS.md`.
 - `/tmp/run_one.py` is not executable — run `.venv-build/bin/python /tmp/run_one.py <file> <test>`.
   A whole file is `.venv-build/bin/python -m pytest tests/<file>.py`.
 - `tests/test_native_ux_enhancements.py` **cannot be run whole**: network icon preloads hang it and
@@ -30,6 +44,14 @@
   Tinted system the app's icon renders green-tinted rather than as the bundled PNG.
 - `NSWorkspace.accessibilityDisplayShouldShowWindowTitlebarIcons()` is the "Show window title icons"
   setting, and there is no document-proxy-icon slot in this app (content extends under the traffic lights).
+- The app's code runs in the bundled interpreter (the launcher `execv`s `Contents/Resources/python/bin`), so
+  `scripts/build_universal_app.py` gives that process the app's own identity: `Info.plist` beside the
+  interpreter plus an interpreter symlink under the app's name. Without it macOS calls the process
+  `python3.11` (Dock, login-item "… is running in the background" banner) and `NSUserNotificationCenter` is
+  nil, which pushed notices onto `osascript` and made them appear under Script Editor. Keep notifications
+  native (`src/notifications.py` never posts via `osascript` at all — bundled or not — and
+  `housekeeping/core.py`'s scheduled check posts natively or not at all) and keep the macOS login item
+  pointed at the bundle launcher instead of `sys.executable`.
 - The Software dropdown must never key off item *text*: canonical English names are the lookup keys, so the
   preset localisation rides in `Qt.UserRole` item data (`select_page._populate_software_combo`), and
   `retranslate()` re-labels rows in place. `display_software_name()` localises the label only.
@@ -87,6 +109,12 @@
   and `src/linux_sp_flash.py` are the user-confirmed working back-end: installs complete without bricking
   devices when the connection is not interrupted.
 - Preserve this logic. Change it only when the user explicitly asks for a change to it.
+- **The host must stay awake for exactly the device window.** A flash or a Rockbox themes transfer that the
+  OS suspends mid-write bricks the player, so `src/sleep_inhibit.py` holds a power assertion: named holds
+  (`"install session"` via `process_guard.begin/end_install_session`, `"themes:<id>"` via
+  `ThemesJourney.begin/finish`) so one finishing never frees the other, and `MainWindow._stop_running_install`
+  ends both when a run is abandoned. Do not add ad-hoc acquire/release pairs in the widgets, and do not hold
+  anything while the app is idle or finished — the hold must disappear with the task.
 
 ## Rockbox themes/fonts stage: one owner for its state
 - `src/themes_journey.py` (`ThemesJourney`) owns the stage's decisions and state: transfer running,

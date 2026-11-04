@@ -322,6 +322,10 @@ class SelectPackagePage(QWidget):
         self._auto_translate_notes = False
         self._translated_notes_cache = {}
         self._translate_worker = None
+        # One local notice per session when the translation services stop
+        # answering, so a failed translate explains itself instead of looking
+        # like a dead link.
+        self._translation_notice_posted = False
         # Whether the online catalogue is on offer. It starts hidden and is only
         # offered once the catalogue's own firmware listings load: on a network
         # that cannot reach GitHub (some regions, corporate filters) a generic
@@ -335,6 +339,9 @@ class SelectPackagePage(QWidget):
         # False until the first probe answers: the first answer is a starting
         # state, not a connection change worth a toast.
         self._connectivity_known = False
+        # Set when the first probe finds no archive at all, so the explanation
+        # can wait until the page is actually on screen (see showEvent).
+        self._pending_archive_notice = False
         self._build_ui()
         self._tabs = _TabsAdapter(self)
         self._update_view_links()
@@ -583,9 +590,25 @@ class SelectPackagePage(QWidget):
         elif may_switch:
             self._views.setCurrentWidget(self._local_tab)
         show_toast = self._connectivity_known and was_available != is_online
+        if not self._connectivity_known and not is_online:
+            # The first probe of the session found no archive. That is not a
+            # "connection change" but it is exactly when the app would otherwise
+            # look broken, so queue the explanation for the first visible paint.
+            self._pending_archive_notice = True
         self._connectivity_known = True
         if show_toast and self.isVisible():
             self._show_connection_toast(is_online)
+        elif not is_online:
+            self._maybe_show_archive_notice()
+
+    def _maybe_show_archive_notice(self) -> None:
+        """Explain an unreachable archive once, as soon as the page is on screen."""
+        if not getattr(self, "_pending_archive_notice", False):
+            return
+        if self._online_available or not self.isVisible():
+            return
+        self._pending_archive_notice = False
+        self._show_connection_toast(False)
 
     def _show_connection_toast(self, is_online: bool) -> None:
         """Explain a connection change beside the catalogue, with one way out."""
@@ -599,17 +622,25 @@ class SelectPackagePage(QWidget):
                 icon="\U0001F310",
             )
         else:
+            # The archive is not answering: GitHub refused the connection and the
+            # static fallback feed could not be reached either. Point the user at
+            # the crawlable firmware list, which needs no GitHub API, so a package
+            # can still be fetched from another device or network.
             toast.show_message(
-                tr("conn_offline"),
-                action_text=tr("conn_action_local"),
+                tr("conn_archive_unavailable"),
+                action_text=tr("conn_action_archive_list"),
                 icon="\U0001F4E1",
             )
 
     def _on_conn_toast_action(self) -> None:
-        """Go where the toast offered: the catalogue, or the local-file screen."""
+        """Go where the toast offered: refresh the catalogue, or open the static list."""
         if self._online_available:
             self._show_online_view(refresh=True)
-        else:
+            return
+        from ..browser import open_browser
+        from ..feed_fallback import FIRMWARE_LIST_URL
+
+        if not open_browser(FIRMWARE_LIST_URL):
             self._show_local_view()
 
     def _build_ui(self):
@@ -2377,6 +2408,17 @@ class SelectPackagePage(QWidget):
             self._notes.clear()
             self._fit_release_list_height()
             self.content_size_changed.emit()
+            # A failed poll is not fatal: the screen already says it is offline,
+            # and a status line names what could not be loaded. Nothing here
+            # should raise or take the window over.
+            toast = getattr(self, "_conn_toast", None)
+            try:
+                if toast is not None and self.isVisible():
+                    toast.show_message(
+                        tr("toast_release_notes_unavailable"), icon="\U0001F4E1"
+                    )
+            except Exception:
+                pass
             return
         self._release_list.clear()
         releases = sorted(releases or [], key=catalog.release_sort_key, reverse=True)
@@ -2651,6 +2693,8 @@ class SelectPackagePage(QWidget):
         layout = content.layout() if content is not None else None
         if layout is not None:
             layout.activate()
+        # A session that started with no reachable archive says so here, once.
+        self._maybe_show_archive_notice()
 
     def _update_see_more_link(self):
         rel = self._current_selected_rel
@@ -2701,6 +2745,15 @@ class SelectPackagePage(QWidget):
         t = T()
         url = get_google_translate_release_url(rel, lang)
         self._translate_label.setVisible(True)
+        # When every provider is on cooldown the control is dimmed and its hint
+        # (hover, or a click that pins it) explains why. It is not a dialog:
+        # a dead link is a small detail, not a decision the reader must make.
+        try:
+            from ..translate import is_translation_available
+
+            translation_ready = is_translation_available()
+        except Exception:
+            translation_ready = True
 
         if self._is_translating:
             msg = tr("translating_notes")
@@ -2727,10 +2780,25 @@ class SelectPackagePage(QWidget):
                 globe_html = f'<img src="{globe_uri}" width="12" height="12" style="vertical-align: -1px;"> '
             except Exception:
                 globe_html = ""
-            self._translate_label.setText(
-                f'{globe_html}<a href="action:translate_in_app" style="color:{t.fg}; text-decoration:none; font-weight:700;">{trans_txt}</a> &nbsp;·&nbsp; '
-                f'<a href="{url}" style="color:{t.fg}; text-decoration:none; font-weight:700;">{open_txt} ↗</a>'
-            )
+            if translation_ready:
+                self._translate_label.setText(
+                    f'{globe_html}<a href="action:translate_in_app" style="color:{t.fg}; text-decoration:none; font-weight:700;">{trans_txt}</a> &nbsp;·&nbsp; '
+                    f'<a href="{url}" style="color:{t.fg}; text-decoration:none; font-weight:700;">{open_txt} ↗</a>'
+                )
+            else:
+                # Same words, no link: disabled by the palette, with the pin hint.
+                self._translate_label.setText(
+                    f'<span style="color:{t.fg};">{globe_html}{trans_txt}</span> &nbsp;·&nbsp; '
+                    f'<a href="{url}" style="color:{t.fg}; text-decoration:none; font-weight:700;">{open_txt} ↗</a>'
+                )
+        from .widgets import install_pinned_hint
+
+        if translation_ready:
+            self._translate_label.setEnabled(True)
+            install_pinned_hint(self._translate_label, "")
+        else:
+            self._translate_label.setEnabled(False)
+            install_pinned_hint(self._translate_label, tr("translate_unavailable_hint"))
         card_w = max(160, (self._notes_group.width() - 28) if hasattr(self, "_notes_group") and self._notes_group.width() > 28 else 200)
         needed_h = max(self._translate_label.sizeHint().height(), self._translate_label.heightForWidth(card_w), 24)
         self._translate_label.setMinimumHeight(needed_h)
@@ -2777,12 +2845,43 @@ class SelectPackagePage(QWidget):
             return
         self._translate_current_release_in_app()
 
+    def _note_translation_unavailable(self) -> None:
+        """Explain an unavailable translation service once, and on the control."""
+        self._is_translating = False
+        self._update_translate_link()
+        if getattr(self, "_translation_notice_posted", False):
+            return
+        self._translation_notice_posted = True
+        try:
+            from ..notice_service import NoticeService
+
+            NoticeService.instance().post_local_notice(
+                "translation-unavailable",
+                tr("translate_unavailable_notice_title"),
+                tr("translate_unavailable_notice_body"),
+                severity="warning",
+            )
+        except Exception:
+            pass
+
     def _translate_current_release_in_app(self):
         rel = self._current_selected_rel
         if not rel:
             return
         lang = (translator().lang or "en").strip()
         if is_english_language(lang):
+            return
+        try:
+            from ..translate import is_translation_available
+        except Exception:
+            is_translation_available = None
+        # Only the import is defensive: if the availability check or the
+        # explanation itself fails we still want the error, not a worker that
+        # silently sits there and dies.
+        if is_translation_available is not None and not is_translation_available():
+            # Every provider is on cooldown: do not start a worker that would
+            # sit there and fail, just say so and dim the control.
+            self._note_translation_unavailable()
             return
         tag = rel.get("tag_name", "")
         cached = self._translated_notes_cache.get((tag, lang))
@@ -2810,6 +2909,14 @@ class SelectPackagePage(QWidget):
 
     def _on_translation_ready(self, rel, lang, trans_name, trans_body):
         self._translated_notes_cache[(rel.get("tag_name", ""), lang)] = (trans_name, trans_body)
+        # A provider answered again: the local notice has served its purpose.
+        try:
+            from ..notice_service import NoticeService
+
+            NoticeService.instance().remove_local_notice("translation-unavailable")
+            self._translation_notice_posted = False
+        except Exception:
+            pass
         cur = self._current_selected_rel
         if cur == rel or (cur and cur.get("tag_name") == rel.get("tag_name")):
             self._is_translating = False
@@ -2823,7 +2930,7 @@ class SelectPackagePage(QWidget):
         cur = self._current_selected_rel
         if cur == rel or (cur and cur.get("tag_name") == rel.get("tag_name")):
             self._is_translating = False
-            self._update_translate_link()
+            self._note_translation_unavailable()
 
     def _show_original_release_notes(self):
         self._is_translated = False
@@ -2875,6 +2982,13 @@ class SelectPackagePage(QWidget):
         dest = dest_dir / f"{pkg.slug}_{rel.get('tag_name', 'latest')}_{fname}"
         extract_dir = compute_extract_dir(dest)
 
+        # New firmware install confirmed: stop any active download/extraction and
+        # remove old scatter files / working directories from previous installs.
+        self._stop_transfer_workers()
+        from ..flash_service import cleanup_previous_install_scatters
+
+        cleanup_previous_install_scatters(keep_package_path=dest, for_new_install=True)
+
         # 1. Reuse the extracted firmware. The archive is deleted once it is
         # extracted, so a finished extract counts even when the zip is gone.
         if _is_extract_complete(extract_dir):
@@ -2910,10 +3024,14 @@ class SelectPackagePage(QWidget):
         display_name = self._install_card_title(pkg.name, rel, eff_model)
         self.download_started.emit(display_name, eff_model)
         self._gui_handoff_worker = False
-        if self._download_worker is not None and self._download_worker.isRunning():
-            self._download_worker.cancel()
-            retire_worker(self._download_worker, self._active_workers)
-        self._download_worker = downloads.DownloadWorker(rel["download_url"], str(dest))
+        from .. import portable
+
+        self._download_worker = downloads.DownloadWorker(
+            rel["download_url"],
+            str(dest),
+            fallback_urls=portable.fallback_urls_for(rel["download_url"]),
+        )
+        self._active_workers.add(self._download_worker)
         self._download_worker.progress.connect(self._on_download_progress)
         self._download_worker.status.connect(self._on_download_status)
         self._download_worker.finished.connect(self._on_download_done)
@@ -3035,10 +3153,31 @@ class SelectPackagePage(QWidget):
         self._set_details_header(self._current_selected_rel, self._details_package)
         self._prepare_package(result, self._on_online_prep_done)
 
+    def _stop_transfer_workers(self) -> None:
+        """Ensure at most one download or extraction worker is active at a time."""
+        worker = self._download_worker
+        if worker is not None:
+            for sig in (worker.finished, worker.progress, worker.status):
+                try:
+                    sig.disconnect()
+                except Exception:
+                    pass
+            worker.cancel()
+            retire_worker(worker, self._active_workers)
+            self._download_worker = None
+        prep = self._prep_worker
+        if prep is not None:
+            for sig in (prep.finished, prep.progress):
+                try:
+                    sig.disconnect()
+                except Exception:
+                    pass
+            prep.cancel()
+            retire_worker(prep, self._active_workers)
+            self._prep_worker = None
+
     def _prepare_package(self, path, done_cb):
-        if self._prep_worker is not None:
-            self._prep_worker.cancel()
-            retire_worker(self._prep_worker, self._active_workers)
+        self._stop_transfer_workers()
         self._download_status_key = "sel_preparing"
         self._local_status_key = "sel_preparing"
         self._download_bar.setVisible(False)
@@ -3060,6 +3199,27 @@ class SelectPackagePage(QWidget):
             retire_worker(self._prep_worker, self._active_workers)
             self._prep_worker = None
 
+    def _multiple_scatters_message(self) -> str:
+        """Explain a release that carries more than one scatter it could flash.
+
+        An online release is somebody else's build: the reader cannot repack
+        it, so the sentence names the software whose developer has to publish a
+        single scatter. A browsed folder keeps the generic wording, because
+        choosing a different folder is something the reader can do.
+        """
+        info = getattr(self, "_current_installed_release_info", None) or {}
+        software = str(info.get("software_name") or "").strip()
+        if not software:
+            try:
+                software = str(self.current_software() or "").strip()
+            except Exception:
+                software = ""
+        if not software:
+            software = str(getattr(self, "_current_package_name", "") or "").strip()
+        if software:
+            return tr("sel_multiple_scatters_release_error").format(software=software)
+        return tr("sel_multiple_scatters_error")
+
     def _on_online_prep_done(self, ok, extract_dir, err):
         self._download_bar.setVisible(False)
         if not ok:
@@ -3069,7 +3229,7 @@ class SelectPackagePage(QWidget):
                 QMessageBox.warning(
                     self,
                     tr("sel_multiple_scatters_title"),
-                    tr("sel_multiple_scatters_error"),
+                    self._multiple_scatters_message(),
                 )
             else:
                 self._say(f"{tr('sel_prepare_failed')} \u2014 {err}", 15000)
@@ -3427,6 +3587,13 @@ class SelectPackagePage(QWidget):
             if self._should_prompt_pre_install():
                 if not self._prompt_pre_install(eff_model, eff_type):
                     return
+            self._stop_transfer_workers()
+            from ..flash_service import cleanup_previous_install_scatters
+
+            cleanup_previous_install_scatters(
+                keep_package_path=self._current_package_path,
+                for_new_install=True,
+            )
             self._emit_ready()
 
     def _ensure_install_title(self) -> str:
@@ -3648,11 +3815,17 @@ class SelectPackagePage(QWidget):
         self.download_started.emit(self._current_package_name, self._current_package_model)
         self._last_download_percent = 0
         self._last_download_status_text = ""
-        if self._download_worker is not None and self._download_worker.isRunning():
-            self._download_worker.cancel()
-            retire_worker(self._download_worker, self._active_workers)
-            self._download_worker = None
-        self._download_worker = downloads.DownloadWorker(target["url"], str(dest))
+        self._stop_transfer_workers()
+        from ..flash_service import cleanup_previous_install_scatters
+
+        cleanup_previous_install_scatters(keep_package_path=dest, for_new_install=True)
+        from .. import portable
+
+        self._download_worker = downloads.DownloadWorker(
+            target["url"],
+            str(dest),
+            fallback_urls=portable.fallback_urls_for(target["url"]),
+        )
         self._active_workers.add(self._download_worker)
         self._download_worker.progress.connect(self._on_download_progress)
         self._download_worker.status.connect(self._on_download_status)

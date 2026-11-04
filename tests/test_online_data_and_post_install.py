@@ -996,17 +996,28 @@ def test_notice_content_and_read_more_url(qapp, monkeypatch):
 
 
 def test_keep_data_compatibility_copy_y1_vs_other():
-    from src.i18n import tr
+    """The English copy distinguishes the two cases.
 
-    hint_y1 = tr("keep_data_only_compatible_hint_y1")
-    hint_other = tr("keep_data_only_compatible_hint_other")
+    The copy is asserted in English, so the language is pinned: a catalog
+    translated by another test must not decide whether this passes.
+    """
+    from src.i18n import translator
 
-    # Y1 copy states "only keep your settings" (no media mentioned since microSD stores media)
-    assert "settings and media" not in hint_y1
-    assert "only keep your settings" in hint_y1
+    t = translator()
+    previous = t.lang
+    t.set_language("en")
+    try:
+        hint_y1 = t.t("keep_data_only_compatible_hint_y1")
+        hint_other = t.t("keep_data_only_compatible_hint_other")
 
-    # Other models say "settings and media"
-    assert "settings and media" in hint_other
+        # Y1 copy states "only keep your settings" (no media mentioned since microSD stores media)
+        assert "settings and media" not in hint_y1
+        assert "only keep your settings" in hint_y1
+
+        # Other models say "settings and media"
+        assert "settings and media" in hint_other
+    finally:
+        t.set_language(previous)
 
 
 def test_online_notices_url_formation():

@@ -9,9 +9,14 @@ This guide contains everything required for anyone to clone this repository and 
 ## 1. Prerequisites by Platform
 
 ### macOS (13.0 Ventura through 26.0+ Golden Gate / Tahoe)
-- **Python**: 3.11 or newer (Universal2 recommended)
-- **Xcode Command Line Tools**: `xcode-select --install`
+- **Python**: none needed up front — the first build finds or installs one (3.10+, preferring 3.12) and creates `.venv-build`
+- **Xcode Command Line Tools**: needed for `--arch universal2` (clang): `xcode-select --install`
 - **Architecture**: Supports Intel (`x86_64`), Apple Silicon (`arm64`), and Universal2 (`universal2`).
+
+`./build_macos.sh` bootstraps its own environment through `scripts/bootstrap_build_env.py`:
+no virtualenv, `pip install` or Homebrew package is a prerequisite for a fresh clone. It reuses
+an existing `.venv-build` when its requirements are unchanged, installs `requirements.txt` +
+`requirements-build.txt` when they are not, and never touches a `PYTHON` you set yourself.
 
 ### Windows (10 / 11, x64 / ARM64)
 - **Python**: 3.10 or newer (ensure "Add python.exe to PATH" is checked during setup; use native ARM64 Python for ARM64 builds)
@@ -19,7 +24,7 @@ This guide contains everything required for anyone to clone this repository and 
 - **Windows 10/11 SDK** (optional, only if packing Microsoft Store `.msix` packages with `MakeAppx.exe`)
 
 ### Linux (Ubuntu, Debian, Fedora, Arch, etc.)
-- **Python**: 3.10 or newer
+- **Python**: installed by `./build_appimage.sh` if missing (3.10+, preferring 3.12); `python3-venv`/`python3-pip` must be available for the virtualenv
 - **Packages**: `curl`, `file`, `desktop-file-utils` (used by AppImage tooling)
 
 ---
@@ -37,13 +42,19 @@ cd updater-ce-neo
 chmod +x build_macos.sh
 ./build_macos.sh
 
-# Or build Universal2 fat binary and create a drag-and-drop DMG:
+# Or build a Universal2 fat binary and create a drag-and-drop DMG:
 ./build_macos.sh --arch universal2 --dmg
 ```
 
-**Output** (both front ends — see section 5):
-- `dist/Updater CE.app` and `dist/MediaTek Installer.app` (100% self-contained application bundles)
-- `dist/UpdaterCE-3.0-universal2-macOS.dmg` and `dist/MediaTekInstaller-3.0-universal2-macOS.dmg` (if `--dmg` is specified)
+The first run creates `.venv-build/` and installs the requirements (a few minutes, ~200 MB);
+later runs reuse it and go straight to PyInstaller. `./build_macos.sh --check-deps` only verifies
+the environment. Without `--arch`, the bundle targets the machine's own architecture — PyInstaller
+can only produce the architecture of the Python it runs under; use `--arch universal2` for one
+bundle that runs on both Intel and Apple Silicon.
+
+**Output** (Updater CE by default — `--brand all` adds the MediaTek Installer, see section 5):
+- `dist/macos/Innioasis Updater.app` (100% self-contained application bundle)
+- `dist/macos/InnioasisUpdater-2.5.2-<arch>-macOS.dmg` (if `--dmg` is specified)
 
 ---
 
@@ -65,10 +76,10 @@ cd updater-ce-neo
 .\build_windows.ps1
 ```
 
-**Output** (both front ends — see section 5):
-- `dist\windows\InnioasisUpdater\InnioasisUpdater.exe` and `dist\windows\MediaTekInstaller\MediaTekInstaller.exe` (standalone portable directories with bundled SP Flash Tool)
-- `dist\windows\UpdaterCE-Portable-2.5.2.zip` and `dist\windows\MediaTekInstaller-Portable-2.5.2.zip` (portable zip archives)
-- `dist\windows\UpdaterCE-Setup-2.5.2.exe` and `dist\windows\MediaTekInstaller-Setup-2.5.2.exe` (full Windows Inno Setup installer wizards, each with its own identity so both can be installed side by side)
+**Output** (Updater CE by default — `--brand both` adds the MediaTek Installer, see section 5):
+- `dist\windows\InnioasisUpdater\InnioasisUpdater.exe` (standalone portable directory with bundled SP Flash Tool)
+- `dist\windows\UpdaterCE-Portable-2.5.2.zip` (portable zip archive)
+- `dist\windows\UpdaterCE-Setup-2.5.2.exe` (Windows Inno Setup installer wizard)
 
 > **Note**: On x64 Windows, the app runs 100% SP Flash Tool by default. Press the `M` key on the keyboard to unlock the MTKClient advanced backend option.
 
@@ -88,10 +99,10 @@ Or in PowerShell:
 
 > **Auto-detection**: When running on an ARM64 Windows system (or VM) with native ARM64 Python, `build_windows.bat` and `build_windows.ps1` automatically detect the architecture without needing `--arch arm64`.
 
-**ARM64 Output**:
-- `dist\windows\InnioasisUpdater\InnioasisUpdater.exe` and `dist\windows\MediaTekInstaller\MediaTekInstaller.exe` (native ARM64 portable folders)
-- `dist\windows\UpdaterCE-Portable-2.5.2-arm64.zip` and `dist\windows\MediaTekInstaller-Portable-2.5.2-arm64.zip` (portable archives)
-- `dist\windows\UpdaterCE-Setup-2.5.2-arm64.exe` and `dist\windows\MediaTekInstaller-Setup-2.5.2-arm64.exe` (Inno Setup 6 installer compiled with `ArchitecturesAllowed=arm64` and `ArchitecturesInstallIn64BitMode=arm64`)
+**ARM64 Output** (`-Brand both` also produces the same three as MediaTek Installer):
+- `dist\windows\InnioasisUpdater\InnioasisUpdater.exe` (native ARM64 portable folder)
+- `dist\windows\UpdaterCE-Portable-2.5.2-arm64.zip` (portable archive)
+- `dist\windows\UpdaterCE-Setup-2.5.2-arm64.exe` (Inno Setup 6 installer compiled with `ArchitecturesAllowed=arm64` and `ArchitecturesInstallIn64BitMode=arm64`)
 - `dist\windows\InnioasisUpdater-2.5.2.0-arm64.msix` (when building with `-Msix`)
 
 **Flashing Backend on Windows ARM64**:
@@ -152,8 +163,8 @@ chmod +x build_appimage.sh
 ./build_appimage.sh --arch aarch64     # builds ARM64
 ```
 
-**Output** (both front ends — see section 5):
-- `dist/linux/InnioasisUpdater-2.5-x86_64.AppImage` (alias `UpdaterCE.appimage` / `UpdaterCE.AppImage`) and `dist/linux/MediaTekInstaller-2.5-x86_64.AppImage` (alias `MediaTek Installer.appimage`)
+**Output** (Updater CE by default — `--brand all` adds the MediaTek Installer, see section 5):
+- `dist/linux/InnioasisUpdater-2.5-x86_64.AppImage` (alias `UpdaterCE.appimage` / `UpdaterCE.AppImage`)
 - Standalone portable `.tar.gz` and `.zip` archives next to each AppImage
 - Bundled full stack:
   - **Customized SP Flash Tool for Linux** (`tools/linux/SP_Flash_Tool_v5.1904_Linux`, built from `tools/sp-flash-tool-src` via `tools/build_linux_sp_flash.sh` against Ubuntu 16.04 glibc 2.23 baseline with self-contained Qt 4.8.7 runtime libraries)
@@ -202,32 +213,31 @@ firmware installer with no Updater CE identity and no online firmware at all:
 - "install from a terminal window" remains available, so the console tools can
   still be watched and diagnosed
 
-### Every build ships both apps
+### MediaTek Installer is an opt-in brand
 
-A normal build of any platform produces **both** front ends side by side — the
-Updater CE app and the MediaTek Installer app — because they are the same
-engine with different identities:
+A normal build produces the **Updater CE** app only — it is the product that
+ships, and building the MediaTek Installer as well doubles the packaging time
+for a build that may never be released. Both front ends come from the same
+engine with different identities, so the Installer is one flag away:
 
 ```bash
-./build_macos.sh            # dist/Updater CE.app + dist/MediaTek Installer.app
-./build_appimage.sh         # dist/UpdaterCE-*.AppImage + dist/MediaTekInstaller-*.AppImage
-build_windows.bat           # dist\InnioasisUpdater\ + dist\MediaTekInstaller\ (+ both installers)
-build_windows.bat updater_ce -Msix   # ... and the Microsoft Store package
+./build_macos.sh --brand all        # dist/Innioasis Updater.app + dist/MediaTek Installer.app
+./build_appimage.sh --brand all     # Updater CE + MediaTek Installer AppImages
+build_windows.bat both              # dist\InnioasisUpdater\ + dist\MediaTekInstaller\ (+ both installers)
 ```
 
-To build just one (the quick path while iterating on a single front end):
+To build only the Installer:
 
 ```bash
 ./build_macos.sh --brand mediatek_installer     # dist/MediaTek Installer.app only
-./build_appimage.sh --brand updater_ce          # Updater CE AppImage only
+./build_appimage.sh --brand mediatek_installer  # MediaTek Installer AppImage only
 build_windows.bat mediatek_installer            # MediaTek Installer only
 powershell -File build_windows.ps1 -Brand mediatek_installer
 BUILD_BRAND=mediatek_installer ./build_macos.sh # same, via the environment
 ```
 
-A single-brand build only replaces that app's own artifacts: whatever else is
-already in `dist/` (the other app, its installer/DMG) stays exactly as it was,
-so both front ends remain there to test.
+A build only replaces the artifacts of the brands it builds: whatever else is
+already in `dist/` (the other app, its installer/DMG) stays exactly as it was.
 
 The dist folder / executable name stays a slug per brand
 (`InnioasisUpdater`, `MediaTekInstaller`); `MediaTek Installer` is the name the

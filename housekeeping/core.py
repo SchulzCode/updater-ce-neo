@@ -960,12 +960,33 @@ def has_issues(statuses: Sequence[MirrorStatus], max_age_hours: float = DEFAULT_
 
 
 def notify(title: str, message: str) -> None:
+    """Post a macOS notification as this process's own app, or not at all.
+
+    A scheduled run started from the packaged app inherits its bundle identity,
+    so the notice appears under the app that installed the job. A source
+    checkout has no such identity, and the only thing left to hand a banner to
+    would be a script host: macOS files those under Script Editor, which is not
+    this app and not something the user opened. There the run's log is the
+    report.
+    """
     if sys.platform != "darwin":
         return
-    script = f"display notification {json.dumps(message)} with title {json.dumps(title)}"
     try:
-        subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=10, check=False)
-    except (OSError, subprocess.SubprocessError):
+        from Foundation import NSBundle
+
+        bundle = NSBundle.mainBundle()
+        if bundle is None or not bundle.bundleIdentifier():
+            return
+        from AppKit import NSUserNotification, NSUserNotificationCenter
+
+        center = NSUserNotificationCenter.defaultUserNotificationCenter()
+        if center is None:
+            return
+        notification = NSUserNotification.alloc().init()
+        notification.setTitle_(str(title))
+        notification.setInformativeText_(str(message))
+        center.deliverNotification_(notification)
+    except Exception:
         pass
 
 

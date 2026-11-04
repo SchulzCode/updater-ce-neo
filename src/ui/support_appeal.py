@@ -1,20 +1,9 @@
-"""Short support headline: a round portrait beside a warm one-line pitch.
-
-The same block is used in two places, and they do not say the same thing:
-
-* the Support page introduces the project (``INTRO_KEYS``), and
-* the appeal under a finished install speaks about the install that just
-  succeeded (``COMPLETION_KEYS``) — the install is why the reader is here, so
-  it is the natural thing to name before asking for anything.
-
-The portrait is circle-cropped. A bundled copy is shown immediately, and the
-network image replaces it when it can be loaded. Nothing here paints a solid
-plate; the window material shows through the square outside the circle.
-"""
-
 from __future__ import annotations
 
+import datetime as _dt
 import os
+import random
+import re
 import urllib.request
 
 from PySide6.QtCore import QThread, Qt, Signal
@@ -27,35 +16,143 @@ from ..i18n import tr
 PORTRAIT_URL = "https://innioasis.app/mtkclient/gui/images/developer.png"
 PORTRAIT_DIAMETER = 56
 
-# (headline, subtitle) key pairs. The Support page keeps the project pitch;
-# the post-install appeal uses the completion wording.
 INTRO_KEYS = ("donate_headline", "donate_subtitle")
 COMPLETION_KEYS = ("donate_completion_headline", "donate_completion_subtitle")
-# Firmware plus themes pack: the power-on steps already ran before placement.
 THEMES_COMPLETION_KEYS = ("donate_completion_headline", "donate_completion_themes_subtitle")
 
+LEGACY_APPEAL_KEY = "donate_support_appeal_lead"
+SUPPORT_APPEAL_KEYS = (
+    LEGACY_APPEAL_KEY,
+    "donate_appeal_always_free",
+    "donate_appeal_community_archive",
+    "donate_appeal_family_and_time",
+    "donate_appeal_human_touch",
+    "donate_appeal_keep_going",
+    "donate_support_appeal_servers",
+    "donate_support_appeal_evenings",
+    "donate_support_appeal_independent",
+    "donate_support_appeal_testbench",
+    "donate_support_appeal_bandwidth",
+    "donate_support_appeal_monthly_costs",
+    "donate_support_appeal_small_change",
+    "donate_support_appeal_long_nights",
+    "donate_support_appeal_behind_the_scenes",
+    "donate_support_appeal_next_feature",
+    "donate_support_appeal_kindness",
+    "donate_support_appeal_rescue",
+    "donate_support_appeal_no_subscription",
+    "donate_support_appeal_one_person",
+    "donate_support_appeal_archive_forever",
+    "donate_support_appeal_coffee_math",
+)
+
+FAMILY_APPEAL_KEYS = (
+    "donate_family_appeal_expected",
+    "donate_family_appeal_new_arrival",
+    "donate_family_appeal_nursery",
+)
+FAMILY_COHORT_KEY = "donation_family_appeal_cohort"
+FAMILY_COHORT_FRACTION = 0.30
+FAMILY_APPEAL_LAST_DAY = _dt.date(2027, 4, 17)
+
+FAMILY_APPEAL_WEIGHT = 3.0
+FAMILY_NO_DONATION_BOOST = 2.0
+FAMILY_SHORT_GOAL_BOOST = 1.8
+
+_RECENT_KEYS: list[str] = []
+
+_SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+|(?<=[。！？])\s*")
 
 def _fill(text: str, **fields) -> str:
-    """Substitute the placeholders the caller actually has.
-
-    A subtitle is only rewritten for the fields passed in with a real value, so
-    a language that phrases the sentence without ``{model}`` — or a caller that
-    has no model to name — never leaves a literal ``{model}`` on screen.
-    """
     for name, value in fields.items():
         value = str(value or "").strip()
         if value:
             text = text.replace("{%s}" % name, value)
     return text
 
+def family_appeal_window_open(now=None) -> bool:
+    now = now or _dt.datetime.now()
+    return now.date() <= FAMILY_APPEAL_LAST_DAY
+
+def family_appeal_cohort(settings=None) -> bool:
+    from PySide6.QtCore import QSettings
+
+    store = settings if settings is not None else QSettings("innioasis", "updater")
+    raw = store.value(FAMILY_COHORT_KEY, None)
+    if raw is None:
+        chosen = random.random() < FAMILY_COHORT_FRACTION
+        store.setValue(FAMILY_COHORT_KEY, "1" if chosen else "0")
+        try:
+            store.sync()
+        except Exception:
+            pass
+        return chosen
+    return str(raw).strip().lower() in ("1", "true", "yes", "on")
+
+def _donated_today(donations, now) -> bool:
+    for row in donations or ():
+        when = row.get("dt")
+        if isinstance(when, _dt.datetime):
+            when = when.date()
+        if when == now.date():
+            try:
+                if float(row.get("amount") or 0) > 0:
+                    return True
+            except (TypeError, ValueError):
+                continue
+    return False
+
+def _short_period_goal(donations, now) -> bool:
+    from ..donors import get_goal_stats, goal_scope
+
+    scope = None
+    if donations:
+        try:
+            scope = get_goal_stats(donations, now=now).get("scope")
+        except Exception:
+            scope = None
+    return (scope or goal_scope(now)) in ("daily", "weekly")
+
+def _choose(pool, rng=random) -> str:
+    fresh = [key for key in pool if key not in _RECENT_KEYS]
+    key = rng.choice(fresh or list(pool))
+    _RECENT_KEYS.append(key)
+    del _RECENT_KEYS[:-4]
+    return key
+
+def pick_support_appeal_key(donations=None, now=None, settings=None, rng=random) -> str:
+    now = now or _dt.datetime.now()
+    weight = 0.0
+    if family_appeal_window_open(now) and family_appeal_cohort(settings):
+        weight = FAMILY_APPEAL_WEIGHT
+        if not _donated_today(donations, now):
+            weight *= FAMILY_NO_DONATION_BOOST
+        if _short_period_goal(donations, now):
+            weight *= FAMILY_SHORT_GOAL_BOOST
+    if weight > 0 and rng.random() < weight / (weight + len(SUPPORT_APPEAL_KEYS)):
+        return _choose(FAMILY_APPEAL_KEYS, rng)
+    return _choose(SUPPORT_APPEAL_KEYS, rng)
+
+def _bold_lead(text: str) -> str:
+    text = str(text or "").strip()
+    match = _SENTENCE_BREAK.search(text)
+    if match is None:
+        return text
+    lead, rest = text[: match.start()].strip(), text[match.end():].strip()
+    if not lead or not rest:
+        return text
+    return f"<b>{lead}</b>{match.group(0)}{rest}"
+
+def support_appeal_html(key: str) -> str:
+    key = key or LEGACY_APPEAL_KEY
+    if key == LEGACY_APPEAL_KEY:
+        return f"<b>{tr('donate_support_appeal_lead')}</b> {tr('donate_support_appeal_followup')}"
+    return _bold_lead(tr(key))
 
 def bundled_portrait_path():
-    """Shipped portrait, used when the network image cannot be loaded."""
     return paths.RESOURCES_DIR / "developer.png"
 
-
 def circle_pixmap(source: QPixmap, diameter: int = PORTRAIT_DIAMETER) -> QPixmap:
-    """Scale, center-crop, and clip to a circle on a transparent square."""
     diameter = max(1, int(diameter))
     image = QImage(diameter, diameter, QImage.Format.Format_ARGB32_Premultiplied)
     image.fill(Qt.GlobalColor.transparent)
@@ -78,7 +175,6 @@ def circle_pixmap(source: QPixmap, diameter: int = PORTRAIT_DIAMETER) -> QPixmap
         painter.end()
     return QPixmap.fromImage(image)
 
-
 class _PortraitFetch(QThread):
     finished_bytes = Signal(bytes)
 
@@ -99,9 +195,7 @@ class _PortraitFetch(QThread):
             data = b""
         self.finished_bytes.emit(data)
 
-
 class DeveloperPortrait(QLabel):
-    """Circular developer photo. Bundled file first, network image when it arrives."""
 
     def __init__(self, diameter: int = PORTRAIT_DIAMETER, parent=None):
         super().__init__(parent)
@@ -119,7 +213,6 @@ class DeveloperPortrait(QLabel):
         self._maybe_fetch()
 
     def apply_bytes(self, data: bytes) -> bool:
-        """Replace the portrait when ``data`` is an image. Keeps the bundled one otherwise."""
         if not data:
             return False
         pix = QPixmap()
@@ -157,9 +250,7 @@ class DeveloperPortrait(QLabel):
         if thread.isRunning():
             thread.wait(2000)
 
-
 class SupportIntro(QWidget):
-    """Portrait aligned with the headline block. No card behind it."""
 
     def __init__(self, parent=None, keys=INTRO_KEYS):
         super().__init__(parent)
@@ -194,7 +285,6 @@ class SupportIntro(QWidget):
         self.retranslate()
 
     def set_keys(self, keys) -> None:
-        """Choose which wording this block shows (see ``INTRO_KEYS``)."""
         self._keys = tuple(keys)
         self.retranslate()
 
