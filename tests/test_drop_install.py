@@ -52,6 +52,32 @@ def test_accepted_extensions_and_scatter_folders():
         assert package_check_error(packed) == ""
 
 
+def test_dropped_package_takes_the_android_scatter_over_its_variants():
+    """A dropped zip/folder is accepted like a browsed one: the stock scatter wins."""
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        pkg = root / "pkg"
+        pkg.mkdir()
+        (pkg / "MT6582_Android_scatter.txt").write_text(
+            "file_name: system.img\n", encoding="utf-8"
+        )
+        (pkg / "MT6582_Android_scatter_preserve_data.txt").write_text(
+            "file_name: userdata.img\n", encoding="utf-8"
+        )
+        (pkg / "rom_scatter.txt").write_text("file_name: absent.img\n", encoding="utf-8")
+        (pkg / "system.img").write_bytes(b"img")
+
+        # Only the stock scatter and the images it lists are checked; the
+        # preserve variant and the stray scatter are ignored.
+        assert package_check_error(pkg) == ""
+
+        # Two models in one drop is still not one package.
+        (pkg / "MT6572_Android_scatter.txt").write_text(
+            "file_name: system.img\n", encoding="utf-8"
+        )
+        assert package_check_error(pkg) == "missing_scatter"
+
+
 def test_drop_overlay_string_in_six_locales():
     table = _STRINGS["drop_firmware_here"]
     assert table["en"] == "Drop firmware file here to install"
