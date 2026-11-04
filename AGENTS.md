@@ -21,8 +21,9 @@
 - `scripts/build_universal_app.py` **deletes and rebuilds `dist/*.app` in place**: a rebuild wipes any
   already-running app's bundle, so never build while the user is testing from `dist/`.
 - Build entry points are `./build_macos.sh [--arch arm64|x86_64|universal2] [--dmg] [--brand …]`,
-  `build_windows.{bat,ps1}` and `./build_appimage.sh --arch …`; a run builds **both** front ends
-  unless `--brand` names one. Per-arch commands are in `BUILD_TARGETS.md`.
+  `build_windows.{bat,ps1}` and `./build_appimage.sh --arch …`; a run builds **Updater CE only**,
+  and `--brand mediatek_installer` (or `--brand all`, `-Brand both` on Windows) adds the MediaTek
+  Installer. Per-arch commands are in `BUILD_TARGETS.md`.
 - `/tmp/run_one.py` is not executable — run `.venv-build/bin/python /tmp/run_one.py <file> <test>`.
   A whole file is `.venv-build/bin/python -m pytest tests/<file>.py`.
 - `tests/test_native_ux_enhancements.py` **cannot be run whole**: network icon preloads hang it and

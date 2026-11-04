@@ -10,8 +10,8 @@
 #   ./build_appimage.sh --clean            # Clean previous builds and rebuild
 #
 # Requirements:
-#   - Python 3.10+ (virtualenv recommended)
-#   - pip install -r requirements.txt pyinstaller
+#   - Python 3.10+ (a fresh clone gets .venv-build + requirements installed
+#     automatically by scripts/bootstrap_build_env.py)
 #   - curl, file, desktop-file-utils (appimagetool is auto-bootstrapped if missing)
 # ==============================================================================
 
@@ -75,8 +75,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --container       Build PyInstaller payload inside Debian Bookworm container (ensures x86-64-baseline)"
             echo "  --no-container    Force building PyInstaller directly on the host system"
             echo "  --arch <arch>     Target architecture (default: x86_64)"
-            echo "  --brand <name>    Build only this brand (updater_ce or mediatek_installer);"
-            echo "                    by default BOTH apps are built"
+            echo "  --brand <name>    Build this brand: updater_ce (default), mediatek_installer,"
+            echo "                    or all for both front ends"
             echo "  -h, --help        Show this help message"
             exit 0
             ;;
@@ -104,25 +104,26 @@ fi
 # AppImages sitting in dist/.
 for _candidate in "${BRAND_REQUESTED:-}" "${BUILD_BRAND:-}"; do
     case "$_candidate" in
-        ""|updater_ce|mediatek_installer) ;;
+        ""|updater_ce|mediatek_installer|all|both) ;;
         *)
-            echo "ERROR: unknown brand '$_candidate' (expected updater_ce or mediatek_installer)"
+            echo "ERROR: unknown brand '$_candidate' (expected updater_ce, mediatek_installer or all)"
             exit 1
             ;;
     esac
 done
 
 # --- Brand plan ---------------------------------------------------------------
-# A build produces BOTH front ends: Updater CE and the generic MediaTek
-# Installer (same internals, different identity and front end). --brand picks
-# just one for a quick local iteration. Each brand is built by a child run of
-# this script, so the single-brand path stays identical to what it always was.
+# A build produces Updater CE. The generic MediaTek Installer (same internals,
+# different identity and front end) is opt-in, because building it doubles a
+# release run for a product that may never ship. Each brand is built by a child
+# run of this script, so the single-brand path stays identical to what it
+# always was.
 if [ -z "${INNOASIS_BRAND_LOCK:-}" ]; then
-    if [ -n "${BRAND_REQUESTED:-}" ]; then
-        brands=("$BRAND_REQUESTED")
-    else
-        brands=(updater_ce mediatek_installer)
-    fi
+    case "${BRAND_REQUESTED:-${BUILD_BRAND:-}}" in
+        "") brands=(updater_ce) ;;
+        all|both) brands=(updater_ce mediatek_installer) ;;
+        *) brands=("${BRAND_REQUESTED:-${BUILD_BRAND:-}}") ;;
+    esac
 
     if [ "$CLEAN_BUILD" -eq 1 ]; then
         rm -rf "$BUILD_DIR"
@@ -161,7 +162,7 @@ case "$BRAND" in
         BRAND_SLUG="MediaTekInstaller"
         ;;
     *)
-        echo "ERROR: unknown BUILD_BRAND '$BRAND' (expected updater_ce or mediatek_installer)"
+        echo "ERROR: unknown BUILD_BRAND '$BRAND' (expected updater_ce, mediatek_installer or all)"
         exit 1
         ;;
 esac
@@ -188,40 +189,50 @@ log_step() {
 TOTAL_STEPS=8
 
 # --- Preflight Python & Dependencies ------------------------------------------
+# Same bootstrap as the macOS/Windows scripts: a fresh clone has no virtualenv,
+# so create .venv-build and install requirements.txt + requirements-build.txt
+# rather than failing on the first missing import.
+BOOTSTRAP_SCRIPT="scripts/bootstrap_build_env.py"
 PYTHON="${PYTHON:-}"
-if [ -z "$PYTHON" ]; then
-    for cand in .venv-build/bin/python3 .venv/bin/python3 "$(which python3 2>/dev/null || true)"; do
-        if [ -n "$cand" ] && [ -x "$cand" ]; then
-            PYTHON="$cand"
-            break
-        fi
-    done
-fi
 
 log_step 1 "$TOTAL_STEPS" "Validating Environment & Dependencies" "Checking Python runtime, PySide6, PyInstaller, and build tools..."
 if [ "$SKIP_PYINSTALLER" -eq 0 ]; then
-    if [ -z "$PYTHON" ] || [ ! -x "$PYTHON" ]; then
-        if command -v python3 >/dev/null 2>&1; then
-            PYTHON="$(command -v python3)"
-        else
-            echo "ERROR: Python 3 not found. Set PYTHON env var or active virtual environment."
+    if [ ! -f "$BOOTSTRAP_SCRIPT" ]; then
+        echo "ERROR: $BOOTSTRAP_SCRIPT is missing; this checkout is incomplete."
+        exit 1
+    fi
+    if [ -z "$PYTHON" ]; then
+        BOOTSTRAP_PYTHON=""
+        for _cand in python3 /usr/bin/python3 python; do
+            if command -v "$_cand" >/dev/null 2>&1; then
+                BOOTSTRAP_PYTHON="$_cand"
+                break
+            fi
+        done
+        if [ -z "$BOOTSTRAP_PYTHON" ]; then
+            echo "ERROR: no python3 on PATH to start the build environment bootstrap."
+            echo "       Debian/Ubuntu: sudo apt install python3 python3-venv"
+            echo "       Fedora:        sudo dnf install python3"
+            exit 1
+        fi
+        if ! BOOTSTRAP_OUTPUT="$("$BOOTSTRAP_PYTHON" "$BOOTSTRAP_SCRIPT")"; then
+            echo ""
+            echo "ERROR: could not prepare the Python build environment (see above)."
+            exit 1
+        fi
+        PYTHON="$(printf '%s\n' "$BOOTSTRAP_OUTPUT" | sed -n 's/^PYTHON=//p' | tail -1)"
+        if [ -z "$PYTHON" ] || [ ! -x "$PYTHON" ]; then
+            echo "ERROR: the build environment bootstrap did not report an interpreter."
+            exit 1
+        fi
+    else
+        # An explicitly supplied interpreter is verified, never modified.
+        if ! "$PYTHON" "$BOOTSTRAP_SCRIPT" >/dev/null; then
             exit 1
         fi
     fi
 
     echo "  -> Using Python: $PYTHON ($("$PYTHON" --version 2>&1))"
-
-    if ! "$PYTHON" -c "import PyInstaller" 2>/dev/null; then
-        echo "ERROR: PyInstaller is not installed in $PYTHON."
-        echo "       Run: pip install pyinstaller"
-        exit 1
-    fi
-
-    if ! "$PYTHON" -c "import PySide6" 2>/dev/null; then
-        echo "ERROR: PySide6 is not installed in $PYTHON."
-        echo "       Run: pip install -r requirements.txt"
-        exit 1
-    fi
     echo "  -> Required modules verified (PySide6, PyInstaller)"
 fi
 

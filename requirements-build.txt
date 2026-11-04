@@ -1,0 +1,9 @@
+# Build-only tooling: not needed to run the app, only to package or test it.
+#
+# Installed automatically by scripts/bootstrap_build_env.py, which every build
+# script runs before it touches PyInstaller. Keep this separate from
+# requirements.txt so a developer checkout of the app does not drag in the
+# packaging stack.
+pyinstaller>=6.10
+pytest>=8.0
+pytest-qt>=4.4

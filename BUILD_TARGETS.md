@@ -4,16 +4,22 @@ One page of copy-paste build commands for each target this project ships.
 [BUILDING.md](BUILDING.md) explains *why* each platform uses the backend it
 does; this file is the command reference.
 
-A normal build produces **both** front ends side by side (Updater CE and the
-generic MediaTek Installer). Add a brand to build just one:
-`--brand updater_ce` / `--brand mediatek_installer` (macOS, Linux) or
-`updater_ce` / `mediatek_installer` (Windows).
+A normal build produces **Updater CE** only. The generic MediaTek Installer is
+opt-in: `--brand mediatek_installer` (or `--brand all` for both) on macOS and
+Linux, `mediatek_installer` / `both` on Windows.
+
+Every build script first runs `scripts/bootstrap_build_env.py`. On a fresh clone
+that creates `.venv-build/` and installs `requirements.txt` +
+`requirements-build.txt`; afterwards it reuses that environment, so no manual
+virtualenv or `pip install` step is needed on any platform. `./build_macos.sh
+--check-deps`, `python3 scripts/bootstrap_build_env.py --check` (macOS/Linux) and
+`scripts\bootstrap_build_env.py --check` (Windows) verify without installing.
 
 | Platform | Architecture | Command | Output |
 | :--- | :--- | :--- | :--- |
-| macOS | Apple Silicon (`arm64`) | `./build_macos.sh --arch arm64` | `dist/macos/Updater CE.app` |
-| macOS | Intel (`x86_64`) | `./build_macos.sh --arch x86_64` | `dist/macos/Updater CE.app` |
-| macOS | **Universal 2** (`arm64` + `x86_64`) | `./build_macos.sh --arch universal2 --dmg` | `dist/macos/Updater CE.app`, `dist/macos/UpdaterCE-*-universal2-macOS.dmg` |
+| macOS | Apple Silicon (`arm64`) | `./build_macos.sh --arch arm64` | `dist/macos/Innioasis Updater.app` |
+| macOS | Intel (`x86_64`) | `./build_macos.sh --arch x86_64` | `dist/macos/Innioasis Updater.app` |
+| macOS | **Universal 2** (`arm64` + `x86_64`) | `./build_macos.sh --arch universal2 --dmg` | `dist/macos/Innioasis Updater.app`, `dist/macos/InnioasisUpdater-*-universal2-macOS.dmg` |
 | Windows | x64 (`x86_64`) | `build_windows.bat` or `build_windows.ps1` | `dist\windows\InnioasisUpdater\`, `dist\windows\UpdaterCE-Portable-*.zip`, `dist\windows\UpdaterCE-Setup-*.exe` |
 | Windows | ARM64 (`aarch64`) | `build_windows.bat --arch arm64` or `.\build_windows.ps1 -Arch arm64` | `dist\windows\InnioasisUpdater\`, portable `*-arm64.zip`, setup `*-arm64.exe` |
 | Linux | x86-64 | `./build_appimage.sh --arch x86_64` | `dist/linux/UpdaterCE-*-x86_64.AppImage` |
@@ -35,8 +41,13 @@ chmod +x build_macos.sh
 ./build_macos.sh --arch x86_64         # Intel only
 ./build_macos.sh --arch universal2     # Intel + Apple Silicon in one bundle
 ./build_macos.sh --arch universal2 --dmg   # …plus a drag-and-drop DMG
+./build_macos.sh --check-deps          # verify .venv-build, install nothing
 ```
 
+- The first run installs its own build environment (see the note at the top);
+  `--arch` must match the architecture of the Python it runs under, because
+  PyInstaller cannot cross-compile. The script says so up front instead of
+  producing a mislabelled thin bundle.
 - On a Mac the bundle is built and ad-hoc signed by PyInstaller. On a
   non-MacOS host the same command builds the Universal 2 Mach-O bundle through
   `scripts/build_universal_app.py` (LLVM/clang + `rcodesign`), which merges two
@@ -63,15 +74,17 @@ universal `libusb-1.0.dylib` if it is missing.
 ## Windows — portable folder and Inno Setup wizard
 
 ```cmd
-build_windows.bat                       :: both front ends at x64
-build_windows.bat --arch arm64          :: both front ends for Windows on ARM64
+build_windows.bat                       :: Updater CE at x64 (default)
+build_windows.bat --arch arm64          :: Updater CE for Windows on ARM64
+build_windows.bat both                  :: both front ends at x64
 build_windows.bat updater_ce            :: Updater CE only (x64)
 build_windows.bat updater_ce --arch arm64 :: Updater CE only (ARM64)
 build_windows.bat mediatek_installer    :: MediaTek Installer only
 ```
 
 ```powershell
-.\build_windows.ps1                     # both front ends (auto-detects architecture from Python)
+.\build_windows.ps1                     # Updater CE (auto-detects architecture from Python)
+.\build_windows.ps1 -Brand both         # both front ends
 .\build_windows.ps1 -Arch arm64         # force ARM64 build
 .\build_windows.ps1 -Clean              # wipe build/windows + dist/windows first
 .\build_windows.ps1 -NoInstaller        # portable folder + zip only, skip Inno Setup
@@ -98,10 +111,11 @@ chmod +x build_appimage.sh
 ./build_appimage.sh --arch armhf        # ARM32, needs an armhf Python + appimagetool
 ./build_appimage.sh --clean             # rebuild from scratch
 ./build_appimage.sh --no-pyinstaller    # repackage an existing dist/linux/ tree
-./build_appimage.sh --brand updater_ce  # Updater CE only
+./build_appimage.sh --brand all         # Updater CE + MediaTek Installer
+./build_appimage.sh --brand updater_ce  # Updater CE only (the default)
 ```
 
-- Output: `dist/linux/InnioasisUpdater-<version>-<arch>.AppImage` (alias `UpdaterCE.appimage` / `UpdaterCE.AppImage`) and `dist/linux/MediaTekInstaller-<version>-<arch>.AppImage` (alias `MediaTek Installer.appimage`), each carrying the full stack:
+- Output: `dist/linux/InnioasisUpdater-<version>-<arch>.AppImage` (alias `UpdaterCE.appimage` / `UpdaterCE.AppImage`); `--brand all` also builds `MediaTekInstaller-<version>-<arch>.AppImage` (alias `MediaTek Installer.appimage`). Each carries the full stack:
   - Customized SP Flash Tool (`tools/linux/SP_Flash_Tool_v5.1904_Linux`, on x86_64)
   - Precompiled MTKClient with bundled `libusb-1.0`
   - Vendored ADB (`tools/adb`, on `PATH` for both x86_64 and aarch64)
