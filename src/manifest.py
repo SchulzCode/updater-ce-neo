@@ -158,7 +158,12 @@ def parse_manifest_xml(xml_text: str):
             do_not_keep_data = (node.get("do_not_keep_data") or "").strip().lower() in ("true", "1", "yes")
         except Exception:
             continue
-        if not name or not repo or device not in ("Y1", "Y2", "A5"):
+        # Any model the manifest names is listed: the catalogue is data, and
+        # firmware for models outside the original Y1/Y2/A5 trio (Timmkoo and
+        # Innioasis G-series, Q-series, D1, ...) becomes selectable the moment
+        # a hosted release is added to slidia_manifest.xml. Nothing here needs
+        # a code change per model.
+        if not name or not repo or not device:
             continue
         if repo.lower() == SKIPPED_UPDATE_REPO.lower():
             continue  # CE's in-app "please update" placeholder
@@ -174,7 +179,9 @@ def parse_manifest_xml(xml_text: str):
             if cur_v and req_v and cur_v < req_v:
                 continue
         if not pkg_name:
-            pkg_name = "rom_a5.zip" if device == "A5" else ("rom_y2.zip" if device == "Y2" else "rom.zip")
+            # rom.zip is the Y1 stock image; every other model follows the
+            # rom_<model>.zip convention (rom_y2.zip, rom_a5.zip, rom_g5.zip).
+            pkg_name = "rom.zip" if device == "Y1" else f"rom_{device.lower()}.zip"
         entries.append(
             FirmwarePackage(
                 slug=_slug_for(name, device),

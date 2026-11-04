@@ -660,6 +660,16 @@ WRONG_MODEL_ERRORS = frozenset(
 # no-progress watchdog ended it and the flow may offer the other backend.
 ERR_ATTEMPT_TIMEOUT = "ERR_ATTEMPT_TIMEOUT"
 
+
+def is_attempt_timeout_error(value) -> bool:
+    """True when the app's own connect window ended an attempt.
+
+    Nothing was there to flash yet, so this is not a failed method: the same
+    engine is offered again from the power-off step, as many times as needed,
+    and the other backend is only tried after an attempt actually failed.
+    """
+    return str(value or "").strip().upper().startswith(ERR_ATTEMPT_TIMEOUT)
+
 _SP_ERROR_NAME_RE = re.compile(r"(S_[A-Z0-9_]+)")
 _SP_EXIT_ERROR_RE = re.compile(r"\bSP_EXIT_-?\d+\b", re.IGNORECASE)
 
@@ -1071,7 +1081,12 @@ MTK_DA_ATTEMPTS = 2
 # the images start moving. SP Flash Tool's own connection window is set to the
 # same value through its console configuration file.
 ATTEMPT_PROGRESS_TIMEOUT = 60.0
-ATTEMPT_PROGRESS_TIMEOUT_MTK = 180.0
+# MTKClient gets the same one-minute window as SP Flash Tool. It used to be
+# three minutes, which left the install card counting down for so long that the
+# device was usually power-cycled by hand first. A window that reaches zero now
+# ends the attempt and hands the player back to the power-off step, so the same
+# method can be tried again (or the other engine after a real failure).
+ATTEMPT_PROGRESS_TIMEOUT_MTK = 60.0
 # The target re-enumerates while being restarted into BROM; the USB monitor
 # must not read that as the player being unplugged mid-flash.
 MTK_DEVICE_LOSS_GRACE_SECONDS = 90.0
@@ -1754,6 +1769,57 @@ def completed_extract_dir(package_path):
     return str(d) if _is_extract_complete(d) else ""
 
 
+def _firmware_dir_is_usable(directory) -> bool:
+    """True when ``directory`` holds a scatter and every image it lists."""
+    try:
+        d = Path(directory)
+        if not d.is_dir():
+            return False
+        scatter = _find_scatter(d, allow_raise=False)
+        if scatter is None:
+            return False
+        return not _missing_images(scatter)
+    except Exception:
+        logger.debug("Could not check the firmware at %s", directory, exc_info=True)
+        return False
+
+
+def _reusable_firmware_dir(package_path) -> str:
+    """The extracted firmware for ``package_path`` that is still flashable, or ``""``.
+
+    Nothing is deleted or extracted here: this only asks whether the images the
+    scatter declares are on disk. A retry, the automatic switch to the other
+    engine, and a second method all use it, so a missing archive is never
+    mistaken for a missing firmware.
+    """
+    if not package_path:
+        return ""
+    p = Path(str(package_path))
+    if p.is_dir():
+        sc = _find_scatter(p, allow_raise=False)
+        return str(sc.parent if sc else p)
+    if p.is_file() and (p.suffix.lower() == ".txt" or "scatter" in p.name.lower()):
+        return str(p.parent)
+    try:
+        cached = Path(compute_extract_dir(p))
+    except Exception:
+        return ""
+    if _firmware_dir_is_usable(cached):
+        return str(cached)
+    # The worker stages a copy before either engine runs (stage_<hash>_<stem>);
+    # that copy is just as flashable as the cache itself.
+    try:
+        scatter = _find_scatter(cached, allow_raise=False)
+        stem = scatter.stem if scatter is not None else ""
+        if stem:
+            for candidate in (downloads_dir() / "staged_firmware").glob(f"stage_*_{stem}"):
+                if _firmware_dir_is_usable(candidate):
+                    return str(candidate)
+    except Exception:
+        logger.debug("Could not look for a staged copy of %s", package_path, exc_info=True)
+    return ""
+
+
 def _is_extract_complete(extract_dir):
     """True when the extracted firmware on disk can still be flashed.
 
@@ -1931,6 +1997,15 @@ class ExtractWorker(QThread):
         # cache failure it is — the caller then downloads the release again —
         # rather than failing inside the unzipper with a bare errno.
         if not p.is_file():
+            usable = _reusable_firmware_dir(package_path)
+            if usable:
+                logger.warning(
+                    "Firmware archive %s is gone; using the copy already at %s",
+                    package_path,
+                    usable,
+                )
+                self.progress.emit(100)
+                return Path(usable)
             raise RuntimeError("CACHE_FILE_MISSING")
         suffix = Path(package_path).suffix.lower()
         if suffix == ".zip":
@@ -1941,11 +2016,11 @@ class ExtractWorker(QThread):
         prune_to_firmware_package(extract_dir)
         discard_firmware_history(extract_dir)
         _mark_extract_complete(extract_dir)
-        # The archive is no longer needed once its files are extracted.
-        try:
-            Path(package_path).unlink(missing_ok=True)
-        except OSError as e:
-            logger.warning("Could not remove extracted archive %s: %s", package_path, e)
+        # The archive is kept. It is the only copy of the firmware the user
+        # picked: a retry, a backend switch, or an extraction pruned later all
+        # need it, and deleting it here is what turned a retryable cache
+        # problem into CACHE_FILE_MISSING with nothing left to extract.
+        # Cache hygiene is prune_extracted_cache's job, not extraction's.
         # Only now, with the new firmware on disk, may older extractions be replaced.
         prune_extracted_cache(keep_package_path=package_path)
         return extract_dir
@@ -3507,12 +3582,22 @@ class _AttemptWatchdog(threading.Thread):
         self._lock = threading.Lock()
         self._deadline = time.time() + float(timeout)
         self._armed = True
+        # One refill per arming: a backend that keeps printing search or retry
+        # chatter must not push the deadline forward for ever.
+        self._refilled = False
 
     def touch(self):
-        """The device was seen: start the window over."""
+        """The device was seen: start the window over, once.
+
+        Only the first sighting refills the window. Every further report — and
+        MTKClient prints one on most of its lines — leaves the deadline alone,
+        so the countdown always reaches zero and the attempt is ended instead
+        of being kept alive by the tool's own chatter.
+        """
         with self._lock:
-            if not self._armed:
+            if not self._armed or self._refilled:
                 return
+            self._refilled = True
             self._deadline = time.time() + self._timeout
         # No tick here: the run loop reports the remaining time on its next
         # pass, so the countdown keeps counting down instead of jumping back
@@ -3839,6 +3924,13 @@ class FlashWorker(QThread):
                 process.terminate()
         except Exception:
             logger.debug("Could not terminate a silent backend", exc_info=True)
+        # A console-mode SP Flash Tool run (and its search child) holds the USB
+        # port and the tool's own settings files: the next attempt must start
+        # from a clean slate, so take any leftover run this app started down.
+        try:
+            terminate_sp_sessions()
+        except Exception:
+            logger.debug("Could not stop leftover SP sessions", exc_info=True)
 
     def _enter_usb_search(self):
         """The tool is on a search line. Show the connect sentence, still at 0%."""
@@ -3886,7 +3978,9 @@ class FlashWorker(QThread):
 
     def _classify_mtk_output(self, line):
         """Search and forward lines from MTKClient stdout or a ``[LOG]`` payload."""
-        self._touch_attempt()
+        # Deliberately no ``_touch_attempt`` here: this runs for every line the
+        # tool prints, and refreshing the window from chatter kept the
+        # countdown from ever reaching zero.
         if is_mtk_usb_search_line(line):
             self._enter_usb_search()
             return
@@ -4087,10 +4181,21 @@ class FlashWorker(QThread):
             # Ready on disk. The connect sentence waits for a real search line.
             self._announce_please_wait()
         else:
-            self.step_changed.emit(STEP_EXTRACTING)
-            self.progress.emit(5)
-            self._log(f"Extracting firmware package: {self.package_path}")
-            extract_dir = self._extract_package()
+            # The archive can be gone while its files are still on disk (an
+            # older extraction was pruned, or the select page extracted it and
+            # the archive was cleaned up). Flashing those is what a retry
+            # should do; re-extracting a missing archive is what surfaced
+            # CACHE_FILE_MISSING between attempts.
+            on_disk = _reusable_firmware_dir(self.package_path)
+            if on_disk:
+                extract_dir = Path(on_disk)
+                self._log(f"Using the firmware already on disk: {extract_dir}")
+                self._announce_please_wait()
+            else:
+                self.step_changed.emit(STEP_EXTRACTING)
+                self.progress.emit(5)
+                self._log(f"Extracting firmware package: {self.package_path}")
+                extract_dir = self._extract_package()
 
         if self._cancelled:
             self.finished.emit(False, "USER_CANCELLED")

@@ -411,24 +411,21 @@ def test_cached_extract_is_never_deleted_and_is_restored_in_place(tmp_path, monk
     (extract_dir / "keep.txt").write_text("cached")
     (extract_dir / "boot.img").unlink()
 
-    # The archive is removed right after extraction; the cached folder is what remains.
-    assert not archive.exists()
+    # The archive is kept: it is the only copy a retry can work from.
+    assert archive.exists()
 
-    # A cached folder that is missing a declared image cannot be flashed, and
-    # the archive is gone: the attempt reports the cache as missing so the
-    # caller downloads the release again. It does not delete what is left.
-    with pytest.raises(RuntimeError, match="CACHE_FILE_MISSING"):
-        ExtractWorker._extract(stub, str(archive))
-    assert not (extract_dir / "boot.img").exists()
-    assert (extract_dir / "keep.txt").exists()
+    # A cached folder that is missing a declared image is healed from that
+    # archive in place, without touching anything else in the folder. This is
+    # what used to surface CACHE_FILE_MISSING mid-install once extraction
+    # deleted the archive behind the cache.
+    ExtractWorker._extract(stub, str(archive))
+    assert (extract_dir / "boot.img").exists()
 
-    # A forced re-extract over the cache rewrites files in place when the archive is still present.
-    with zipfile.ZipFile(archive, "w") as zf:
-        for f in staging.iterdir():
-            zf.write(f, f.name)
+    # A forced re-extract over the cache rewrites files in place too.
+    (extract_dir / "boot.img").unlink()
     ExtractWorker._extract(stub, str(archive), force=True)
     assert (extract_dir / "boot.img").exists()
-    assert not archive.exists()
+    assert archive.exists()
 
 
 def test_prune_does_nothing_without_a_valid_package(tmp_path):

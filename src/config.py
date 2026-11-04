@@ -301,6 +301,9 @@ def detect_model_and_type_from_name(name_or_url: str) -> tuple[str, str | None]:
 
     clean = str(name_or_url).lower().replace("\\", "/")
     base = Path(clean).name
+    # MX-prefixed zips (``MX_rom_y2.zip``, ``MX-rom_type_b.zip``) are the
+    # manufacturer's packaging of the same names; the prefix is not a model.
+    base = re.sub(r"^mx[-_\s]+", "", base)
     stem = Path(base).stem.lower()
     parts = re.split(r"[-_.\s]+", stem)
 
@@ -367,7 +370,6 @@ def detect_model_and_type_from_name(name_or_url: str) -> tuple[str, str | None]:
         or "y1-stock" in base
         or "y1_stock" in base
         or base.startswith("y1")
-        or "y1-community" in base
         or "/y1" in clean
         or base == "rom.zip"
     ):

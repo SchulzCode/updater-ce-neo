@@ -69,6 +69,10 @@ class FwIni:
     description: str = ""
     post_install: str = ""
     post_install_2: str = ""
+    # Firmware names this rom is a derivative of / compatible with ("Original
+    # Software, Rockbox"), so the user can be asked whether that is what they
+    # are running before a data-wiping install.
+    derivatives: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -190,6 +194,17 @@ def read_fw_package_ini(path: Union[str, Path]) -> FwIni:
     desc = get_first("description", "desc")
     post_install = get_first("post_install", "post install")
     post_install_2 = get_first("post_install2", "post_install_2", "post install 2")
+    derivatives_raw = get_first(
+        "derivative",
+        "derivatives",
+        "rom_derivative",
+        "rom_derivatives",
+        "compatible",
+        "compatible_software",
+    )
+    derivatives = tuple(
+        name.strip() for name in re.split(r"[,;|]", derivatives_raw) if name.strip()
+    )
 
     return FwIni(
         enabled=enabled,
@@ -200,7 +215,22 @@ def read_fw_package_ini(path: Union[str, Path]) -> FwIni:
         description=desc,
         post_install=post_install,
         post_install_2=post_install_2,
+        derivatives=derivatives,
     )
+
+
+def package_derivatives(pkg) -> tuple:
+    """Firmware names ``pkg``'s ``fw_package.ini`` lists as rom derivatives.
+
+    A derivative entry (``derivative = Original Software, Rockbox``) says which
+    firmware shares this package's data partition, so the install can ask the
+    user whether that is what they are running before offering Keep Data.
+    """
+    folder = Path(str(getattr(pkg, "folder", "") or ""))
+    ini = folder / FW_PACKAGE_INI
+    if not ini.is_file():
+        return ()
+    return read_fw_package_ini(ini).derivatives
 
 
 def _single_scatter(folder: Path) -> Optional[Path]:

@@ -271,6 +271,30 @@ _WRITE_STEPS = (STEP_DOWNLOAD_DA, STEP_DOWNLOAD_BL, STEP_WRITE)
 _RETRY_GUIDANCE_CODES = ("CONNECTION_FAILED", "MTK_INIT_FAILED")
 _CACHE_MISSING_MARKERS = ("filenotfounderror", "no such file or directory", "cannot find the file")
 
+# Failures the MTKClient engine reports on its own paths. The player is left
+# half-initialised by these, so the next attempt needs a real power cycle: the
+# card asks for it (with the paperclip reset tip) instead of showing a dead end.
+_MTK_FAILURE_CODES = frozenset(
+    {
+        "MTK_INIT_FAILED",
+        "MTK_IMPORT_FAILED",
+        "MTK_NO_DEVICE",
+        "MTK_DA_FAILED",
+        "MTK_INSTALL_FAILED",
+        "MTK_STALL",
+        "WRITE_FAILED",
+        "CONNECTION_FAILED",
+    }
+)
+
+
+def _is_mtk_install_failure(error_code) -> bool:
+    """True for a failure that leaves the player needing a power cycle."""
+    text = str(error_code or "").strip().upper()
+    if not text:
+        return False
+    return text.startswith("MTK_") or text in _MTK_FAILURE_CODES
+
 # States in which a flash run is under way: the sidebar's first entry becomes
 # "Install Software" and holds the accent highlight until the run finishes.
 _INSTALL_RUN_STATES = (
@@ -557,6 +581,21 @@ def compact_install_height(
     if donations_disabled:
         return max(COMPACT_INSTALL_MIN_HEIGHT_NO_DONATIONS, page_h + prompt_h + header_h)
     return max(COMPACT_INSTALL_MIN_HEIGHT, page_h + prompt_h + status_h + header_h)
+
+
+def waiting_for_device_card(page) -> bool:
+    """True while the install card is only asking for the player.
+
+    The connect prompt and the power-off step draw one short card; a card that
+    is showing install progress keeps the wizard's tall preferred frame. The
+    window uses this to hug the prompt instead of leaving an empty band below
+    it (see ``_adjust_window_geometry``).
+    """
+    try:
+        remaining = int(getattr(page, "_attempt_remaining", 0) or 0)
+    except (TypeError, ValueError):
+        remaining = 0
+    return bool(getattr(page, "_prompt_only", False) or remaining > 0)
 
 
 def install_wizard_height(content_height: int, width: int) -> int:
@@ -3689,10 +3728,16 @@ class MainWindow(QMainWindow):
                 # Downloading and extraction keep their deliberately short
                 # cards. The flashing screen is the one that must look like a
                 # compact installer while it runs (and while it completes).
+                # While the card is only asking for the player (connect
+                # prompt, power-off step) the window hugs that one card: the
+                # wizard's tall preferred frame left a band of empty window
+                # below it. A card showing real progress keeps the wizard size.
+                waiting_for_device = waiting_for_device_card(page)
                 if (
                     getattr(page, "_stack", None) is not None
                     and page._stack.currentWidget()
                     is getattr(page, "_flashing_view", None)
+                    and not waiting_for_device
                 ):
                     content_h = install_wizard_height(content_h, target_w)
                 target_h = max(
@@ -6107,7 +6152,7 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         self._download_active = False
-        from ..flash_service import is_connect_failure, is_disconnection_error, is_mtk_device_connected, is_storage_full_error
+        from ..flash_service import is_attempt_timeout_error, is_connect_failure, is_disconnection_error, is_mtk_device_connected, is_storage_full_error
         if is_storage_full_error(error_code):
             try:
                 from ..downloads import clear_firmware_cache, downloads_dir
@@ -6167,10 +6212,46 @@ class MainWindow(QMainWindow):
             self._append_log(f"Flash failed due to device disconnection ({error_code}).")
             self._on_flash_disconnected()
             return
+        if is_attempt_timeout_error(error_code):
+            # The connect window ended with nothing attached. That is not a
+            # failed method, so the same engine is offered again: the user is
+            # sent back to the disconnect / power-off step, the killed run is
+            # already stopped, and Continue starts the same method afresh.
+            # Timeouts may repeat as often as needed; only a real install
+            # failure switches engines.
+            self._append_log(
+                f"No device inside the connect window ({error_code}); "
+                f"returning to the power-off step with {_method_label(self._flash_method)}."
+            )
+            self._return_to_power_off_stage(self._flash_method)
+            return
         # A backend that never got going is not the end of the install on a
         # host that has the other engine: hand the user back to the power-off
         # step and start the other one from there.
         if not cache_failure and self._offer_backend_failover(error_code):
+            return
+        from ..flash_service import is_mtk_method
+
+        if (
+            not cache_failure
+            and is_mtk_method(self._flash_method)
+            and _is_mtk_install_failure(error_code)
+        ):
+            from ..config import device_label_for_model
+
+            # The engine stopped with the player mid-download. Ask for the
+            # unplug / power-off (paperclip reset if needed) confirmation, then
+            # Continue starts a fresh run of the same method.
+            self._append_log(
+                f"MTKClient install failed ({error_code}); asking for a power cycle "
+                f"with {_method_label(self._flash_method)}."
+            )
+            self._return_to_power_off_stage(
+                self._flash_method,
+                recovery=True,
+                prompt_key="install_disconnect_guidance_fmt",
+                prompt_kwargs={"label": device_label_for_model(self._package_model)},
+            )
             return
         if not cache_failure and getattr(self.service, "_mtk_stall_prompt_text", lambda: None)():
             self._show_mtk_stall_restart_prompt()
@@ -6237,6 +6318,15 @@ class MainWindow(QMainWindow):
         """
         self.service.cancel_flash()
         self.service.stop_device_monitor()
+        # The killed command's children must be gone too: a leftover mtk.py /
+        # console SP Flash Tool run holds the USB port, and the retry the user
+        # confirms next would then fail on a busy device.
+        try:
+            from ..flash_service import terminate_sp_sessions
+
+            terminate_sp_sessions()
+        except Exception:
+            logger.debug("Could not stop leftover flashing sessions", exc_info=True)
         self._elapsed_timer.stop()
         self._install_failed = False
         self._power_off_prompt = True
@@ -6281,6 +6371,11 @@ class MainWindow(QMainWindow):
         one switch is made per install, so an exhausted pair of engines ends
         as an explained failure instead of a loop.
         """
+        from ..flash_service import is_attempt_timeout_error
+
+        if is_attempt_timeout_error(error_code):
+            # Nothing was there to flash: retry the same method, never switch.
+            return False
         if getattr(self, "_fallback_attempted", False):
             return False
         if is_wrong_model_error(error_code) or is_sp_driver_error(error_code):

@@ -233,18 +233,23 @@ def test_rockbox_themes_stage_with_adb_countdown():
         page.stop_theme_workers()
 
 
-def test_mtkclient_watchdog_8min_and_touch_reset():
-    """MTKClient uses a longer no-progress window than SP Flash Tool, and any
+def test_mtkclient_watchdog_is_one_minute_and_refills_once():
+    """MTKClient's connect window is a minute, and the countdown reaches zero.
 
-    MTK output line refreshes that window."""
-    from src.flash_service import ATTEMPT_PROGRESS_TIMEOUT_MTK, ATTEMPT_PROGRESS_TIMEOUT
-
-    # The code documents this as a longer MTK window than the SP Flash Tool one.
-    assert ATTEMPT_PROGRESS_TIMEOUT_MTK > ATTEMPT_PROGRESS_TIMEOUT
-    assert ATTEMPT_PROGRESS_TIMEOUT_MTK == 180.0
-
-    from src.flash_service import FlashWorker
+    The tool prints a line for almost everything it does; refreshing the window
+    from that chatter used to reset the countdown every few seconds, so it never
+    ended and the install was never handed back to the power-off step.
+    """
     import time
+
+    from src.flash_service import (
+        ATTEMPT_PROGRESS_TIMEOUT,
+        ATTEMPT_PROGRESS_TIMEOUT_MTK,
+        FlashWorker,
+    )
+
+    assert ATTEMPT_PROGRESS_TIMEOUT == 60.0
+    assert ATTEMPT_PROGRESS_TIMEOUT_MTK == 60.0
 
     app = _app()
     w = FlashWorker("dummy.zip", method="mtk", model="Y2")
@@ -254,15 +259,18 @@ def test_mtkclient_watchdog_8min_and_touch_reset():
         initial_deadline = watchdog._deadline
         time.sleep(0.05)
 
-        # Touching the attempt resets the window.
+        # The device being seen starts the window over, once.
         w._touch_attempt()
-        assert watchdog._deadline > initial_deadline
+        refilled = watchdog._deadline
+        assert refilled > initial_deadline
 
-        # A real MTK write line also refreshes the window.
-        d2 = watchdog._deadline
+        # Output lines and later sightings leave the deadline alone, so the
+        # countdown actually reaches zero.
         time.sleep(0.05)
         w._classify_mtk_output("sdmmc_write_data: 完成 50 chunks")
-        assert watchdog._deadline > d2
+        assert watchdog._deadline == refilled
+        w._touch_attempt()
+        assert watchdog._deadline == refilled
     finally:
         w._stop_attempt_watchdog()
 

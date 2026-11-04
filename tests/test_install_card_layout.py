@@ -432,3 +432,25 @@ def test_icon_progress_band_and_round_wizard_buttons_are_vertically_centered():
 
 
 
+
+
+
+def test_a_connect_prompt_card_does_not_ask_for_the_wizard_height():
+    """The card that only asks for the player hugs its own height.
+
+    The wizard's tall preferred frame is for a card showing progress; using it
+    while the connect countdown is up left a band of empty window under the
+    card.
+    """
+    from types import SimpleNamespace
+
+    from src.ui.main_window import waiting_for_device_card
+
+    assert waiting_for_device_card(SimpleNamespace(_attempt_remaining=178)) is True
+    assert waiting_for_device_card(SimpleNamespace(_prompt_only=True)) is True
+    assert (
+        waiting_for_device_card(
+            SimpleNamespace(_attempt_remaining=0, _prompt_only=False)
+        )
+        is False
+    )
