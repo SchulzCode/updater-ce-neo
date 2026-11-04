@@ -244,9 +244,7 @@ def _goal_line(stats, short: bool):
     (\u00a3/\u20ac/$), never converted.
     """
     sym = stats.get("currency_symbol", "$")
-    if stats["scope"] == "daily":
-        key = "donate_goal_day_status_fmt" if short else "donate_goal_day_fmt"
-    elif stats["scope"] == "weekly":
+    if stats["scope"] == "weekly":
         key = "donate_goal_week_status_fmt" if short else "donate_goal_week_fmt"
     else:
         key = "donate_goal_status_fmt" if short else "donate_goal_fmt"

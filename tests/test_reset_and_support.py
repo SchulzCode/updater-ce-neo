@@ -78,12 +78,12 @@ def test_goal_scope_is_monthly_on_the_months_edge_days_only():
         {"amount": 30.0, "dt": datetime(2026, 2, 2)},   # opening days
         {"amount": 10.0, "dt": datetime(2026, 2, 9)},   # first week block (Monday)
     ]
-    # February 2026 has 28 days: monthly on 1-5 and 22-28.
-    # Between day 6 and 21: Tuesdays and Wednesdays are daily ($10), others are weekly ($50).
+    # February 2026 has 28 days: monthly on 1-5 and 22-28, weekly in between,
+    # whatever day of the week those days fall on.
     assert get_goal_stats(donations, now=datetime(2026, 2, 5, 12, 0))["scope"] == "monthly"
     assert get_goal_stats(donations, now=datetime(2026, 2, 6, 12, 0))["scope"] == "weekly"  # Friday
-    assert get_goal_stats(donations, now=datetime(2026, 2, 10, 12, 0))["scope"] == "daily"   # Tuesday
-    assert get_goal_stats(donations, now=datetime(2026, 2, 11, 12, 0))["scope"] == "daily"   # Wednesday
+    assert get_goal_stats(donations, now=datetime(2026, 2, 10, 12, 0))["scope"] == "weekly"  # Tuesday
+    assert get_goal_stats(donations, now=datetime(2026, 2, 11, 12, 0))["scope"] == "weekly"  # Wednesday
     assert get_goal_stats(donations, now=datetime(2026, 2, 21, 12, 0))["scope"] == "weekly"  # Saturday
     assert get_goal_stats(donations, now=datetime(2026, 2, 22, 12, 0))["scope"] == "monthly"
 
@@ -96,18 +96,12 @@ def test_goal_scope_is_monthly_on_the_months_edge_days_only():
     # A week is a quarter of the month's costs, so it is $50 in every month.
     assert week["target"] == 50.0 and week["target"] == weekly_goal_usd(week["period_start"])
 
-    # Tuesday: daily target of $10, only today's donations counted
-    tuesday_stats = get_goal_stats(donations, now=datetime(2026, 2, 10, 12, 0))
-    assert tuesday_stats["scope"] == "daily"
-    assert tuesday_stats["target"] == 10.0
-    assert tuesday_stats["raised"] == 0.0
-
     closing = get_goal_stats(donations, now=datetime(2026, 2, 24, 12, 0))
     assert closing["scope"] == "monthly" and closing["raised"] == 40.0
 
     # A met goal reports itself as met, so the display can drop it entirely.
     met = get_goal_stats(
-        [{"amount": 15.0, "dt": datetime(2026, 2, 10)}], now=datetime(2026, 2, 10, 12, 0)
+        [{"amount": 55.0, "dt": datetime(2026, 2, 10)}], now=datetime(2026, 2, 10, 12, 0)
     )
     assert met["reached"] is True
 
