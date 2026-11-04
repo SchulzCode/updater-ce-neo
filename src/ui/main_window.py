@@ -5085,11 +5085,6 @@ class MainWindow(QMainWindow):
         self.themes.set_apk(apk_path, apk_url)
         self._is_360p_rockbox = is_360p_rockbox or bool(apk_path or apk_url)
 
-        try:
-            from ..sleep_inhibit import acquire_sleep_inhibition
-            acquire_sleep_inhibition("Firmware installation in progress")
-        except Exception as e:
-            logger.debug("Could not acquire sleep inhibition: %s", e)
 
         self._flash_page.set_package_name(self._package_name)
         self._flash_page.set_model(self._package_model)
@@ -5576,11 +5571,6 @@ class MainWindow(QMainWindow):
             self._kill_process_timer.timeout.connect(lambda: self._kill_flashing_process("usb disconnected"))
         self._kill_process_timer.start(5000)
 
-        try:
-            from ..sleep_inhibit import release_sleep_inhibition
-            release_sleep_inhibition()
-        except Exception:
-            pass
         self._install_failed = True
         self._power_off_prompt = False
         self._install_complete = False
@@ -5834,11 +5824,6 @@ class MainWindow(QMainWindow):
                     "[Rockbox Themes] Themes and fonts auto-install is off in Settings; "
                     "the install finishes without the themes stage."
                 )
-            try:
-                from ..sleep_inhibit import release_sleep_inhibition
-                release_sleep_inhibition()
-            except Exception:
-                pass
             self._install_complete = True
             self._compact_install_screen = False
             self._power_off_prompt = False
@@ -5978,11 +5963,6 @@ class MainWindow(QMainWindow):
         self.themes.mark_completion_shown()
         self.themes.finish()
         self._sync_install_nav_entry()
-        try:
-            from ..sleep_inhibit import release_sleep_inhibition
-            release_sleep_inhibition()
-        except Exception:
-            pass
         self._install_complete = True
         self._compact_install_screen = False
         self._power_off_prompt = False
@@ -6146,11 +6126,6 @@ class MainWindow(QMainWindow):
         self._update_header_title()
 
     def _handle_flash_failure(self, error_code):
-        try:
-            from ..sleep_inhibit import release_sleep_inhibition
-            release_sleep_inhibition()
-        except Exception:
-            pass
         self._download_active = False
         from ..flash_service import is_attempt_timeout_error, is_connect_failure, is_disconnection_error, is_mtk_device_connected, is_storage_full_error
         if is_storage_full_error(error_code):
@@ -6636,11 +6611,6 @@ class MainWindow(QMainWindow):
             from .. import process_guard
             for _ in process_guard.end_install_session(reason="restart prompt accepted"):
                 pass
-            try:
-                from ..sleep_inhibit import release_sleep_inhibition
-                release_sleep_inhibition()
-            except Exception:
-                pass
             QApplication.quit()
 
     def _show_com_port_reboot_suggestion(self, error_code):
@@ -6682,12 +6652,6 @@ class MainWindow(QMainWindow):
 
             for _ in process_guard.end_install_session(reason="restart computer suggestion accepted"):
                 pass
-            try:
-                from ..sleep_inhibit import release_sleep_inhibition
-
-                release_sleep_inhibition()
-            except Exception:
-                pass
             QApplication.quit()
 
     def _on_method_changed(self, method):
@@ -6714,11 +6678,20 @@ class MainWindow(QMainWindow):
     def _stop_running_install(self) -> None:
         """Stop a download or flash so it does not keep running in the background."""
         self._download_active = False
+        # Abandoning a run ends the window in which a backend may hold the USB
+        # port, and with it the system-awake hold: nothing is touching the
+        # player from here. Cancel first so the sweep cannot take a live writer
+        # with it, and let the sweep run off the GUI thread.
+        self.themes.finish()
         try:
-            from ..sleep_inhibit import release_sleep_inhibition
-            release_sleep_inhibition()
+            self.service.cancel_flash()
+            self.service.stop_device_monitor()
         except Exception:
-            pass
+            logger.debug("Stopping the install run failed", exc_info=True)
+        from .. import process_guard
+
+        process_guard.end_install_session(reason="install stopped", sweep=False)
+        process_guard.sweep_async(reason="install stopped", on_done=self.sweep_report.emit)
         if hasattr(self, "_flash_page") and hasattr(self._flash_page, "stop_theme_workers"):
             self._flash_page.stop_theme_workers()
         page = getattr(self, "_select_page", None)
@@ -8723,19 +8696,9 @@ class MainWindow(QMainWindow):
                     self.service.cancel_flash()
                 except Exception:
                     pass
-            try:
-                from ..sleep_inhibit import release_sleep_inhibition
-                release_sleep_inhibition()
-            except Exception:
-                pass
         elif hasattr(self, "service") and self.service:
             try:
                 self.service.cancel_flash()
-            except Exception:
-                pass
-            try:
-                from ..sleep_inhibit import release_sleep_inhibition
-                release_sleep_inhibition()
             except Exception:
                 pass
 

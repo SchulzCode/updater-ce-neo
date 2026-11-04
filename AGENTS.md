@@ -101,6 +101,12 @@
   and `src/linux_sp_flash.py` are the user-confirmed working back-end: installs complete without bricking
   devices when the connection is not interrupted.
 - Preserve this logic. Change it only when the user explicitly asks for a change to it.
+- **The host must stay awake for exactly the device window.** A flash or a Rockbox themes transfer that the
+  OS suspends mid-write bricks the player, so `src/sleep_inhibit.py` holds a power assertion: named holds
+  (`"install session"` via `process_guard.begin/end_install_session`, `"themes:<id>"` via
+  `ThemesJourney.begin/finish`) so one finishing never frees the other, and `MainWindow._stop_running_install`
+  ends both when a run is abandoned. Do not add ad-hoc acquire/release pairs in the widgets, and do not hold
+  anything while the app is idle or finished — the hold must disappear with the task.
 
 ## Rockbox themes/fonts stage: one owner for its state
 - `src/themes_journey.py` (`ThemesJourney`) owns the stage's decisions and state: transfer running,

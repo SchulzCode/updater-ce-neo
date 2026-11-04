@@ -414,6 +414,14 @@ def begin_install_session(reason: str = "") -> None:
     with _SESSION_LOCK:
         _ACTIVE_SESSIONS = 1
     logger.debug("Install session opened%s", f" ({reason})" if reason else "")
+    # A flash backend is about to talk to the player over USB: the host must
+    # not suspend in the middle of a write. The hold ends with the session.
+    try:
+        from .sleep_inhibit import hold_sleep
+
+        hold_sleep("install session")
+    except Exception:
+        logger.debug("Could not hold the system awake", exc_info=True)
 
 
 def end_install_session(reason: str = "", sweep: bool = True) -> list:
@@ -422,6 +430,12 @@ def end_install_session(reason: str = "", sweep: bool = True) -> list:
     with _SESSION_LOCK:
         _ACTIVE_SESSIONS = 0
     logger.debug("Install session closed%s", f" ({reason})" if reason else "")
+    try:
+        from .sleep_inhibit import release_sleep
+
+        release_sleep("install session")
+    except Exception:
+        logger.debug("Could not release the system-awake hold", exc_info=True)
     return sweep_stray_tools(reason=reason) if sweep else []
 
 

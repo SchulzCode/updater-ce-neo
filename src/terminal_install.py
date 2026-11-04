@@ -340,6 +340,32 @@ def _resolve_lines(command: Sequence[str], fallbacks: Sequence[str], identity: t
     return lines
 
 
+def _awake_wrapper_lines() -> list:
+    """Re-exec the launcher under a sleep inhibitor, exactly once.
+
+    A terminal install runs the flash in its own window, not in the app, so
+    the app's own power assertion disappears when it hands over. Both
+    ``caffeinate -i`` (macOS) and ``systemd-inhibit`` (Linux) run a child
+    command and hold the assertion for as long as it runs. The systemd flags
+    are probed first: on a systemd without ``handle-lid-switch`` the exec
+    would abort the install instead of protecting it.
+    """
+    return [
+        'if [ -z "${INNIOASIS_INSTALL_AWAKE:-}" ]; then',
+        "  export INNIOASIS_INSTALL_AWAKE=1",
+        "  if command -v caffeinate >/dev/null 2>&1; then",
+        '    exec caffeinate -i "$0" "$@"',
+        "  elif command -v systemd-inhibit >/dev/null 2>&1 \\",
+        '      && systemd-inhibit --what=idle:sleep:handle-lid-switch \\',
+        '         --who="Innioasis Updater CE" --why=probe true 2>/dev/null; then',
+        '    exec systemd-inhibit --what=idle:sleep:handle-lid-switch \\',
+        '      --who="Innioasis Updater CE" \\',
+        '      --why="Firmware installation in progress" "$0" "$@"',
+        "  fi",
+        "fi",
+    ]
+
+
 def build_script(
     command: Sequence[str],
     title: str = "Innioasis Updater CE",
@@ -373,6 +399,7 @@ def build_script(
         suffix = ".command" if sys.platform == "darwin" else ".sh"
         path = out_dir / f"{SCRIPT_BASENAME}{suffix}"
         lines = ["#!/bin/bash", f"# {title}"]
+        lines.extend(_awake_wrapper_lines())
         if cwd:
             lines.append(f"cd {shlex.quote(str(cwd))} || exit 1")
         for key, value in (env or {}).items():
