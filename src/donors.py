@@ -260,9 +260,10 @@ def get_goal_stats(donations, now=None):
     """Raised against the target this day of the month's display should name.
 
     Returns ``{"scope", "raised", "remaining", "percent", "target",
-    "period_start", "reached"}``. ``reached`` reports a complete goal, which
-    the callers use to drop the goal line altogether: a finished target is
-    never mentioned, only an outstanding one.
+    "period_start", "reached", "month_raised", "month_reached"}``.
+    ``reached`` reports a complete goal and ``month_reached`` a covered month:
+    either one means no goal may be named, because a finished target is never
+    mentioned, only an outstanding one.
     """
     now = now or datetime.now()
     scope = goal_scope(now)
@@ -270,6 +271,7 @@ def get_goal_stats(donations, now=None):
     start = goal_period_start(now)
     start_day = start.date()
     raised = 0.0
+    month_raised = 0.0
     for donation in donations or ():
         dt = donation.get("dt")
         if not dt:
@@ -282,9 +284,11 @@ def get_goal_stats(donations, now=None):
             continue
         # A donation dated later in the month has not happened yet, so it is
         # not part of what this period has raised.
-        if day < start_day or day > now.date():
+        if day > now.date():
             continue
-        raised += amount
+        month_raised += amount
+        if day >= start_day:
+            raised += amount
     percent = min(100.0, max(0.0, (raised / target) * 100.0)) if target > 0 else 0.0
     return {
         "scope": scope,
@@ -293,6 +297,11 @@ def get_goal_stats(donations, now=None):
         "percent": percent,
         "target": target,
         "period_start": start,
+        # The month's own total travels with the week's: it is one pot of costs,
+        # so a covered month has nothing outstanding to name even in a week
+        # that has not seen a donation yet.
+        "month_raised": month_raised,
+        "month_reached": month_raised >= MONTHLY_GOAL_USD,
         "reached": raised >= target,
     }
 

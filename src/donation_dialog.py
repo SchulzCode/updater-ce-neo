@@ -216,9 +216,12 @@ def _goal_is_suppressed(inst, stats) -> bool:
 
     A completed goal is never mentioned, only an outstanding one, so both
     scopes drop the line the moment they are met and fall back to donor lines
-    and the usual encouragement. The monthly line also stays away at $0, where
-    it would read as a $200 shortfall in the first hour of the month; the
-    weekly line keeps its $0, which is the point of asking by the week.
+    and the usual encouragement. A covered month also silences the weekly ask:
+    the week's target is a share of the same costs, so once the month is paid
+    for there is nothing outstanding to name. The monthly line additionally
+    stays away at $0, where it would read as a $200 shortfall in the first hour
+    of the month; the weekly line keeps its $0, which is the point of asking by
+    the week.
     """
     _os_k, _ew, g_ok, _p_ok, _ = _resolve_bar_state(inst)
     raised = float(stats["raised"])
@@ -226,6 +229,7 @@ def _goal_is_suppressed(inst, stats) -> bool:
     return bool(
         not g_ok
         or stats["reached"]
+        or stats.get("month_reached")
         or (stats["scope"] == "monthly" and raised <= 0.0)
         or (target - raised) < 1.0
     )

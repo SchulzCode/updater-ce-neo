@@ -142,6 +142,33 @@ def test_status_bar_names_only_the_weeks_costs_mid_month(qapp):
         translator().set_language("en")
 
 
+def test_goal_is_dropped_once_the_month_is_covered_even_mid_week(qapp):
+    from datetime import datetime
+
+    from src.i18n import translator
+
+    translator().set_language("en")
+    try:
+        # The month's $200 was met on day 2. On day 10 this week has seen no
+        # donation at all, but the costs it would cover are already paid for,
+        # so no goal may be mentioned: donor lines and encouragement only.
+        donations = [
+            {"amount": 150.0, "name": "Alice", "dt": datetime(2026, 11, 2)},
+            {"amount": 50.0, "name": "Bob", "dt": datetime(2026, 11, 2)},
+        ]
+        bar = DonationStatusBar(donations=donations)
+        _draw_goal_at(bar, datetime(2026, 11, 10, 12, 0))
+        assert bar._goal_scope == "weekly"
+        assert bar._goal_reached is False   # the week itself is still short...
+        assert bar._goal_suppressed is True  # ...but the month is covered
+        assert bar._showing_goal is False
+        assert not bar._goal_label.isVisible()
+        assert not bar._goal_bar.isVisible()
+        bar.deleteLater()
+    finally:
+        translator().set_language("en")
+
+
 def test_support_page_narratives_and_methods(qapp):
     from src.i18n import translator, tr
 
