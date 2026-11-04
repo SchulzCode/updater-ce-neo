@@ -1698,6 +1698,18 @@ _STRINGS: dict = {
         "de": "Seite öffnen",
         "ja": "ページを開く",
     },
+    "notices_summary_title_one": {
+        "en": "New Community Notice",
+        "en-US": "New Community Notice",
+    },
+    "notices_summary_title_many": {
+        "en": "{count} New Community Notices",
+        "en-US": "{count} New Community Notices",
+    },
+    "notices_summary_body": {
+        "en": "Open the app to read them.",
+        "en-US": "Open the app to read them.",
+    },
     "notices_how_community": {
         "en": "How community notices work",
         "zh-CN": "社区公告如何运作",

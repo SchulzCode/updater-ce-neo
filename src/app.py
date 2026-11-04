@@ -509,6 +509,18 @@ def main():
     app.setApplicationName(config.get_app_name())
     app.setOrganizationName("innioasis")
 
+    # Ask macOS for notification permission while the app is starting: until the
+    # user answers, macOS files a notice silently instead of showing it, and the
+    # question deep in an install looks like a notice that never appeared.
+    try:
+        from .notifications import prepare_system_notifications
+
+        prepare_system_notifications()
+    except Exception:
+        logging.getLogger(__name__).debug(
+            "Notification permission could not be requested", exc_info=True
+        )
+
     # Every file from innioasis.app (catalogue, notices, donors, blocklist) is
     # read from the copies shipped in the app and replaced in the background
     # only when stale, so the first window never waits on the network.

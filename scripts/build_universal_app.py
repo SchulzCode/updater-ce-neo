@@ -162,6 +162,11 @@ int main(int argc, char **argv, char **envp) {
     // Ensure terminal/GUI output is unbuffered
     setenv("PYTHONUNBUFFERED", "1", 1);
 
+    // The bundle is code-signed. A writable .app (dist/, a copy in Downloads)
+    // lets CPython drop __pycache__ beside the shipped bytecode, which changes
+    // a sealed resource and invalidates the signature on the very first run.
+    setenv("PYTHONDONTWRITEBYTECODE", "1", 1);
+
     // Set dynamic linker paths
     char dyld[4096];
     snprintf(dyld, sizeof(dyld), "%s:%s/lib:%s", frameworks_dir, python_dir, qt_lib_dir);
@@ -254,6 +259,10 @@ def ensure_cached_assets():
         "pyobjc_core.whl": "https://files.pythonhosted.org/packages/95/df/d2b290708e9da86d6e7a9a2a2022b91915cf2e712a5a82e306cb6ee99792/pyobjc_core-12.1-cp311-cp311-macosx_10_9_universal2.whl",
         "pyobjc_framework_cocoa.whl": "https://files.pythonhosted.org/packages/3f/07/5760735c0fffc65107e648eaf7e0991f46da442ac4493501be5380e6d9d4/pyobjc_framework_cocoa-12.1-cp311-cp311-macosx_10_9_universal2.whl",
         "pyobjc_framework_quartz.whl": "https://files.pythonhosted.org/packages/b7/ef/dcd22b743e38b3c430fce4788176c2c5afa8bfb01085b8143b02d1e75201/pyobjc_framework_quartz-12.1-cp311-cp311-macosx_10_9_universal2.whl",
+        # UserNotifications: the only macOS channel that takes part in the
+        # host's permission and presentation settings, so notices appear as
+        # banners. The older NSUserNotification API files them silently.
+        "pyobjc_framework_usernotifications.whl": "https://files.pythonhosted.org/packages/d1/96/aa25bb0727e661a352d1c52e7288e25c12fe77047f988bb45557c17cf2d7/pyobjc_framework_usernotifications-12.1-cp311-cp311-macosx_10_9_universal2.whl",
         "capstone.whl": "https://files.pythonhosted.org/packages/da/f3/43f4dbfc36c7740d512621a9d42b276ac21bb6ca7cb974d4c8a19060d387/capstone-5.0.9-py3-none-macosx_10_9_universal2.whl",
     }
     pure_deps = [

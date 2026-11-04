@@ -10,6 +10,12 @@ import os
 import sys
 from pathlib import Path
 
+# Never write __pycache__ beside the shipped bytecode: the app bundle is
+# code-signed, and a writable .app would otherwise change a sealed resource on
+# its first run. The launcher sets this for the packaged app; this covers a
+# source checkout started straight from launcher.py too.
+sys.dont_write_bytecode = True
+
 SRC = Path(__file__).resolve().parent / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))

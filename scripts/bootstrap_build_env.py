@@ -74,7 +74,15 @@ BASE_MODULES = (
     "colorama",
     "capstone",
 )
-DARWIN_MODULES = ("objc", "AppKit", "Foundation", "Quartz", "pyqt_liquidglass", "libusb_package")
+DARWIN_MODULES = (
+    "objc",
+    "AppKit",
+    "Foundation",
+    "Quartz",
+    "UserNotifications",
+    "pyqt_liquidglass",
+    "libusb_package",
+)
 
 # One subprocess verifies every module, so a slow import (PySide6, AppKit) is
 # paid once. Any exception counts as missing: a half-installed wheel is not

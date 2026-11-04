@@ -8269,10 +8269,12 @@ class MainWindow(QMainWindow):
         btn.setEnabled(visible)
 
     def _notify_about_notices(self, notices) -> None:
-        """Announce each genuinely new notice whose category is switched on.
+        """Announce the new notices as one counted notification.
 
-        Notices are marked seen whether or not a notification was sent, so
-        turning a category on later never replays old announcements.
+        One banner for the batch, never one per notice: a feed that publishes
+        three items must not raise three alerts. Notices are marked seen whether
+        or not a notification was sent, so turning a category on later never
+        replays old announcements.
         """
         from .. import notice_alerts
 
@@ -8281,10 +8283,9 @@ class MainWindow(QMainWindow):
             return
         logger.info("Notices: %d new since the last run", len(fresh))
         notice_alerts.mark_notices_seen(n.id for n in fresh)
-        tray = self._notification_tray()
-        for notice in fresh:
-            if notice_alerts.category_enabled(notice_alerts.notice_category(notice)):
-                notice_alerts.notify_notice(notice, tray=tray, route="notices")
+        notice_alerts.notify_new_notices(
+            fresh, tray=self._notification_tray(), route="notices"
+        )
 
     def _on_notification_clicked(self, route=None) -> None:
         """Route a clicked system notification to the view it announces."""

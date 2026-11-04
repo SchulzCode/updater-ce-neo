@@ -1,17 +1,16 @@
 """macOS notifications and identity: the app posts its own, never AppleScript.
 
 The launcher hands over to the bundled interpreter, so that process is what
-macOS names and what owns the app's notifications. These tests pin the things
-that depend on it: nothing ever falls back to ``osascript`` (macOS files those
-banners under Script Editor, an app the user never opened), the notification
-switch only offers a channel that carries this app's name, and the login item
-starts the .app bundle rather than the raw interpreter.
+macOS names and what owns the app's notifications. These tests pin what depends
+on that: notices go through ``UNUserNotificationCenter`` (the only channel that
+can show a banner), a bundled build never falls back to ``osascript`` (macOS
+files those banners under Script Editor), and the login item starts the .app
+bundle rather than the raw interpreter.
 """
 
 import importlib.util
 import plistlib
 import sys
-import types
 from pathlib import Path
 
 import pytest
@@ -30,11 +29,84 @@ def _builder():
     return module
 
 
-# -- notification channel ---------------------------------------------------
+def _no_modern_center(monkeypatch):
+    """Pretend this host has no UserNotifications framework (the harsher host)."""
+    monkeypatch.setattr(notifications, "_macos_user_notification_center", lambda: None)
+
+
+# -- the modern channel -----------------------------------------------------
+
+
+def test_banner_presentation_is_requested():
+    pytest.importorskip("UserNotifications")
+    options = notifications._macos_presentation_options()
+    assert options & 16  # banner
+    assert options & 8  # notification list
+    assert options & 2  # sound
+
+
+def test_the_delegate_answers_the_frameworks_own_selectors():
+    """A mis-named delegate method raises BadPrototypeError and loses every notice."""
+    pytest.importorskip("UserNotifications")
+    delegate = notifications._macos_un_delegate_object()
+    assert delegate.respondsToSelector_(
+        "userNotificationCenter:willPresentNotification:withCompletionHandler:"
+    )
+    assert delegate.respondsToSelector_(
+        "userNotificationCenter:didReceiveNotificationResponse:withCompletionHandler:"
+    )
+
+
+def test_a_notice_goes_through_the_apps_own_center(monkeypatch):
+    pytest.importorskip("UserNotifications")
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(notifications, "_macos_bundle_identifier", lambda: "com.innioasis.updater")
+    monkeypatch.setitem(notifications._macos_un_state, "authorized", True)
+    monkeypatch.setitem(notifications._macos_un_state, "pending", [])
+    added = []
+
+    class _Center:
+        def addNotificationRequest_withCompletionHandler_(self, request, handler):
+            added.append(request)
+
+    monkeypatch.setattr(notifications, "_macos_user_notification_center", lambda: _Center())
+    monkeypatch.setattr(
+        notifications, "_show_macos_script_notification", lambda *a: pytest.fail("osascript used")
+    )
+
+    assert notifications.show_system_notification("Installation Complete", "Y2", route="notices")
+    content = added[0].content()
+    assert content.title() == "Installation Complete"
+    assert content.body() == "Y2"
+    assert dict(content.userInfo())["route"] == "notices"
+
+
+def test_a_notice_is_held_until_the_permission_answer_arrives(monkeypatch):
+    """macOS files a request posted before the answer, so it must wait."""
+    monkeypatch.setitem(notifications._macos_un_state, "authorized", None)
+    monkeypatch.setitem(notifications._macos_un_state, "pending", [])
+
+    assert notifications._post_macos_user_notification(object(), "Installation Complete", "Y2", "notices")
+    assert notifications._macos_un_state["pending"] == [("Installation Complete", "Y2", "notices")]
+
+
+def test_declined_permission_is_respected(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(notifications, "_macos_user_notification_center", lambda: object())
+    monkeypatch.setitem(notifications._macos_un_state, "authorized", False)
+    monkeypatch.setattr(
+        notifications, "_show_macos_script_notification", lambda *a: pytest.fail("osascript used")
+    )
+
+    assert notifications.show_system_notification("t", "m") is False
+
+
+# -- the legacy host --------------------------------------------------------
 
 
 def test_a_bundled_app_never_posts_through_osascript(monkeypatch):
     monkeypatch.setattr(sys, "platform", "darwin")
+    _no_modern_center(monkeypatch)
     monkeypatch.setattr(notifications, "_macos_notification_center", lambda: None)
     monkeypatch.setattr(notifications, "_macos_bundle_identifier", lambda: "com.innioasis.updater")
     spawned = []
@@ -44,34 +116,27 @@ def test_a_bundled_app_never_posts_through_osascript(monkeypatch):
     assert spawned == []
 
 
-def test_a_source_checkout_never_posts_through_osascript(monkeypatch):
-    """No bundle and no center: the notice is kept in the app, not handed to a script host."""
+def test_a_source_checkout_passes_the_text_as_arguments(monkeypatch):
+    """No interpolation: a quote or "$(...)" in a notice can never become code."""
     monkeypatch.setattr(sys, "platform", "darwin")
+    _no_modern_center(monkeypatch)
     monkeypatch.setattr(notifications, "_macos_notification_center", lambda: None)
     monkeypatch.setattr(notifications, "_macos_bundle_identifier", lambda: "")
     monkeypatch.setattr(notifications.shutil, "which", lambda name: "/usr/bin/osascript")
     spawned = []
     monkeypatch.setattr(notifications.subprocess, "Popen", lambda argv, **k: spawned.append(argv))
 
-    assert notifications.show_system_notification("Installation Complete", "Y2") is False
-    assert spawned == []
-
-
-def test_notifications_are_unavailable_without_the_apps_own_identity(monkeypatch):
-    monkeypatch.setattr(sys, "platform", "darwin")
-    monkeypatch.setitem(
-        sys.modules, "AppKit", types.SimpleNamespace(NSUserNotificationCenter=object)
-    )
-    monkeypatch.setattr(notifications, "_macos_bundle_identifier", lambda: "")
-
-    assert notifications.system_notifications_available() is False
-
-    monkeypatch.setattr(notifications, "_macos_bundle_identifier", lambda: "com.innioasis.updater")
-    assert notifications.system_notifications_available() is True
+    title = 'Installation Complete " done" $(rm -rf ~) \\'
+    assert notifications.show_system_notification(title, "Y2") is True
+    argv = spawned[0]
+    assert argv[0] == "/usr/bin/osascript"
+    assert argv[1:3] == ["-e", "on run argv"]
+    assert argv[-2:] == [title, "Y2"]
 
 
 def test_the_apps_own_notification_channel_wins_over_the_tray(monkeypatch):
     monkeypatch.setattr(sys, "platform", "darwin")
+    _no_modern_center(monkeypatch)
     monkeypatch.setattr(notifications, "_macos_notification_center", lambda: object())
     monkeypatch.setattr(
         notifications, "_show_macos_notification", lambda center, title, message: True
@@ -85,34 +150,6 @@ def test_the_apps_own_notification_channel_wins_over_the_tray(monkeypatch):
 
     assert notifications.show_system_notification("t", "m", tray=object()) is True
     assert tray_calls == []
-
-
-def test_housekeeping_notifies_natively_or_not_at_all(monkeypatch):
-    """The scheduled check must never pop a banner under Script Editor."""
-    from housekeeping import core
-
-    monkeypatch.setattr(sys, "platform", "darwin")
-    # A launchd run of a source checkout has no PyObjC bundle identity to use.
-    monkeypatch.setitem(sys.modules, "Foundation", None)
-    calls = []
-    monkeypatch.setattr(core.subprocess, "run", lambda *a, **k: calls.append(a))
-
-    core.notify("Mirror Housekeeping", "2 mirror(s) need attention")
-
-    assert calls == []
-
-
-def test_no_source_file_can_hand_a_notice_to_a_script_host():
-    """The rule everywhere, not only at the call sites covered above."""
-    candidates = [ROOT / "launcher.py", ROOT / "housekeeping" / "core.py"]
-    candidates += sorted((ROOT / "src").rglob("*.py"))
-    needles = ("display notification", "display alert")
-    offenders = [
-        str(path.relative_to(ROOT))
-        for path in candidates
-        if any(needle in path.read_text(encoding="utf-8") for needle in needles)
-    ]
-    assert offenders == []
 
 
 # -- build identity ---------------------------------------------------------
@@ -139,6 +176,12 @@ def test_launcher_prefers_the_interpreter_named_after_the_app():
     source = builder.launcher_source()
     assert "@@APP_EXECUTABLE@@" not in source
     assert f"%s/bin/{builder.APP_DISPLAY_NAME}" in source
+
+
+def test_build_bundles_the_notification_framework():
+    """Without UserNotifications the app can only file notices silently."""
+    source = (ROOT / "scripts" / "build_universal_app.py").read_text(encoding="utf-8")
+    assert "pyobjc_framework_usernotifications" in source
 
 
 # -- login item -------------------------------------------------------------
