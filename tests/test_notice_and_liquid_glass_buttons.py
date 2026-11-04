@@ -244,6 +244,44 @@ def test_toast_widgets_use_liquid_glass_round_buttons():
     assert n_close.cursor().shape() == Qt.ArrowCursor
 
 
+def test_notice_toast_title_is_the_notice_title_never_its_id():
+    """The Select Software banner must not print a feed id as its headline."""
+    app = QApplication.instance() or QApplication(sys.argv)
+    from src.i18n import tr
+
+    toast = NoticeToast()
+    try:
+        # A feed entry whose title repeats its id (the form that used to reach
+        # this banner): the id belongs in routing and settings, not on screen.
+        toast.set_notice(
+            Notice(
+                id="2026-11-03-rockbox-y2-warn",
+                title="2026-11-03-rockbox-y2-warn",
+                content="Rockbox 360p themes not working.",
+            )
+        )
+        assert toast._title_label.text() == tr("notices_dialog_title")
+        assert "2026-11-03" not in toast._title_label.text()
+
+        # A real headline is displayed exactly as the feed wrote it.
+        toast.set_notice(
+            Notice(
+                id="2026-11-03-rockbox-y2-warn",
+                title="Users having issues with Rockbox for Y2.",
+                content="Rockbox 360p themes not working.",
+            )
+        )
+        assert toast._title_label.text() == "Users having issues with Rockbox for Y2."
+
+        # A notice without a headline still gets words, not a blank title.
+        toast.set_notice(Notice(id="2026-10-25-firmware-advisory", title="", content="Body"))
+        assert toast._title_label.text() == tr("notices_dialog_title")
+    finally:
+        toast.close()
+        toast.deleteLater()
+        app.processEvents()
+
+
 def test_retry_buttons_use_arrow_based_retry_glyph():
     app = QApplication.instance() or QApplication(sys.argv)
 

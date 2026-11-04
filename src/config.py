@@ -226,6 +226,9 @@ def site_source_urls(path: str) -> tuple[str, ...]:
 DONATION_LINKS = {
     "kofi": "https://ko-fi.com/teamslide",
     "bmc": "https://buymeacoffee.com/ryanspecter",
+    # The only donation page that accepts a Russian card, so Russian readers in
+    # Russia are offered this instead of the coffee pages (see fx.donation_route()).
+    "boosty": "https://boosty.to/ryanspecter",
     "paypal": "https://paypal.me/ryanspecter282",
     "revolut": "https://revolut.me/rspecter",
     "patreon": "https://www.patreon.com/ryanspecter",

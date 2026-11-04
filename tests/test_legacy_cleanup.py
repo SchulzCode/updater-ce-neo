@@ -576,3 +576,125 @@ if __name__ == "__main__":
     test_platform_tools_question_asks_and_is_honoured()
     test_removal_journey_stays_in_the_card()
     print("All legacy cleanup tests passed!")
+
+
+def test_removal_offer_is_refused_where_the_card_is_not_offered(monkeypatch):
+    """The launch check must not focus a card this host never shows.
+
+    Windows keeps a pre-3.0 data folder that the detector counts as legacy, but
+    the Settings column does not offer removal there. Focusing the hidden card
+    used to hide every other card and switch scrolling off, with no journey to
+    finish -- a launch glitch the reader could not scroll out of.
+    """
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    import src.legacy_cleanup as legacy
+    import src.ui.settings_page as settings_page
+    from src.i18n import translator
+    from src.ui.settings_page import SettingsPage
+
+    app = QApplication.instance() or QApplication(["--platform", "offscreen"])
+    original_lang = translator().lang
+    translator().set_language("en")
+    page = None
+    try:
+        monkeypatch.setattr(
+            legacy,
+            "detect_legacy_installations",
+            lambda: {
+                "has_legacy": True,
+                "windows_legacy_dirs": [
+                    Path("C:/Users/test/AppData/Local/Innioasis Updater")
+                ],
+                "estimated_bytes": 1024,
+            },
+        )
+        monkeypatch.setattr(settings_page.paths, "IS_WINDOWS", True)
+        page = SettingsPage()
+
+        assert page.legacy_offer_available() is False
+        assert page._legacy_cleanup_card.isHidden()
+        assert page.show_card_alone(page._legacy_cleanup_card) is False
+        assert page.focused_card() is None
+        # Nothing was hidden for a journey that could not start: the ordinary
+        # Settings column is still on screen.
+        assert not page._reminders_card.isHidden()
+    finally:
+        translator().set_language(original_lang)
+        if page is not None:
+            page.deleteLater()
+            app.processEvents()
+
+
+def test_focused_settings_card_hides_every_card_in_the_column():
+    """A guided card owns Settings: no other card may stay on screen."""
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    from src.i18n import translator
+    from src.ui.settings_page import SettingsPage
+
+    app = QApplication.instance() or QApplication(["--platform", "offscreen"])
+    original_lang = translator().lang
+    translator().set_language("en")
+    page = None
+    try:
+        page = SettingsPage()
+        focus = page._reminders_card
+        assert page.show_card_alone(focus) is True
+        assert page.focused_card() is focus
+        cards = page._cards_in_column()
+        # The shortcut card is part of the column even though the old name list
+        # forgot it.
+        assert page._shortcuts_card in cards
+        for card in cards:
+            assert card.isHidden() is (card is not focus), card
+        page.clear_card_focus()
+        assert page.focused_card() is None
+    finally:
+        translator().set_language(original_lang)
+        if page is not None:
+            page.deleteLater()
+            app.processEvents()
+
+
+def test_removal_offer_shows_where_the_card_is_offered(monkeypatch):
+    """Off Windows, a real legacy install still puts the card on screen."""
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    import src.legacy_cleanup as legacy
+    import src.ui.settings_page as settings_page
+    from src.i18n import translator
+    from src.ui.settings_page import SettingsPage
+
+    app = QApplication.instance() or QApplication(["--platform", "offscreen"])
+    original_lang = translator().lang
+    translator().set_language("en")
+    page = None
+    try:
+        monkeypatch.setattr(
+            legacy,
+            "detect_legacy_installations",
+            lambda: {
+                "has_legacy": True,
+                "macos_apps": [Path("/Applications/InnioasisUpdater.app")],
+                "estimated_bytes": 1024,
+            },
+        )
+        monkeypatch.setattr(settings_page.paths, "IS_WINDOWS", False)
+        monkeypatch.setattr(settings_page, "is_mediatek_installer", lambda: False)
+        page = SettingsPage()
+
+        assert page.legacy_offer_available() is True
+        page._update_legacy_cleanup_visibility()
+        assert not page._legacy_cleanup_card.isHidden()
+        assert page.show_card_alone(page._legacy_cleanup_card) is True
+        assert page.focused_card() is page._legacy_cleanup_card
+        page.clear_card_focus()
+    finally:
+        translator().set_language(original_lang)
+        if page is not None:
+            page.deleteLater()
+            app.processEvents()

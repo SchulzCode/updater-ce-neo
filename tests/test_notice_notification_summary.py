@@ -33,7 +33,7 @@ def test_three_new_notices_arrive_as_one_counted_notification(monkeypatch, deliv
     assert len(delivered) == 1
     title, _message, route = delivered[0]
     assert title == tr("notices_summary_title_many").format(count=3)
-    assert route == "notices"
+    assert route == "notices:a"
 
 
 def test_a_single_notice_is_announced_by_its_own_headline(monkeypatch, delivered):
@@ -95,3 +95,75 @@ def test_the_window_posts_one_notification_for_the_whole_batch(monkeypatch):
         _Window(), [_notice("a"), _notice("b"), _notice("c")]
     )
     assert posted == [3]
+
+
+def test_notification_titles_never_fall_back_to_keys_or_notice_ids(
+    monkeypatch, delivered
+):
+    import src.i18n as i18n
+
+    monkeypatch.setattr(notice_alerts, "category_enabled", lambda category: True)
+    monkeypatch.setattr(i18n, "tr", lambda key: key)
+
+    notice_alerts.notify_new_notices(
+        [_notice("2026-11-03-rockbox-y2-warn", title="2026-11-03-rockbox-y2-warn")]
+    )
+    title, body, _route = delivered[0]
+    assert "notices_summary_" not in title
+    assert "2026-11-03-rockbox-y2-warn" not in title
+    assert "2026-11-03-rockbox-y2-warn" not in body
+
+    delivered.clear()
+    notice_alerts.notify_new_notices([_notice("a"), _notice("b")])
+    title, body, _route = delivered[0]
+    assert title == "2 New Community Notices"
+    assert body == "Open Notices in the app to read them."
+
+
+def test_a_catalogue_value_equal_to_the_notice_id_is_not_used(monkeypatch, delivered):
+    import src.i18n as i18n
+
+    monkeypatch.setattr(notice_alerts, "category_enabled", lambda category: True)
+    monkeypatch.setattr(i18n, "tr", lambda key: "2026-11-03-rockbox-y2-warn")
+    notice_alerts.notify_new_notices(
+        [_notice("2026-11-03-rockbox-y2-warn", title="A real headline")]
+    )
+    title, _body, _route = delivered[0]
+    assert title == "New Community Notice"
+
+
+def test_notice_rows_use_words_instead_of_an_id(monkeypatch):
+    from src.ui.dialogs import _notice_heading
+
+    assert _notice_heading(_notice("a", title="")) == tr("notices_dialog_title")
+    assert _notice_heading(_notice("a", title="a")) == tr("notices_dialog_title")
+    assert _notice_heading(_notice("a", title="Real headline")) == "Real headline"
+
+
+def test_the_summary_copy_is_words_not_catalogue_ids(monkeypatch, delivered):
+    """A missing catalogue entry falls back to its own key, which reads as an ID.
+
+    The title of a notice notification once reached the desktop as
+    ``notices_summary_title_one``: the string had never been added to the
+    catalogue, and every earlier assertion compared it with ``tr(key)``, so a
+    missing entry matched a missing entry. Compare with the words instead.
+    """
+    for key in (
+        "notices_summary_title_one",
+        "notices_summary_title_many",
+        "notices_summary_body",
+    ):
+        assert tr(key) != key, f"{key} has no catalogue entry"
+        assert "_" not in tr(key), f"{key} still reads as an identifier"
+
+    monkeypatch.setattr(notice_alerts, "category_enabled", lambda category: True)
+    notice_alerts.notify_new_notices([_notice("2026-11-03-rockbox-y2-warn")])
+    title, _body, _route = delivered[0]
+    assert title == tr("notices_summary_title_one")
+    assert "_" not in title
+
+    delivered.clear()
+    notice_alerts.notify_new_notices([_notice("a"), _notice("b")])
+    title, _body, _route = delivered[0]
+    assert title == tr("notices_summary_title_many").format(count=2)
+    assert "2" in title

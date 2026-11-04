@@ -270,8 +270,8 @@ def test_remote_rescue_flags_evaluations(temp_settings):
 
 def test_completion_screen_layout_and_post_install_buttons(app, monkeypatch):
     """Verify that when extra steps are needed:
-    - Text explaining extra steps is ABOVE buttons
-    - Donation appeal text is BELOW buttons
+    - Completion text and the guide hint are ABOVE the buttons
+    - The appeal reads as one letter: message, picture and signature, buttons
     - If post_install2 URL is present, button reads 'View Guide + Donate' and opens post_install2
     - If donations are disabled, 'donations=false' is appended to View Guide URLs
     """
@@ -296,8 +296,16 @@ def test_completion_screen_layout_and_post_install_buttons(app, monkeypatch):
         assert fp._coffee_btn.text() == "View Guide + Donate"
         assert not fp._view_guide_btn.isHidden()
         assert not fp._completion_guide_hint.isHidden()
-        assert fp._appeal_body.isHidden()
-        assert not fp._appeal_body_below.isHidden()
+        # One letter layout: the message stays above the signature, guide or not.
+        assert not fp._appeal_body.isHidden()
+        assert not fp._appeal_signature_row.isHidden()
+        assert fp._appeal_signature.text() == "- Ryan - Maintainer of Updater CE"
+        # The heading carries the firmware icon (or its squircle stand-in).
+        assert fp._intro.icon is not None
+        assert not fp._intro.icon.pixmap().isNull()
+        layout = fp._appeal.layout()
+        assert layout.indexOf(fp._appeal_body) < layout.indexOf(fp._appeal_signature_row)
+        assert layout.indexOf(fp._appeal_signature_row) < layout.indexOf(fp._appeal_dont)
 
         # Coffee button opens post_install2
         fp._open_coffee_page()
@@ -318,7 +326,7 @@ def test_completion_screen_layout_and_post_install_buttons(app, monkeypatch):
         fp.show_completion_appeal(True)
         assert fp._completion_guide_hint.isHidden()
         assert not fp._appeal_body.isHidden()
-        assert fp._appeal_body_below.isHidden()
+        assert not fp._appeal_signature_row.isHidden()
         assert fp._coffee_btn.text() == "Donate on Ko-Fi"
     finally:
         fp.deleteLater()

@@ -489,11 +489,16 @@ def show_completion_notification(
     title: str,
     message: str,
     window: Optional[QWidget] = None,
+    route: str = "install",
 ) -> None:
-    """Deliver a desktop notification and alert the user's desktop environment."""
+    """Deliver a desktop notification and alert the user's desktop environment.
+
+    The default route takes a click back to the install card, where the
+    completion message and the next steps are waiting.
+    """
     if window is not None:
         bring_window_to_front(window)
-    show_system_notification(title, message)
+    show_system_notification(title, message, route=route)
 
     # Flash window / taskbar icon
     if window is not None:

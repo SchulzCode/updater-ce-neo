@@ -1388,7 +1388,13 @@ class NoticeToast(QFrame):
     def set_notice(self, notice) -> None:
         self._notice = notice
         if notice is not None:
-            self._title_label.setText(getattr(notice, "title", "") or "")
+            # The headline is the notice's own title, never its feed id. The
+            # list, detail view and dialog already go through _notice_heading;
+            # this banner was the one surface that printed the raw field, so a
+            # notice whose title repeats its id showed the id instead.
+            from .dialogs import _notice_heading
+
+            self._title_label.setText(_notice_heading(notice))
             self._content_label.setText(getattr(notice, "content", "") or "")
             # The banner has no action of its own: clicking it opens the notices list.
             self._action.setVisible(False)
@@ -1426,6 +1432,11 @@ class NoticeToast(QFrame):
                 self.action_clicked.emit(target_url)
 
     def _on_dismiss_clicked(self) -> None:
+        # Hide the chip's tooltip with the toast; otherwise it can outlive the
+        # hidden banner as a small window left at the cursor.
+        from PySide6.QtWidgets import QToolTip
+
+        QToolTip.hideText()
         if self._notice:
             from ..notice_service import NoticeService
 

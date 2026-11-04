@@ -57,6 +57,32 @@ def test_background_opt_in_reads_back_when_enabled():
         _clear_opt_in()
 
 
+def test_background_copy_names_only_the_host_surface():
+    """No reader is told about a menu bar or tray their desktop lacks."""
+    from src import i18n
+    from src.i18n import translator
+    from src.ui.settings_page import run_in_background_desc
+
+    translator().set_language("en")
+    mac = run_in_background_desc("darwin")
+    windows = run_in_background_desc("win32")
+    linux = run_in_background_desc("linux")
+
+    assert "menu bar" in mac.lower()
+    assert "system tray" not in mac.lower()
+    assert "system tray" in windows.lower()
+    assert "menu bar" not in windows.lower()
+    assert linux == windows
+    assert "menu bar" not in run_in_background_desc("freebsd14").lower()
+
+    for key in (
+        "settings_run_in_background_desc_menu_bar",
+        "settings_run_in_background_desc_system_tray",
+    ):
+        for lang in ("zh-CN", "en", "fr", "es", "de", "ja"):
+            assert i18n._STRINGS[key].get(lang), (key, lang)
+
+
 def test_close_with_opt_in_off_quits_and_creates_no_tray(monkeypatch):
     _clear_opt_in()
     app, win = _window()
@@ -137,6 +163,9 @@ def test_close_to_tray_holds_off_macos_automatic_termination(monkeypatch):
     QSettings("innioasis", "updater").setValue(tray.RUN_IN_BACKGROUND_KEY, True)
     calls = []
     monkeypatch.setattr(tray, "hold_off_automatic_termination", lambda hold: calls.append(hold))
+    # Offscreen Qt reports no system tray; hide-to-tray only keeps the process
+    # when a tray really exists, so give these checks one.
+    monkeypatch.setattr(tray.BackgroundTray, "is_available", lambda self: True)
     try:
         app, win = _window()
         win._hide_to_tray(QCloseEvent())
@@ -201,8 +230,9 @@ def test_start_in_tray_holds_off_macos_automatic_termination(monkeypatch):
         app.processEvents()
 
 
-def test_hidden_window_pauses_its_timers_and_resumes_on_show():
+def test_hidden_window_pauses_its_timers_and_resumes_on_show(monkeypatch):
     QSettings("innioasis", "updater").setValue(tray.RUN_IN_BACKGROUND_KEY, True)
+    monkeypatch.setattr(tray.BackgroundTray, "is_available", lambda self: True)
     try:
         app, win = _window()
         win._hide_to_tray(QCloseEvent())
@@ -239,6 +269,26 @@ def test_macos_gets_the_native_menu_bar_item(monkeypatch):
     monkeypatch.setattr(tray, "NativeStatusItem", lambda *a, **k: created.append(a) or "native")
     assert tray.create_background_tray(object(), lambda: None, lambda: None, QIcon()) == "native"
     assert len(created) == 1
+
+
+def test_tray_menu_offers_check_for_updates():
+    app = _app()
+    from PySide6.QtGui import QIcon
+
+    calls = []
+    bg_tray = tray.BackgroundTray(
+        app,
+        lambda: None,
+        lambda: None,
+        QIcon(),
+        check_updates=lambda: calls.append(True),
+    )
+    expected = tray._localized_label(
+        ("tray_check_updates", "nav_check_updates"), "Check for Updates…"
+    )
+    action = next(a for a in bg_tray._menu.actions() if a.text() == expected)
+    action.trigger()
+    assert calls == [True]
 
 
 def test_other_hosts_keep_qt_tray(monkeypatch):

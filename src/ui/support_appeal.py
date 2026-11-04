@@ -20,6 +20,22 @@ INTRO_KEYS = ("donate_headline", "donate_subtitle")
 COMPLETION_KEYS = ("donate_completion_headline", "donate_completion_subtitle")
 THEMES_COMPLETION_KEYS = ("donate_completion_headline", "donate_completion_themes_subtitle")
 
+# One pool for every completion message. The picker, the re-render after a
+# language change and the tests all read this tuple, so a new variant can
+# never be shown without being translatable and covered.
+COMPLETION_BODY_KEYS = (
+    "donate_completion_body",
+    "donate_completion_body_reciprocity",
+    "donate_completion_body_community",
+    "donate_completion_body_effort",
+    "donate_completion_body_momentum",
+    "donate_completion_body_transparency",
+    "donate_completion_body_family",
+    "donate_completion_body_running_costs",
+    "donate_completion_body_kindness",
+    "donate_completion_body_small_hours",
+)
+
 LEGACY_APPEAL_KEY = "donate_support_appeal_lead"
 SUPPORT_APPEAL_KEYS = (
     LEGACY_APPEAL_KEY,
@@ -252,7 +268,7 @@ class DeveloperPortrait(QLabel):
 
 class SupportIntro(QWidget):
 
-    def __init__(self, parent=None, keys=INTRO_KEYS):
+    def __init__(self, parent=None, keys=INTRO_KEYS, show_portrait=True, show_icon=False):
         super().__init__(parent)
         self._keys = tuple(keys)
         self.setAutoFillBackground(False)
@@ -260,7 +276,20 @@ class SupportIntro(QWidget):
         row = QHBoxLayout(self)
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(12)
-        self.portrait = DeveloperPortrait(PORTRAIT_DIAMETER)
+        self.icon = None
+        if show_icon:
+            # The firmware's own icon (the generic squircle when it has none)
+            # beside the headline, so the first thing read is what finished.
+            from .release_icon import squircle_pixmap
+
+            self.icon = QLabel()
+            self.icon.setFixedSize(40, 40)
+            self.icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.icon.setAutoFillBackground(False)
+            self.icon.setStyleSheet("")
+            self.icon.setPixmap(squircle_pixmap(QPixmap(), 40))
+            row.addWidget(self.icon, 0, Qt.AlignmentFlag.AlignTop)
+        self.portrait = DeveloperPortrait(PORTRAIT_DIAMETER) if show_portrait else None
         column = QVBoxLayout()
         column.setContentsMargins(0, 0, 0, 0)
         column.setSpacing(2)
@@ -280,9 +309,18 @@ class SupportIntro(QWidget):
         self.subtitle.setAutoFillBackground(False)
         column.addWidget(self.headline)
         column.addWidget(self.subtitle)
-        row.addWidget(self.portrait, 0, Qt.AlignmentFlag.AlignVCenter)
+        if self.portrait is not None:
+            row.addWidget(self.portrait, 0, Qt.AlignmentFlag.AlignVCenter)
         row.addLayout(column, 1)
         self.retranslate()
+
+    def set_icon(self, pixmap) -> None:
+        """Show ``pixmap`` beside the headline; a null one keeps the placeholder."""
+        if self.icon is None:
+            return
+        from .release_icon import squircle_pixmap
+
+        self.icon.setPixmap(squircle_pixmap(pixmap, 40))
 
     def set_keys(self, keys) -> None:
         self._keys = tuple(keys)

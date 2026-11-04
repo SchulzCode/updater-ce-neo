@@ -342,6 +342,15 @@ def _notice_link_button(text: str, parent=None):
     return button
 
 
+def _notice_heading(notice) -> str:
+    """A human notice heading, never the feed identifier."""
+    title = str(getattr(notice, "title", "") or "").strip()
+    identifier = str(getattr(notice, "id", "") or "").strip()
+    if title and title != identifier:
+        return title
+    return tr("notices_dialog_title")
+
+
 def _notice_posted_text(notice) -> str:
     """The posted-date line used by both the list card and the detail page."""
     posted = getattr(notice, "from_date", None)
@@ -494,7 +503,7 @@ class NoticeDetailView(QWidget):
 
     def set_notice(self, notice) -> None:
         self._notice = notice
-        self._title.setText(getattr(notice, "title", "") or getattr(notice, "id", ""))
+        self._title.setText(_notice_heading(notice))
         posted_text = _notice_posted_text(notice)
         self._posted.setText(posted_text)
         self._posted.setVisible(bool(posted_text))
@@ -606,7 +615,7 @@ class NoticesDialog(QDialog):
     def _show_notice(self, notice) -> None:
         self._detail.set_notice(notice)
         self._stack.setCurrentWidget(self._detail)
-        self.setWindowTitle(getattr(notice, "title", "") or tr("notices_dialog_title"))
+        self.setWindowTitle(_notice_heading(notice))
 
     def _show_list(self) -> None:
         self._stack.setCurrentWidget(self._list_page)
@@ -715,7 +724,11 @@ class NoticesPage(QWidget):
                 release = getattr(child, "release_native", None)
                 if callable(release):
                     release()
-                child.setParent(None)
+                # Keep the card parented and hide it while deleteLater waits for
+                # the event loop: setParent(None) turns a visible card into a
+                # top-level window, which flashed as a small window over the
+                # page when the list rebuilt on dismissal.
+                child.hide()
                 child.deleteLater()
         notices = list(notices or [])
         for notice in notices:
@@ -745,6 +758,28 @@ class NoticesPage(QWidget):
         self._pages.setCurrentWidget(self._detail)
         self.title_changed.emit()
 
+    def open_notice_by_id(self, notice_id) -> bool:
+        """Open the live notice with *notice_id*; False when it is gone.
+
+        The notification only carries an id, so the feed is the authority on
+        what that id means now: a dismissed or edited-away notice opens the
+        list instead of showing a stale copy.
+        """
+        target = str(notice_id or "").strip()
+        if not target:
+            return False
+        try:
+            from ..notice_service import NoticeService
+
+            notices = list(NoticeService.instance().active_notices or ())
+        except Exception:
+            notices = []
+        for notice in notices:
+            if str(getattr(notice, "id", "") or "") == target:
+                self.open_notice(notice)
+                return True
+        return False
+
     def show_list(self) -> None:
         """Return the page to the notice cards."""
         changed = self._current_notice is not None
@@ -758,7 +793,7 @@ class NoticesPage(QWidget):
         notice = self._current_notice
         if notice is None:
             return tr("nav_notices")
-        return getattr(notice, "title", "") or tr("nav_notices")
+        return _notice_heading(notice) or tr("nav_notices")
 
     def refresh(self) -> None:
         """Reload from the cache now, then fetch a fresh copy in the background."""
@@ -819,7 +854,7 @@ class _NoticeRow(QFrame):
         header = QHBoxLayout()
         header.setContentsMargins(0, 0, 0, 0)
         header.setSpacing(8)
-        title = QLabel(notice.title or notice.id, self)
+        title = QLabel(_notice_heading(notice), self)
         title.setStyleSheet(f"font-weight: 600; color: {t.fg}; border: none; background: transparent;")
         title.setWordWrap(True)
         header.addWidget(title, 1)
@@ -899,6 +934,11 @@ class _NoticeRow(QFrame):
             chip.detach_native()
 
     def _on_dismiss_clicked(self) -> None:
+        # The chip is about to leave with its card. A tooltip still showing for
+        # it would be left behind as a small window after the rebuild.
+        from PySide6.QtWidgets import QToolTip
+
+        QToolTip.hideText()
         try:
             from ..notice_service import NoticeService
 

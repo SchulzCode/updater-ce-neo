@@ -1,5 +1,6 @@
 import csv
 import logging
+import re
 import threading
 import time
 from datetime import datetime
@@ -197,6 +198,12 @@ GOAL_SETTLED_USD = 1.0
 
 GOAL_WIDE_MAX_PERCENT = 25.0
 
+GOAL_COPY_KEYS = {
+    "daily": "donate_goal_day_fmt",
+    "weekly": "donate_goal_week_fmt",
+    "monthly": "donate_goal_fmt",
+}
+
 
 def get_user_currency() -> tuple[str, str]:
     return fx.pair()
@@ -346,6 +353,50 @@ def get_goal_stats(donations, now=None):
         shown_percent=fx.share(shown_raised, shown_target),
     )
     return stats
+
+
+def _fill_goal_template(template, raised_text, target_text):
+    """Fill a goal sentence, including catalogs that still hardcode ``$``.
+
+    Older translations wrap the amount in a dollar sign (``${target:.0f}``)
+    because the goal used to be shown in USD. The reader's own currency mark is
+    passed in already, so the dollar is removed from the template before the
+    amounts (which may themselves be dollars) are substituted.
+    """
+    text = str(template or "").replace("$", "")
+    try:
+        text = text.format(raised=raised_text, target=target_text)
+    except (KeyError, IndexError, ValueError):
+        text = re.sub(
+            r"\{\s*(raised|target)(?::[^}]*)?\}",
+            lambda match: raised_text if match.group(1) == "raised" else target_text,
+            text,
+        )
+    return text.strip()
+
+
+def format_goal_line(stats) -> str:
+    """Warm, period-aware costs line for the status bar and modal.
+
+    ``stats`` comes from :func:`get_goal_stats`, so the sentence names the
+    same daily/weekly/monthly rung the support appeal is using. A zero or
+    already-covered rung returns an empty string; the caller shows a donor or
+    appeal line instead of a cold "$0 of ..." sentence.
+    """
+    from .i18n import tr
+
+    stats = stats or {}
+    key = GOAL_COPY_KEYS.get(stats.get("scope"))
+    if not key or stats.get("reached") or stats.get("covered"):
+        return ""
+    raised = float(stats.get("shown_raised") or 0)
+    target = float(stats.get("shown_target") or 0)
+    if raised <= 0 or target <= 0 or raised >= target:
+        return ""
+    code = str(stats.get("currency_code") or "USD")
+    raised_text = fx.money_local(raised, code)
+    target_text = fx.money_local(target, code)
+    return _fill_goal_template(tr(key), raised_text, target_text)
 
 
 def cached_donors_path() -> Path:

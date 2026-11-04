@@ -4,8 +4,10 @@ Two copies would fight over the same USB device, SP Flash Tool's own settings
 files and the shared cache directory. Worse, every start-up sweeps stray flash
 tools, so a second copy starting while a flash run is in progress can kill the
 very tool that run is using. A second launch is therefore refused — it asks the
-copy already running to show its window and exits — and it never ends that copy,
-because ending it runs its shut-down sweep as well.
+copy already running to show its window and exits. It only ever ends that copy
+on request: when the running copy does not answer the focus request, the second
+launch offers to force quit it and take over, and the user has to say yes. That
+is the recovery path for a hung copy, not a routine takeover.
 
 The guard is deliberately biased towards *starting*. Refusing needs positive
 evidence of a live copy; every ambiguous case fails open:
@@ -31,9 +33,11 @@ import ctypes
 import logging
 import os
 import re
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -48,8 +52,14 @@ logger = logging.getLogger(__name__)
 WINDOWS_MUTEX_NAME = "Local\\innioasis-updater-ce-single-instance"
 _ERROR_ALREADY_EXISTS = 183
 
+# The elevated restart starts the new copy before the old one has quit, so
+# the copy that inherits the guard is told to wait for it rather than to
+# treat it as somebody else's launch.
+TAKE_OVER_ARG = "--take-over"
+
 _focus_server = None
 _windows_mutex = None
+_windows_kernel32 = None
 
 
 def _user_token() -> str:
@@ -75,6 +85,310 @@ def lock_name() -> str:
 
 def focus_server_name() -> str:
     return f"updater-ce-focus-{_user_token()}"
+
+
+# Names a copy can run under, wherever its folder is: the packaged front ends
+# (including the portable aliases the Windows build stages) and the
+# development launcher. Windows reports image names; POSIX reports a command
+# line, so both are matched.
+_COPY_IMAGE_NAMES = (
+    "innioasisupdater",
+    "innioasis updater",
+    "updater ce",
+    "updater-ce",
+    "2. install firmware",
+    "mediatek installer",
+    "mediatekinstaller",
+)
+_COPY_COMMAND_HINTS = (
+    "src/app.py",
+    "src\\app.py",
+    "innioasis updater",
+    "updater-ce",
+    "2. install firmware",
+    "mediatek installer",
+)
+_COPY_TITLE_HINTS = (
+    "innioasis updater",
+    "updater ce",
+    "install firmware",
+    "mediatek installer",
+)
+
+
+def _copy_pid_from_identity(pid: int, identity: str) -> bool:
+    """True when an image name or command line is a copy of this app."""
+    text = str(identity or "").replace("\\", "/").lower()
+    image = text.rsplit("/", 1)[-1]
+    if image.endswith(".exe"):
+        image = image[:-4]
+    if image.strip() in _COPY_IMAGE_NAMES:
+        return True
+    return any(hint.replace("\\", "/") in text for hint in _COPY_COMMAND_HINTS)
+
+
+def _windows_process_image_names() -> dict:
+    """PID -> image name from a Toolhelp snapshot, without spawning a helper."""
+    try:
+        from ctypes import wintypes
+
+        TH32CS_SNAPPROCESS = 0x00000002
+        INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
+
+        class PROCESSENTRY32W(ctypes.Structure):
+            _fields_ = [
+                ("dwSize", wintypes.DWORD),
+                ("cntUsage", wintypes.DWORD),
+                ("th32ProcessID", wintypes.DWORD),
+                ("th32DefaultHeapID", ctypes.POINTER(ctypes.c_ulong)),
+                ("th32ModuleID", wintypes.DWORD),
+                ("cntThreads", wintypes.DWORD),
+                ("th32ParentProcessID", wintypes.DWORD),
+                ("pcPriClassBase", ctypes.c_long),
+                ("dwFlags", wintypes.DWORD),
+                ("szExeFile", wintypes.WCHAR * 260),
+            ]
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.CreateToolhelp32Snapshot.restype = ctypes.c_void_p
+        snapshot = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+        if snapshot in (None, 0, INVALID_HANDLE_VALUE):
+            return {}
+        names = {}
+        try:
+            entry = PROCESSENTRY32W()
+            entry.dwSize = ctypes.sizeof(PROCESSENTRY32W)
+            more = kernel32.Process32FirstW(
+                ctypes.c_void_p(snapshot), ctypes.byref(entry)
+            )
+            while more:
+                names[int(entry.th32ProcessID)] = str(entry.szExeFile)
+                more = kernel32.Process32NextW(
+                    ctypes.c_void_p(snapshot), ctypes.byref(entry)
+                )
+        finally:
+            kernel32.CloseHandle(ctypes.c_void_p(snapshot))
+        return names
+    except Exception:
+        return {}
+
+
+def find_running_copy_pids() -> list[int]:
+    """PIDs of other copies of this app, whatever folder they started from.
+
+    The mutex and the lock file answer for builds that carry this guard. An
+    older portable copy, or one started from another extraction, may hold
+    neither, so the process table is the backstop.
+    """
+    me = os.getpid()
+    # A portable build can start a child copy and stay alive as its launcher;
+    # that parent is this program, not another copy competing for the player.
+    parent = os.getppid()
+    found: list[int] = []
+    try:
+        if sys.platform.startswith("win"):
+            names = _windows_process_image_names()
+            for pid, name in names.items():
+                if pid and pid not in (me, parent) and _copy_pid_from_identity(pid, name):
+                    found.append(int(pid))
+            # The snapshot succeeded: "no match" is the answer, so do not spawn
+            # tasklist on every normal start. Only a failed snapshot falls back.
+            if names:
+                return found
+            out = subprocess.run(
+                ["tasklist", "/FO", "CSV", "/NH"],
+                capture_output=True,
+                text=True,
+                timeout=6,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            ).stdout or ""
+            for line in out.splitlines():
+                parts = [part.strip().strip('"') for part in line.split('","')]
+                if len(parts) < 2:
+                    continue
+                try:
+                    pid = int(parts[1])
+                except ValueError:
+                    continue
+                if pid and pid not in (me, parent) and _copy_pid_from_identity(pid, parts[0]):
+                    found.append(pid)
+            return found
+        out = subprocess.run(
+            ["ps", "-eo", "pid=,args="],
+            capture_output=True,
+            text=True,
+            timeout=6,
+        ).stdout or ""
+        for line in out.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            pid_text, _, command = line.partition(" ")
+            try:
+                pid = int(pid_text)
+            except ValueError:
+                continue
+            if pid and pid not in (me, parent) and _copy_pid_from_identity(pid, command):
+                found.append(pid)
+    except Exception:
+        logger.debug("Could not list running copies", exc_info=True)
+    return found
+
+
+def _focus_running_window(pid: int = 0) -> bool:
+    """Raise another copy's top-level window on Windows, by pid or by title.
+
+    A copy built before the focus socket existed cannot answer it, but its
+    window is still there to be shown. This is the same operation the user gets
+    by clicking the taskbar entry.
+    """
+    if os.name != "nt":
+        return False
+    try:
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        found = []
+        WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+        def _visit(hwnd, _lparam):
+            if not user32.IsWindowVisible(hwnd):
+                return True
+            length = user32.GetWindowTextLengthW(hwnd)
+            if length:
+                buffer = ctypes.create_unicode_buffer(length + 1)
+                user32.GetWindowTextW(hwnd, buffer, length + 1)
+                title = buffer.value.strip().lower()
+                if any(hint in title for hint in _COPY_TITLE_HINTS):
+                    owner = wintypes.DWORD()
+                    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+                    if not pid or int(owner.value) == int(pid):
+                        found.append(hwnd)
+            return True
+
+        user32.EnumWindows(WNDENUMPROC(_visit), 0)
+        for hwnd in found:
+            user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+            user32.SetForegroundWindow(hwnd)
+        return bool(found)
+    except Exception:
+        logger.debug("Could not raise the running copy's window", exc_info=True)
+        return False
+
+
+# -- the show-request marker -------------------------------------------------
+#
+# The local socket is the fast path, but a copy started from another folder,
+# an older build, or a host that blocks local sockets still needs a way in.
+# A launch writes a marker into the app's own per-user profile; every copy of
+# this version, portable or installed, watches the same file. The running copy
+# deletes it only after it has brought its window up, which also tells a second
+# launch whether the first one actually answered.
+
+SHOW_REQUEST_TIMEOUT_S = 2.5
+
+
+def show_request_path() -> Path:
+    """The show marker shared by installed and portable copies of this app.
+
+    A process temp directory is not enough: portable builds can run from
+    different folders and still share the same per-user profile. Keep the
+    marker there so one of them can bring the other forward.
+    """
+    try:
+        from .paths import app_cache_dir
+
+        base = app_cache_dir()
+    except Exception:
+        base = None
+    if base is None:
+        fallback = QStandardPaths.writableLocation(
+            QStandardPaths.StandardLocation.TempLocation
+        )
+        base = Path(fallback or tempfile.gettempdir())
+    return Path(base) / f"updater-ce-{_user_token()}.show"
+
+
+def request_show() -> bool:
+    """Ask the running copy to show itself. False when the marker cannot be written."""
+    try:
+        path = show_request_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(str(time.time()), encoding="utf-8")
+        return True
+    except Exception:
+        logger.debug("Could not write the show request", exc_info=True)
+        return False
+
+
+def show_request_stamp() -> float:
+    try:
+        return show_request_path().stat().st_mtime
+    except Exception:
+        return 0.0
+
+
+def clear_show_request(expected_stamp: Optional[float] = None) -> bool:
+    """Remove the marker, or only the request *expected_stamp* identifies.
+
+    The acknowledgement must not delete a newer request that arrived while the
+    window was being raised; that launch still needs its own show.
+    """
+    try:
+        path = show_request_path()
+        if expected_stamp is not None and show_request_stamp() != expected_stamp:
+            return False
+        path.unlink()
+        return True
+    except FileNotFoundError:
+        return False
+    except Exception:
+        return False
+
+
+def wait_for_show_request(stamp: float, timeout_s: float = SHOW_REQUEST_TIMEOUT_S) -> bool:
+    """Wait for the running copy to delete the marker it was asked to handle."""
+    if not stamp:
+        return False
+    deadline = time.monotonic() + max(0.0, float(timeout_s))
+    while True:
+        if show_request_stamp() != stamp:
+            return True
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(min(0.1, remaining))
+
+
+def watch_show_requests(callback, interval_ms: int = 1500, baseline: Optional[float] = None):
+    """Call *callback* whenever another launch asks this copy to show itself.
+
+    The callback's successful return acknowledges the request by removing the
+    marker. A request that arrived while the callback ran keeps its marker.
+    """
+    from PySide6.QtCore import QTimer
+
+    # A request written while the window was still being built is real: start
+    # from the launch-time stamp so it is not mistaken for a stale file. The
+    # caller clears a marker that was already there before this copy started.
+    last = [float(baseline) if baseline is not None else 0.0]
+    timer = QTimer()
+    timer.setInterval(max(250, int(interval_ms)))
+
+    def _poll() -> None:
+        stamp = show_request_stamp()
+        if stamp and stamp != last[0]:
+            last[0] = stamp
+            try:
+                callback()
+            except Exception:
+                logger.debug("Show request callback failed", exc_info=True)
+            else:
+                clear_show_request(stamp)
+
+    timer.timeout.connect(_poll)
+    timer.start()
+    return timer
 
 
 class FocusServer(QObject):
@@ -141,6 +455,33 @@ def request_focus(timeout_ms: int = 500) -> bool:
         return False
 
 
+def _win_kernel32():
+    """kernel32 loaded with the ctypes error shadow, so last-error is real.
+
+    ``ctypes.get_last_error()`` only reports what the DLL captured when it was
+    loaded with ``use_last_error=True``. Loaded the plain way it returns 0, which
+    made every duplicate copy look like the first one.
+    """
+    global _windows_kernel32
+    if _windows_kernel32 is None:
+        _windows_kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    return _windows_kernel32
+
+
+def _create_named_mutex(name: str):
+    """Create a named mutex; returns ``(handle, already_existed)``.
+
+    A zero handle means the host refused to create it (a locked-down machine),
+    which callers treat as "no guard available" rather than "another copy".
+    """
+    create = _win_kernel32().CreateMutexW
+    create.restype = ctypes.c_void_p
+    # A stale thread error from an earlier call would read as "exists".
+    ctypes.set_last_error(0)
+    handle = create(None, False, name)
+    return handle, ctypes.get_last_error() == _ERROR_ALREADY_EXISTS
+
+
 def acquire_windows_mutex() -> bool:
     """Hold the session-wide guard for this process. False means a copy exists.
 
@@ -156,27 +497,47 @@ def acquire_windows_mutex() -> bool:
     if _windows_mutex is not None:
         return True
     handle = 0
-    last_error = 0
     try:
-        kernel32 = getattr(ctypes, "WinDLL", ctypes.windll).kernel32
-        create = kernel32.CreateMutexW
-        create.restype = ctypes.c_void_p
-        handle = create(None, False, WINDOWS_MUTEX_NAME)
-        last_error = ctypes.get_last_error()
+        handle, existed = _create_named_mutex(WINDOWS_MUTEX_NAME)
     except Exception as e:
         logger.debug("Could not create the single-instance mutex: %s", e)
         return True
     if not handle:
-        logger.debug("CreateMutexW failed: %s", last_error)
+        logger.debug("CreateMutexW failed; starting without the mutex")
         return True
-    if last_error == _ERROR_ALREADY_EXISTS:
+    if existed:
         try:
-            kernel32.CloseHandle(ctypes.c_void_p(handle))
+            _win_kernel32().CloseHandle(ctypes.c_void_p(handle))
         except Exception:
             pass
         return False
     _windows_mutex = handle
     return True
+
+
+def _take_over_requested() -> bool:
+    """True when this launch is replacing a copy that is on its way out."""
+    try:
+        return TAKE_OVER_ARG in sys.argv[1:]
+    except Exception:
+        return False
+
+
+def _wait_for_previous_copy(deadline_s: float = 8.0) -> None:
+    """Give the copy this launch replaces time to finish exiting.
+
+    The elevated restart starts the new copy before the old one quits, so the
+    lock is held for a moment. Waiting for it to fall free keeps that hand-over
+    from looking like a second person's launch — and from offering to force quit
+    the copy that is already leaving.
+    """
+    deadline = time.monotonic() + deadline_s
+    while time.monotonic() < deadline:
+        probe = InstanceLock()
+        if probe.acquire():
+            probe.release()
+            return
+        time.sleep(0.2)
 
 
 def lock_path() -> Path:
@@ -335,12 +696,80 @@ def _dismiss_label() -> str:
     return "OK"
 
 
-def _explain_already_running(focus_failed: bool = False) -> None:
-    """Say why this launch stops. Never offers to end the running copy.
+def _focus_running_copy(
+    attempts: int = 4, timeout_ms: int = 350, pause_s: float = 0.3
+) -> bool:
+    """Ask the running copy to come forward, giving a slow start a moment."
 
-    There is deliberately no "force quit" here: the copy that is running owns
-    the USB device and its own flash tool, and ending it would run its
-    shut-down sweep over whatever flash run is in flight.
+    A copy that is still starting up has not opened its focus channel yet;
+    retrying briefly keeps a fast second launch from calling it unresponsive.
+    Each attempt is also a liveness probe: the OS owns the socket name.
+    """
+    for attempt in range(max(1, attempts)):
+        if request_focus(timeout_ms=timeout_ms):
+            return True
+        if attempt + 1 < attempts:
+            time.sleep(pause_s)
+    return False
+
+
+def end_running_copy(pid: int, wait_s: float = 5.0) -> bool:
+    """End the copy the user just agreed to force quit. True once it is gone.
+
+    Only called from the explicit force-quit answer. Termination is immediate,
+    so the running copy gets no shut-down sweep: that is exactly what makes it
+    usable on a hung copy, and why the dialog warns about an install in flight.
+    """
+    if pid <= 0:
+        return False
+    try:
+        if sys.platform.startswith("win"):
+            kernel32 = getattr(ctypes, "WinDLL", ctypes.windll).kernel32
+            process_terminate = 0x0001
+            handle = kernel32.OpenProcess(process_terminate, False, int(pid))
+            if not handle:
+                return False
+            try:
+                kernel32.TerminateProcess(handle, 1)
+            finally:
+                kernel32.CloseHandle(handle)
+        else:
+            os.kill(int(pid), signal.SIGTERM)
+    except Exception as e:
+        logger.info("Could not end the running copy (pid %s): %s", pid, e)
+        return False
+    deadline = time.monotonic() + wait_s
+    while time.monotonic() < deadline:
+        if not _pid_alive(pid):
+            return True
+        time.sleep(0.1)
+    return not _pid_alive(pid)
+
+
+def _explain_force_failed(pid: int = 0) -> None:
+    """Say the takeover did not work, and how to end the copy by hand."""
+    from PySide6.QtWidgets import QMessageBox
+
+    from .i18n import tr
+
+    box = QMessageBox()
+    box.setWindowTitle(tr("single_instance_title"))
+    detail = tr("single_instance_force_failed")
+    if pid:
+        # The user has to be able to find it in Task Manager / Activity Monitor.
+        detail = f"{detail}\n\nPID: {pid}"
+    box.setText(detail)
+    box.setIcon(QMessageBox.Icon.Warning)
+    box.exec()
+
+
+def _explain_already_running(focus_failed: bool = False, pid: int = 0) -> str:
+    """Say why this launch stops; on an unanswered focus, offer the takeover.
+
+    Returns ``"force"`` only when the user chose to end a copy that did not
+    answer. The copy that is running can own the USB device and its own flash
+    tool, so the destructive answer is never the default and its copy says the
+    install in progress would be interrupted.
     """
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
@@ -372,13 +801,22 @@ def _explain_already_running(focus_failed: bool = False) -> None:
 
     buttons = QHBoxLayout()
     buttons.addStretch(1)
-    dismiss = QPushButton(_dismiss_label())
+    choice = ""
+    if focus_failed and pid > 0:
+        force = QPushButton(tr("single_instance_force_quit"))
+        force.setAutoDefault(False)
+        force.clicked.connect(dialog.accept)
+        buttons.addWidget(force)
+    dismiss = QPushButton(tr("btn_cancel") if focus_failed else _dismiss_label())
     dismiss.setDefault(True)
-    dismiss.clicked.connect(dialog.accept)
+    dismiss.setAutoDefault(True)
+    dismiss.clicked.connect(dialog.reject)
     buttons.addWidget(dismiss)
     layout.addLayout(buttons)
 
-    dialog.exec()
+    if dialog.exec() == QDialog.DialogCode.Accepted:
+        choice = "force"
+    return choice
 
 
 def _hold_lock(app, lock: InstanceLock) -> None:
@@ -392,9 +830,11 @@ def _hold_lock(app, lock: InstanceLock) -> None:
 def ensure_single_instance(app, lock: Optional["InstanceLock"] = None) -> bool:
     """Take the guard, or send this launch to the copy already running.
 
-    True means "carry on". A live copy is never terminated, so a refusal cannot
-    disturb a flash run in progress. Any failure inside the guard itself starts
-    the app: the user is never locked out by the guard's own machinery.
+    True means "carry on". A copy that answers the focus request is never
+    terminated, so an ordinary second launch cannot disturb a flash run in
+    progress; only a copy that fails to answer may be ended, and only after the
+    user chooses that. Any failure inside the guard itself starts the app: the
+    user is never locked out by the guard's own machinery.
     """
     try:
         return _guarded(app, lock)
@@ -403,15 +843,72 @@ def ensure_single_instance(app, lock: Optional["InstanceLock"] = None) -> bool:
         return True
 
 
+def _ask_running_copy_to_show(pid: int = 0, wait_s: Optional[float] = None) -> bool:
+    """Ask the live copy to show, treating its marker deletion as acknowledgement.
+
+    A visible window is immediate proof. Otherwise the focus socket is tried;
+    if it cannot deliver, wait for the running copy to delete the marker. Only
+    a copy that neither raised a window nor acknowledged the marker is called
+    unresponsive.
+    """
+    request_show()
+    stamp = show_request_stamp()
+    if _focus_running_window(pid):
+        if stamp:
+            clear_show_request(stamp)
+        return True
+    if _focus_running_copy():
+        return True
+    timeout = SHOW_REQUEST_TIMEOUT_S if wait_s is None else wait_s
+    return bool(stamp) and wait_for_show_request(stamp, timeout_s=timeout)
+
+
 def _guarded(app, lock: Optional["InstanceLock"]) -> bool:
+    if _take_over_requested():
+        _wait_for_previous_copy()
     if not acquire_windows_mutex():
-        logger.info("Another copy holds the single-instance mutex; refusing to start")
-        focus_failed = not request_focus()
-        _explain_already_running(focus_failed=focus_failed)
+        logger.info("Another copy holds the single-instance mutex; asking it to show")
+        diagnosis = InstanceLock()
+        pid = diagnosis.holder_pid()
+        if _ask_running_copy_to_show(pid):
+            return False
+        pids = find_running_copy_pids()
+        pid = pid or (pids[0] if pids else 0)
+        if _explain_already_running(focus_failed=True, pid=pid) != "force":
+            return False
+        if not end_running_copy(pid):
+            _explain_force_failed(pid)
+            return False
+        lock = lock or diagnosis
+        lock.drop()
+        if lock.acquire() and acquire_windows_mutex():
+            _hold_lock(app, lock)
+            return True
         return False
 
     lock = lock or InstanceLock()
     if lock.acquire():
+        # Builds without this guard hold neither the mutex nor the lock file.
+        # The process table still knows such a copy is running, so a second
+        # launch must ask it to show rather than open a second window beside it.
+        pids = find_running_copy_pids()
+        if pids:
+            logger.info("Another copy is running (pid %s); asking it to show", pids[0])
+            if _ask_running_copy_to_show(pids[0]):
+                lock.release()
+                return False
+            logger.info("The running copy did not answer the show request")
+            # A copy built before this guard has no socket and may be hidden in
+            # the tray, so there is no window to raise. Offer the same explicit
+            # takeover as a guarded copy rather than exiting with no way in.
+            if _explain_already_running(focus_failed=True, pid=pids[0]) != "force":
+                lock.release()
+                return False
+            for pid in pids:
+                if not end_running_copy(pid):
+                    _explain_force_failed()
+                    lock.release()
+                    return False
         _hold_lock(app, lock)
         return True
 
@@ -432,10 +929,15 @@ def _guarded(app, lock: Optional["InstanceLock"]) -> bool:
         logger.warning("Could not clear the stale lock; starting anyway")
         return True
 
-    # A live copy of this app holds the lock. Show its window; if it cannot be
-    # raised, say so — but never offer to end it.
-    logger.info("Another copy is running (pid %s); refusing to start", pid)
-    if request_focus():
+    # A live copy of this app holds the lock. Show its window; only a copy that
+    # does not answer may be ended, and only if the user says so.
+    logger.info("Another copy is running (pid %s); asking it to show", pid)
+    if _ask_running_copy_to_show(pid):
         return False
-    _explain_already_running(focus_failed=True)
+    if _explain_already_running(focus_failed=True, pid=pid) != "force":
+        return False
+    if end_running_copy(pid) and lock.drop() and lock.acquire():
+        _hold_lock(app, lock)
+        return True
+    _explain_force_failed(pid)
     return False

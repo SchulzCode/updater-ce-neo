@@ -599,7 +599,7 @@ def waiting_for_device_card(page) -> bool:
 
 
 def install_wizard_height(content_height: int, width: int) -> int:
-    """Give a progress card a compact wizard pane instead of a thin strip.
+    """Give a running progress card a compact wizard pane instead of a thin strip.
 
     The card's own height remains the floor. At a typical installer width the
     preferred frame is roughly 1.9:1 (about 395px at 760px wide, 416px at
@@ -611,6 +611,22 @@ def install_wizard_height(content_height: int, width: int) -> int:
         min(INSTALL_WIZARD_FRAME_MAX_HEIGHT, preferred),
     )
     return max(int(content_height), preferred)
+
+
+def install_card_keeps_wizard_frame(
+    page, *, finished: bool, waiting_for_device: bool
+) -> bool:
+    """Whether the install card still wants the tall wizard frame.
+
+    A run that is flashing does: its progress card should look like a compact
+    installer, not a thin strip. A finished card hugs the copy it actually
+    shows — with donations disabled there is no appeal below it, so padding to
+    the wizard frame left an empty band under the completion note.
+    """
+    stack = getattr(page, "_stack", None)
+    if stack is None or stack.currentWidget() is not getattr(page, "_flashing_view", None):
+        return False
+    return not finished and not waiting_for_device
 
 
 def page_title_alignment() -> Qt.AlignmentFlag:
@@ -936,6 +952,27 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(600, self._check_linux_first_run)
         self._sync_sp_gui_button_visibility()
         self._sync_settings_sp_gui_visibility()
+
+        self._runtime_i18n = None
+        if not is_headless:
+            try:
+                from ..i18n import current_language
+                from ..runtime_i18n import RuntimeTranslator
+
+                self._runtime_i18n = RuntimeTranslator(self)
+                self._runtime_i18n.start(current_language())
+                app = QApplication.instance()
+                if app is not None:
+                    app.aboutToQuit.connect(self._runtime_i18n.stop)
+                if hasattr(self, "_stack"):
+                    self._stack.currentChanged.connect(
+                        lambda _index: QTimer.singleShot(
+                            0, self._runtime_i18n.scan
+                        )
+                    )
+            except Exception:
+                logger.debug("Runtime translation unavailable", exc_info=True)
+                self._runtime_i18n = None
 
         if not paths.IS_MAC:
             self._sp_history_timer = QTimer(self)
@@ -1620,7 +1657,7 @@ class MainWindow(QMainWindow):
         self._nav_btn_group.addButton(self._settings_btn, _PAGE_SETTINGS)
 
         # Notices sits under Settings and follows the same hide rules.
-        self._notices_btn = self._make_nav_button(tr("nav_notices"), "bell")
+        self._notices_btn = self._make_nav_button(tr("nav_notices"), "bell", checkable=True)
         self._notices_btn.clicked.connect(lambda: self._nav_to_page(_PAGE_NOTICES))
         layout.addWidget(self._notices_btn)
         self._nav_buttons["nav_notices"] = (self._notices_btn, _PAGE_NOTICES)
@@ -3484,9 +3521,8 @@ class MainWindow(QMainWindow):
         """
         if (
             self.isMinimized()
-            or self.isMaximized()
             or self.isFullScreen()
-            or bool(self.windowState() & (Qt.WindowMaximized | Qt.WindowFullScreen))
+            or bool(self.windowState() & Qt.WindowFullScreen)
         ):
             return
         stack = getattr(self, "_stack", None)
@@ -3494,7 +3530,11 @@ class MainWindow(QMainWindow):
         if page is None:
             return
         if stack.currentIndex() == _PAGE_FLASH or getattr(self, "_hugging_install", False):
+            # The install card gives a maximized frame back, so the hug runs
+            # even then; it decides for itself whether to restore the frame.
             self._adjust_window_geometry()
+            return
+        if self.isMaximized() or bool(self.windowState() & Qt.WindowMaximized):
             return
         self._release_select_window_size()
         if stack.currentIndex() == _PAGE_DIAGNOSTICS:
@@ -3604,9 +3644,8 @@ class MainWindow(QMainWindow):
         """Adjust window size to fit the content of the active page without wasted space."""
         if (
             self.isMinimized()
-            or self.isMaximized()
             or self.isFullScreen()
-            or bool(self.windowState() & (Qt.WindowMaximized | Qt.WindowFullScreen))
+            or bool(self.windowState() & Qt.WindowFullScreen)
         ):
             return
 
@@ -3669,6 +3708,24 @@ class MainWindow(QMainWindow):
         # and grows it back.
         hug_install = install_flags and curr_idx == _PAGE_FLASH
 
+        if not hug_install and (
+            self.isMaximized() or bool(self.windowState() & Qt.WindowMaximized)
+        ):
+            # A maximized frame belongs to the document pages the user is
+            # reading. Nothing here resizes it.
+            return
+        if hug_install and (
+            self.isMaximized() or bool(self.windowState() & Qt.WindowMaximized)
+        ):
+            # A maximized frame is a document window; the install card is a
+            # compact wizard. One short card at the top of a full-height
+            # empty column looked broken, so the card gives the frame back
+            # before it is measured.
+            self.showNormal()
+            controls = getattr(self, "_window_controls", None)
+            if controls is not None and hasattr(controls, "set_state"):
+                controls.set_state(False)
+
         if hug_install:
             # Hug the progress card. The minimum comes from the wrapped copy
             # (package name, prompt, buttons), not a fixed height that clips it.
@@ -3730,18 +3787,20 @@ class MainWindow(QMainWindow):
                     donations_disabled=donations_disabled,
                 )
                 # Downloading and extraction keep their deliberately short
-                # cards. The flashing screen is the one that must look like a
-                # compact installer while it runs (and while it completes).
-                # While the card is only asking for the player (connect
-                # prompt, power-off step) the window hugs that one card: the
-                # wizard's tall preferred frame left a band of empty window
-                # below it. A card showing real progress keeps the wizard size.
+                # cards. A flashing run keeps the wizard size while it is
+                # still working, but a finished card hugs the copy it shows:
+                # once the donation appeal is gone there is nothing below the
+                # completion note, and the wizard frame left an empty band.
+                # A card only asking for the player (connect prompt, power-off
+                # step) has always hugged its one card for the same reason.
                 waiting_for_device = waiting_for_device_card(page)
-                if (
-                    getattr(page, "_stack", None) is not None
-                    and page._stack.currentWidget()
-                    is getattr(page, "_flashing_view", None)
-                    and not waiting_for_device
+                if install_card_keeps_wizard_frame(
+                    page,
+                    finished=bool(
+                        getattr(self, "_install_complete", False)
+                        or getattr(self, "_install_failed", False)
+                    ),
+                    waiting_for_device=waiting_for_device,
                 ):
                     content_h = install_wizard_height(content_h, target_w)
                 target_h = max(
@@ -4313,6 +4372,10 @@ class MainWindow(QMainWindow):
             checked = self._log_btn
         elif page_idx == _PAGE_SUPPORT:
             checked = getattr(self, "_support_btn", None)
+        elif page_idx in (_PAGE_NOTICES, _PAGE_NOTICE):
+            # One notice's detail is a child view of the Notices page, so that
+            # row stays lit rather than leaving the previously open tab's row.
+            checked = getattr(self, "_notices_btn", None)
         elif page_idx == _PAGE_FLASH:
             checked = self._nav_buttons.get("nav_select_package", (None,))[0]
         else:
@@ -4329,6 +4392,7 @@ class MainWindow(QMainWindow):
         for btn in (
             self._nav_buttons.get("nav_select_package", (None,))[0],
             getattr(self, "_settings_btn", None),
+            getattr(self, "_notices_btn", None),
             getattr(self, "_log_btn", None),
             getattr(self, "_support_btn", None),
         ):
@@ -4920,15 +4984,14 @@ class MainWindow(QMainWindow):
                         pkg = candidate
                         break
             self._keep_data_pkg = pkg
+            # The tick says only what it does. Naming one compatible release in
+            # brackets beside it read as though Keep Data belonged to that
+            # release; the compatible software gets its own caption instead.
             names = keep_data.compatible_software_names(pkg, model) if pkg is not None else []
-            base_label = keep_data.keep_data_label(model)
-            if len(names) == 1:
-                label = f"{base_label} ({names[0]})"
-            else:
-                label = base_label
             self._flash_page.set_keep_data_available(
                 keep_data.keep_data_available(model, pkg, self.settings),
-                label,
+                keep_data.keep_data_label(model),
+                names,
             )
         except Exception:
             logger.debug("Could not evaluate Keep Data compatibility", exc_info=True)
@@ -5204,9 +5267,11 @@ class MainWindow(QMainWindow):
             self._settings_page.set_method_enabled(False)
             self._enter_flashing_state()
         elif step == STEP_DONE:
-            self._flash_page.set_device_done(
-                donations_shown=not device_tracking.is_donation_install_prompt_disabled(self.settings)
-            )
+            # Every partition is written, but the worker has not finished: it
+            # still closes USB (MTKclient) or waits for SP Flash Tool. The
+            # completion screen arrives with _handle_flash_success; until then
+            # the card stays up saying it is finishing.
+            self._flash_page.show_finishing()
 
     def _set_state(self, state):
         if self.sm.state is state:
@@ -6030,8 +6095,14 @@ class MainWindow(QMainWindow):
             from ..notifications import bring_window_to_front, show_completion_notification
             title = tr("notify_install_complete_title")
             message = _completion_notification_message(software, model)
+            hidden = self._window_hidden_in_tray()
             show_completion_notification(title, message, window=self)
-            bring_window_to_front(self)
+            if hidden:
+                # The notification's bring-to-front shows the window but does
+                # not release the menu-bar hold or restart the paused timers.
+                self._show_from_tray()
+            else:
+                bring_window_to_front(self)
         except Exception:
             logger.debug("Completion notification failed", exc_info=True)
 
@@ -6137,7 +6208,12 @@ class MainWindow(QMainWindow):
         from ..flash_service import parse_flash_error
         parsed_title, explanation = parse_flash_error(message, getattr(self, "_package_model", ""))
         self._failure_title = parsed_title
-        self._flash_page.show_install_failure(message, explanation, self._last_progress or 0)
+        self._flash_page.show_install_failure(
+            message,
+            explanation,
+            self._last_progress or 0,
+            wrong_model=is_wrong_model_error(message),
+        )
         self._sync_install_nav_entry()
         self._nav_to_page(_PAGE_FLASH)
         self._update_header_title()
@@ -7255,6 +7331,9 @@ class MainWindow(QMainWindow):
             return
         page = getattr(self, "_settings_page", None)
         self._linux_setup_flow_active = False
+        # Opening Settings by hand is the reader leaving any focused card: a
+        # stale removal journey must not pull them back to Select later.
+        self._legacy_focus_pending = False
         self._sync_settings_nav_label()
         if page is not None and page.focused_card() is not None:
             page.clear_card_focus()
@@ -7872,6 +7951,11 @@ class MainWindow(QMainWindow):
 
     def _on_language_changed(self, index):
         lang = self._lang_combo.itemData(index)
+        runtime = getattr(self, "_runtime_i18n", None)
+        if runtime is not None:
+            # Restore anything the fallback had changed before the normal
+            # retranslation writes the new language over these widgets.
+            runtime.set_language(lang)
         translator().set_language(lang)
         self.settings.setValue("language", lang)
         # A right-to-left language mirrors the interface. This runs before the
@@ -7975,6 +8059,9 @@ class MainWindow(QMainWindow):
         # Every row has its new language's text now: the rail takes the width
         # that copy needs instead of eliding it
         self._reapply_rail_width()
+        runtime = getattr(self, "_runtime_i18n", None)
+        if runtime is not None:
+            QTimer.singleShot(0, runtime.scan)
 
     def _on_manifest_loaded(self, entries):
         if entries:
@@ -8014,6 +8101,7 @@ class MainWindow(QMainWindow):
         info = getattr(self, "_pending_app_update", None)
         version = str(getattr(info, "version", "") or "")
         waiting = bool(version) and bool(getattr(info, "tag", ""))
+        self._sync_tray_update_state(waiting)
         if waiting:
             button.setText(tr("nav_get_update").format(version=version))
         else:
@@ -8263,11 +8351,18 @@ class MainWindow(QMainWindow):
                 continue
             if latest_tag:
                 player_update_check.set_last_notified_tag(model, latest_tag)
+            import json
+
+            # The click must land on this release, not just on Select Software.
+            route = "player_update:" + json.dumps(
+                {"model": model, "software": software, "tag": latest_tag},
+                separators=(",", ":"),
+            )
             notice_alerts.deliver(
                 title,
                 tr("sel_update_available").format(software=software, model=model),
                 tray=self._notification_tray(),
-                route="player_update",
+                route=route,
             )
 
     def _on_notices_ready(self, notices) -> None:
@@ -8316,25 +8411,93 @@ class MainWindow(QMainWindow):
             fresh, tray=self._notification_tray(), route="notices"
         )
 
-    def _on_notification_clicked(self, route=None) -> None:
-        """Route a clicked system notification to the view it announces."""
+    def _bring_notification_window_forward(self) -> None:
+        """Restore the window like a tray click before opening a notification's page."""
+        if self._window_hidden_in_tray() or not self.isVisible():
+            self._show_from_tray()
+            return
         from ..notifications import bring_window_to_front
 
+        bring_window_to_front(self)
+
+    def _on_notification_clicked(self, route=None) -> None:
+        """Route a clicked system notification to the view it announces."""
         if route is None:
             app = QApplication.instance()
             route = getattr(app, "_last_notification_route", "")
-        if route == "app_update":
-            bring_window_to_front(self)
+        route = str(route or "")
+        kind, _, target = route.partition(":")
+        if kind == "app_update":
+            self._bring_notification_window_forward()
             self._on_check_updates_clicked()
-        elif route == "player_update":
-            bring_window_to_front(self)
+        elif kind == "player_update":
+            self._bring_notification_window_forward()
             self._nav_to_page(_PAGE_SELECT)
-        elif route == "notices" and getattr(self, "_notices_available", False):
-            bring_window_to_front(self)
+            self._focus_notified_release(target)
+        elif kind == "install":
+            self._bring_notification_window_forward()
+            self._nav_to_page(_PAGE_FLASH)
+        elif kind == "notices":
+            self._bring_notification_window_forward()
             self._nav_to_page(_PAGE_NOTICES)
+            self._open_notified_notice(target)
+
+    def _focus_notified_release(self, target: str) -> None:
+        """Select the model, software and tag named by a notification."""
+        if not target:
+            return
+        stack = getattr(self, "_stack", None)
+        if stack is not None and stack.currentIndex() != _PAGE_SELECT:
+            # The install run owns the window; do not change the hidden page.
+            return
+        import json
+
+        try:
+            payload = json.loads(target)
+        except Exception:
+            return
+        if not isinstance(payload, dict):
+            return
+        model = str(payload.get("model") or "").strip()
+        software = str(payload.get("software") or "").strip()
+        tag = str(payload.get("tag") or "").strip()
+        page = getattr(self, "_select_page", None)
+        if page is None or not model or not software:
+            return
+        if hasattr(page, "navigate_to_package"):
+            page.navigate_to_package(
+                model, software, tag_name=tag or None, refresh_if_missing=True
+            )
+
+    def _open_notified_notice(self, target: str) -> None:
+        """Show the notice named by a notification, falling back to the list."""
+        stack = getattr(self, "_stack", None)
+        if stack is not None and stack.currentIndex() != _PAGE_NOTICES:
+            return
+        page = getattr(self, "_notices_page", None)
+        if page is None:
+            return
+        if hasattr(page, "refresh_from_service"):
+            try:
+                page.refresh_from_service()
+            except Exception:
+                pass
+        if target and hasattr(page, "open_notice_by_id"):
+            try:
+                if page.open_notice_by_id(target):
+                    return
+            except Exception:
+                pass
+        if hasattr(page, "show_list"):
+            page.show_list()
 
     def _check_legacy_installations(self):
         try:
+            if paths.IS_WINDOWS or config.is_mediatek_installer():
+                # The removal offer is a macOS/Linux Settings card. On these
+                # hosts it can never be shown, so launch neither walks the old
+                # folders nor risks focusing a card that is not there.
+                return
             if sys.platform == "darwin":
                 # macOS, first launch: the pre-3.0 app's footprint is the
                 # Application Support folder marked by firmware_downloader.py.
@@ -8367,28 +8530,37 @@ class MainWindow(QMainWindow):
             info = detect_legacy_installations()
             if info.get("has_legacy"):
                 # The offer is the Settings card, shown on its own in the app's
-                # own surface. Nothing is popped out over the window.
-                self._show_legacy_removal_card()
-                self.settings.setValue("legacy_cleanup_prompted", True)
+                # own surface. Nothing is popped out over the window. A host
+                # whose Settings column does not carry the card is left alone,
+                # and is not recorded as having been asked.
+                if self._show_legacy_removal_card():
+                    self.settings.setValue("legacy_cleanup_prompted", True)
         except Exception:
             logger.debug("Legacy installation migration/check failed", exc_info=True)
 
-    def _show_legacy_removal_card(self) -> None:
+    def _show_legacy_removal_card(self) -> bool:
         """Offer the removal on its own card, in the window, not as a modal.
 
         The Settings card is the offer's one home. Showing it alone keeps the
         question on the app's own surface, and the window is then sized to fit
-        that single card.
+        that single card. Returns False when this host's Settings column does
+        not offer the card, so the launch check cannot navigate into a focused
+        card that has no journey behind it.
         """
-        self._nav_to_page(_PAGE_SETTINGS)
         page = getattr(self, "_settings_page", None)
         card = getattr(page, "_legacy_cleanup_card", None) if page is not None else None
         if card is None:
-            return
-        page.show_card_alone(card)
+            return False
+        available = getattr(page, "legacy_offer_available", None)
+        if not callable(available) or not available():
+            return False
+        self._nav_to_page(_PAGE_SETTINGS)
+        if not page.show_card_alone(card):
+            return False
         page._reveal_legacy_card()
         self._legacy_focus_pending = True
         self._adjust_window_geometry()
+        return True
 
     def _on_card_focus_finished(self):
         """A card shown on its own is done: hand the page and the window back."""
@@ -8573,8 +8745,11 @@ class MainWindow(QMainWindow):
         if donations:
             self._donations = donations
             page = getattr(self, "_support_page", None)
-            if page is not None:
-                page.set_donations(donations)
+            # The shipped Support Us page is static; a future page that renders
+            # the donation total opts in by providing the setter.
+            setter = getattr(page, "set_donations", None)
+            if callable(setter):
+                setter(donations)
 
     def _on_support_clicked(self):
         """Open Support Us in the window. A finished install keeps Install Software selected.
@@ -8882,6 +9057,21 @@ class MainWindow(QMainWindow):
         self._run_update_check()
         self._check_device_firmware_updates(manual=False)
 
+    def _sync_tray_update_state(self, available: bool) -> None:
+        """Point the menu bar item at a waiting build, when the host has one."""
+        tray = getattr(self, "_background_tray", None)
+        setter = getattr(tray, "set_update_available", None)
+        if callable(setter):
+            try:
+                setter(bool(available))
+            except Exception:
+                logger.debug("Could not update the menu bar item", exc_info=True)
+
+    def _on_tray_check_updates(self) -> None:
+        """The menu bar's update action: show the window before checking."""
+        self._show_from_tray()
+        self._on_check_updates_clicked()
+
     def _ensure_background_tray(self):
         tray = getattr(self, "_background_tray", None)
         if tray is None:
@@ -8894,9 +9084,14 @@ class MainWindow(QMainWindow):
                 self._show_from_tray,
                 self._quit_from_tray,
                 fallback,
+                check_updates=self._on_tray_check_updates,
             )
             tray.message_clicked.connect(self._on_notification_clicked)
             self._background_tray = tray
+            info = getattr(self, "_pending_app_update", None)
+            self._sync_tray_update_state(
+                bool(getattr(info, "version", "")) and bool(getattr(info, "tag", ""))
+            )
         return tray
 
     def _show_from_tray(self) -> None:

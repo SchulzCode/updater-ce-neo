@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .. import fx
 from ..browser import open_browser
 from ..config import DONATION_CRYPTO, DONATION_LINKS
 from ..i18n import tr
@@ -154,27 +155,11 @@ class SupportPage(QWidget):
 
         # Primary payment methods: each button keeps its own label width and
         # the row wraps instead of squeezing four labels into a narrow card.
-        btn_row = FlowLayout(spacing=8)
-
-        primary_methods = [
-            ("donate_kofi", "kofi"),
-            ("donate_buy_me_a_coffee", "bmc"),
-            ("donate_paypal", "paypal"),
-            ("donate_revolut", "revolut"),
-            ("donate_patreon", "patreon"),
-        ]
-
+        self._method_row = FlowLayout(spacing=8)
         self._method_buttons = []
-        for key, link_id in primary_methods:
-            url = DONATION_LINKS.get(link_id, "")
-            btn = QPushButton(tr(key))
-            btn.setCursor(Qt.CursorShape.ArrowCursor)
-            btn.setMinimumHeight(28)
-            btn.clicked.connect(lambda _=False, u=url: open_browser(u))
-            btn_row.addWidget(btn)
-            self._method_buttons.append((btn, key))
-
-        card_layout.addLayout(btn_row)
+        self._method_route = ""
+        self._populate_method_buttons(fx.donation_route())
+        card_layout.addLayout(self._method_row)
 
         # Small Discrete Text Buttons towards bottom for Honeygain & Crypto
         bottom_links_row = QHBoxLayout()
@@ -242,6 +227,7 @@ class SupportPage(QWidget):
 
         self._crypto_drawer.setVisible(False)
         card_layout.addWidget(self._crypto_drawer)
+        self._sync_method_visibility()
 
         self._card.set_layout(card_layout)
         layout.addWidget(self._card)
@@ -346,6 +332,48 @@ class SupportPage(QWidget):
         if win is not None and hasattr(win, "_adjust_window_geometry"):
             win._adjust_window_geometry()
 
+    def _populate_method_buttons(self, route: str) -> None:
+        """Replace the method row with the buttons this route offers."""
+        for button, _key in self._method_buttons:
+            self._method_row.removeWidget(button)
+            button.hide()
+            button.deleteLater()
+        self._method_buttons = []
+        self._method_route = route
+
+        primary_methods = [
+            ("donate_kofi", "kofi"),
+            ("donate_buy_me_a_coffee", "bmc"),
+            ("donate_paypal", "paypal"),
+            ("donate_revolut", "revolut"),
+            ("donate_patreon", "patreon"),
+        ]
+        if route == "boosty":
+            # Boosty is the only page that takes a Russian card, so it is the
+            # whole method row there; the Honeygain and crypto links go too.
+            primary_methods = [("donate_boosty", "boosty")]
+        elif route == "bmc":
+            # A Russian reader outside Russia gets the coffee page that works
+            # there, in Boosty's place.
+            primary_methods = [("donate_buy_me_a_coffee", "bmc")]
+
+        for key, link_id in primary_methods:
+            url = DONATION_LINKS.get(link_id, "")
+            btn = QPushButton(tr(key))
+            btn.setCursor(Qt.CursorShape.ArrowCursor)
+            btn.setMinimumHeight(28)
+            btn.clicked.connect(lambda _=False, u=url: open_browser(u))
+            self._method_row.addWidget(btn)
+            self._method_buttons.append((btn, key))
+
+    def _sync_method_visibility(self) -> None:
+        """The extra ways to give disappear with the Russian one-method row."""
+        hidden = bool(self._method_route)
+        self._honeygain_link.setVisible(not hidden)
+        self._crypto_toggle_link.setVisible(not hidden)
+        if hidden:
+            self._crypto_drawer.setVisible(False)
+
     def _copy_crypto(self, address: str, button: QPushButton):
         clipboard = QGuiApplication.clipboard()
         if clipboard is not None:
@@ -368,8 +396,14 @@ class SupportPage(QWidget):
         self._crypto_toggle_link.setText(
             tr("donate_crypto_hide") if self._crypto_drawer.isVisible() else tr("donate_crypto_toggle")
         )
-        for btn, key in getattr(self, "_method_buttons", []):
-            btn.setText(tr(key))
+        route = fx.donation_route()
+        if route != self._method_route:
+            self._populate_method_buttons(route)
+            self._sync_method_visibility()
+            self._queue_content_check()
+        else:
+            for btn, key in getattr(self, "_method_buttons", []):
+                btn.setText(tr(key))
 
     def refresh_theme(self) -> None:
         self.update()

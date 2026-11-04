@@ -62,3 +62,15 @@ def test_a_failed_run_keeps_the_card_up_after_a_donations_success(page):
     page.begin_run()
     page.show_flashing()
     assert not page._progress_card.isHidden()
+
+
+def test_finishing_holds_the_card_until_the_backend_reports_done(page):
+    """STEP_DONE still closes the session; the card must not blank first."""
+    page.show_flashing()
+    page.show_finishing()
+
+    assert not page._progress_card.isHidden()
+    assert page._appeal.isHidden()
+    assert page._step_label.text() == "Finishing up, please wait…"
+    assert page._warning.isVisible()
+    assert not page._cancel_btn.isVisible()

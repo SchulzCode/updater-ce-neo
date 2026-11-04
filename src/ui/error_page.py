@@ -155,6 +155,10 @@ class ErrorPage(QWidget):
             self._cause.setVisible(False)
         if hasattr(self, "_driver_btn"):
             self._driver_btn.setVisible(False)
+        if hasattr(self, "_retry_btn"):
+            self._retry_btn.setVisible(True)
+            self._reconnect_btn.setVisible(True)
+            self._reselect_btn.setText(tr("err_btn_reselect"))
         if mode == "device":
             self._banner.set_type("danger")
             self._banner.set_key("err_device_title")
@@ -173,13 +177,19 @@ class ErrorPage(QWidget):
             self._hint.setText(tr("flash_warning"))
         elif mode == "failed":
             error_code = self._mode_args.get("error_code")
+            wrong_model = is_wrong_model_error(error_code)
             self._banner.set_type("danger")
-            self._banner.set_key("flash_failed")
-            self._title.setText(
-                tr("err_driver_missing_title")
-                if is_sp_driver_error(error_code)
-                else tr("err_flash_title")
+            self._banner.set_key(
+                "err_sp_wrong_model_title" if wrong_model else "flash_failed"
             )
+            if wrong_model:
+                self._title.setText(tr("err_sp_wrong_model_title"))
+            else:
+                self._title.setText(
+                    tr("err_driver_missing_title")
+                    if is_sp_driver_error(error_code)
+                    else tr("err_flash_title")
+                )
             self._error_row.set_value(_format_error_code(error_code))
             step = self._mode_args.get("step") or "\u2014"
             percent = self._mode_args.get("percent", 0)
@@ -191,6 +201,16 @@ class ErrorPage(QWidget):
             self._cause.setVisible(bool(guidance))
             if hasattr(self, "_driver_btn"):
                 self._driver_btn.setVisible(is_sp_driver_error(error_code))
+            # Retrying or reconnecting cannot change the connected model, so a
+            # wrong-player failure offers the one honest action: cancel the
+            # install and go back to choosing software.
+            if hasattr(self, "_retry_btn"):
+                self._retry_btn.setVisible(not wrong_model)
+                self._reconnect_btn.setVisible(not wrong_model)
+            if hasattr(self, "_reselect_btn"):
+                self._reselect_btn.setText(
+                    tr("err_btn_cancel_install") if wrong_model else tr("err_btn_reselect")
+                )
             ndash = '\u2014'
             self._hint.setText(
                 f"{tr('flash_current_pkg')}: {self._mode_args.get('package_name') or ndash}"
@@ -209,7 +229,6 @@ class ErrorPage(QWidget):
         self._render()
         self._retry_btn.setText(tr("err_btn_retry"))
         self._reconnect_btn.setText(tr("err_btn_reconnect"))
-        self._reselect_btn.setText(tr("err_btn_reselect"))
         self._log_btn.setText(tr("err_view_log"))
         if hasattr(self, "_driver_btn"):
             self._driver_btn.setText(tr("settings_download_drivers_btn"))

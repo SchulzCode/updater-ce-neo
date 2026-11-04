@@ -2503,6 +2503,10 @@ class SelectPackagePage(QWidget):
                         selected_row = row
                         break
             self._release_list.setCurrentRow(selected_row)
+            if target_tag:
+                selected_item = self._release_list.item(selected_row)
+                if selected_item is not None:
+                    self._release_list.scrollToItem(selected_item)
             scroll_to = getattr(self, "_scroll_to_restore", None)
             if scroll_to is not None:
                 self._scroll_to_restore = None
@@ -4151,8 +4155,11 @@ class SelectPackagePage(QWidget):
         newest = max(releases, key=catalog.release_sort_key)
         return newest.get("tag_name") or ""
 
-    def navigate_to_package(self, model: str, software_name: str, tag_name=None):
+    def navigate_to_package(
+        self, model: str, software_name: str, tag_name=None, refresh_if_missing=False
+    ):
         """Switch to the catalogue, select specified model/software, highlight tag_name."""
+
         self._show_online_view()
         m_idx = self._model_combo.findText(model)
         if m_idx >= 0 and m_idx != self._model_combo.currentIndex():
@@ -4168,8 +4175,20 @@ class SelectPackagePage(QWidget):
                 r = it.data(Qt.UserRole)
                 if r and r.get("tag_name") == tag_name:
                     self._release_list.setCurrentRow(row)
+                    self._release_list.scrollToItem(it)
                     self._target_tag_to_select = None
                     break
+            else:
+                # The tag is not in the current listing (a release outside the
+                # active filters, or a stale list). A running worker will apply
+                # the pending tag when it lands; otherwise ask for a fresh list.
+                worker = getattr(self, "_releases_worker", None)
+                if (
+                    refresh_if_missing
+                    and self.current_package() is not None
+                    and (worker is None or not worker.isRunning())
+                ):
+                    self._refresh_releases()
 
     def start_install_for_release(
         self,

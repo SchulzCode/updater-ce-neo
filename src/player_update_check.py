@@ -250,14 +250,23 @@ def hardware_type_label(hardware_type: str) -> str:
 
 
 def tracked_model_label(record: dict) -> str:
-    """User-facing model label, naming only a non-standard hardware revision."""
+    """User-facing model label, naming only a non-standard hardware revision.
+
+    The standard revision is the model's own name: "Y1" is a Type A Y1, and
+    a model the catalogue registers no revisions for (Y2) has only the one,
+    so its records are plain "Y2". Only a second or third revision — the
+    reason an owner tracks more than one player — earns the bracket.
+    """
     model = record.get("model", "")
     label = device_label_for_model(model)
     hw = str(record.get("hardware_type") or "").strip()
     if hw.lower().startswith("type"):
         hw = hw.split()[-1] if hw.split() else ""
     hw = hw.upper()
-    if hw and hw != default_hardware_type(model):
+    # Type A is the unnamed default even when the model registers no
+    # revisions at all (``default_hardware_type`` is then empty).
+    standard = default_hardware_type(model) or "A"
+    if hw and hw != standard:
         label = f"{label} ({hardware_type_label(hw)})"
     return label
 

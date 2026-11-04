@@ -28,6 +28,11 @@ logger = logging.getLogger(__name__)
 # QSettings key for the Settings switch.
 RUN_AS_ADMIN_KEY = "run_as_admin"
 
+# Passed to the restarted copy. It is a hand-over, not a second launch:
+# the old copy is still quitting when the elevated one starts, so the new
+# copy waits for its guard instead of refusing it.
+TAKE_OVER_ARG = "--take-over"
+
 _TRUTHY = frozenset({"1", "true", "yes", "on", "checked", "enabled"})
 
 
@@ -117,14 +122,15 @@ def description_text() -> str:
 
 def _relaunch_argv() -> list:
     """The command that starts this app again, for the current packaging."""
+    forwarded = [a for a in sys.argv[1:] if a != TAKE_OVER_ARG]
     if getattr(sys, "frozen", False):
         # A packaged build: the executable is the app.
-        return [sys.executable, *sys.argv[1:]]
+        return [sys.executable, *forwarded, TAKE_OVER_ARG]
     script = str(sys.argv[0] or "").strip()
     if script and not script.startswith("-"):
-        return [sys.executable, str(Path(script).resolve()), *sys.argv[1:]]
+        return [sys.executable, str(Path(script).resolve()), *forwarded, TAKE_OVER_ARG]
     # Started with -c or -m: the package entry point is the honest answer.
-    return [sys.executable, "-m", "src.app", *sys.argv[1:]]
+    return [sys.executable, "-m", "src.app", *forwarded, TAKE_OVER_ARG]
 
 
 def _quote_windows(part) -> str:

@@ -144,14 +144,9 @@ def test_psychological_donation_appeal_variants(qapp):
     fp.show_flashing()
     fp.set_device_done(donations_shown=True)
 
-    expected_keys = [
-        "donate_completion_body",
-        "donate_completion_body_reciprocity",
-        "donate_completion_body_community",
-        "donate_completion_body_effort",
-        "donate_completion_body_momentum",
-        "donate_completion_body_transparency",
-    ]
+    from src.ui.support_appeal import COMPLETION_BODY_KEYS
+
+    expected_keys = list(COMPLETION_BODY_KEYS)
 
     for key in expected_keys:
         text = tr(key)

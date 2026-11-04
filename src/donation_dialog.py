@@ -9,6 +9,7 @@ import logging
 import random
 import sys
 
+from . import fx
 from .browser import open_browser
 
 from PySide6.QtCore import QEasingCurve, QObject, QPropertyAnimation, QSize, Qt, QTimer, Signal
@@ -30,7 +31,8 @@ from PySide6.QtWidgets import (
 from .config import DONATION_LINKS, device_label_for_model
 from .donors import (
     fetch_remote_donors_async,
-    get_monthly_goal_stats,
+    format_goal_line,
+    get_goal_stats,
     is_anonymous_donor,
     relative_date,
 )
@@ -622,13 +624,14 @@ class DonationStatusBar(QStatusBar):
         """Build recognized donor recognition lines adhering to community display rules.
 
         - Ko-Fi donations: 'bought x coffees' (or 1 coffee).
-        - Other methods (Revolut, PayPal, Patreon, Bitcoin, etc.): '$x by [Method]' (or '$x').
+        - Other methods (Revolut, PayPal, Patreon, Bitcoin, etc.): local-currency amount by [Method].
         - Top supporters: Recognise higher than average or multiple donations with 'Top supporter ' prefix.
-        - Ko-Fi only top supporters show total in coffees; multiple methods show total in dollars.
+        - Ko-Fi only top supporters show total in coffees; multiple methods show the local-currency total.
         - Natural relative date phrasing (e.g. 'last year', 'in August', 'last month', 'in July', etc.).
         """
         from .donors import format_donation_when
 
+        _symbol, code = fx.pair()
         valid = []
         for d in self.donations:
             amt = float(d.get("amount", 0))
@@ -683,7 +686,7 @@ class DonationStatusBar(QStatusBar):
                 tmpl = tr("donate_bought_coffee") if coffees == 1 else tr("donate_bought_coffees")
                 raw_line = tmpl.format(top_prefix=top_prefix, anchor=anchor, count=coffees, when=when)
             else:
-                amt_str = str(int(amt)) if amt.is_integer() else f"{amt:.2f}"
+                amt_str = fx.money(amt, code)
                 clean_method = ""
                 if len(methods_norm) == 1:
                     m = next(iter(methods_norm))
@@ -703,7 +706,7 @@ class DonationStatusBar(QStatusBar):
                         clean_method = list(methods)[0].strip()
 
                 if clean_method and clean_method.lower() != "donation":
-                    tmpl = tr("donate_donated_by_method")
+                    tmpl = tr("donate_donated_by_method").replace("$", "")
                     raw_line = tmpl.format(
                         top_prefix=top_prefix,
                         anchor=anchor,
@@ -712,7 +715,7 @@ class DonationStatusBar(QStatusBar):
                         when=when,
                     )
                 else:
-                    tmpl = tr("donate_donated_amount")
+                    tmpl = tr("donate_donated_amount").replace("$", "")
                     raw_line = tmpl.format(
                         top_prefix=top_prefix,
                         anchor=anchor,
@@ -756,12 +759,11 @@ class DonationStatusBar(QStatusBar):
         return lines or [tr("donate_thanks_status")]
 
     def _refresh_goal(self):
-        raised, _remaining, percent, target = get_monthly_goal_stats(self.donations)
-        raised = float(raised)
+        stats = get_goal_stats(self.donations)
+        line = format_goal_line(stats)
         _os_k, _ew, g_ok, _p_ok, _ = _resolve_bar_state(self)
-        self._goal_suppressed = (raised <= 0.0 or raised > 199.0 or not g_ok)
-        self._goal_reached = raised >= float(target)
-        raised_text = str(int(raised)) if raised.is_integer() else f"{raised:.2f}"
+        self._goal_suppressed = (not line or not g_ok)
+        self._goal_reached = bool(stats.get("reached"))
         if self._goal_suppressed or self._goal_reached:
             self._showing_goal = False
             self._goal_label.setVisible(False)
@@ -774,10 +776,8 @@ class DonationStatusBar(QStatusBar):
             self._goal_label.setVisible(True)
             self._goal_bar.setVisible(True)
             self._donor_label.setVisible(False)
-            self._goal_label.setText(
-                tr("donate_goal_status_fmt").format(raised=raised_text, target=target)
-            )
-            self._goal_bar.setValue(int(round(percent * 10)))
+            self._goal_label.setText(line)
+            self._goal_bar.setValue(int(round(float(stats.get("shown_percent") or 0) * 10)))
 
     def _show_next_donor_line(self):
         if not self._donor_lines:
@@ -797,11 +797,11 @@ class DonationStatusBar(QStatusBar):
 
     def _show_next_message_line(self):
         import random
-        raised, _remaining, percent, target = get_monthly_goal_stats(self.donations)
-        raised = float(raised)
+        stats = get_goal_stats(self.donations)
+        line = format_goal_line(stats)
         os_k, ew, g_ok, _p_ok, _ = _resolve_bar_state(self)
-        goal_suppressed = (raised <= 0.0 or raised > 199.0 or not g_ok)
-        goal_reached = raised >= float(target)
+        goal_suppressed = (not line or not g_ok)
+        goal_reached = bool(stats.get("reached"))
 
         if not g_ok and random.random() < 0.78:
             self._show_next_donor_line()
@@ -824,15 +824,12 @@ class DonationStatusBar(QStatusBar):
         freq_hit = (ew == 1 or os_k == 1 or (self._msg_turn % 2 == 1))
         show_goal = (not goal_suppressed and not goal_reached and freq_hit)
         if show_goal:
-            raised_text = str(int(raised)) if raised.is_integer() else f"{raised:.2f}"
             self._showing_goal = True
             self._goal_label.setVisible(True)
             self._goal_bar.setVisible(True)
             self._donor_label.setVisible(False)
-            self._goal_label.setText(
-                tr("donate_goal_status_fmt").format(raised=raised_text, target=target)
-            )
-            self._goal_bar.setValue(int(round(percent * 10)))
+            self._goal_label.setText(line)
+            self._goal_bar.setValue(int(round(float(stats.get("shown_percent") or 0) * 10)))
             self._goal_label.repaint()
             self._goal_bar.repaint()
         else:
@@ -1117,23 +1114,25 @@ class DonationDialog(QDialog):
             layout.addWidget(self._dont_ask)
 
         # Two donation actions, side by side: the Ko-fi page, and Buy Me a
-        # Coffee beside it. No other payment method is offered here.
+        # Coffee beside it. Russian readers get one region-appropriate action:
+        # Boosty in Russia, Buy Me a Coffee outside it (see fx.donation_route()).
         actions = QHBoxLayout()
         actions.setSpacing(8)
-        coffee = QPushButton(tr("donate_buy_coffee"))
-        coffee.setCursor(Qt.ArrowCursor)
-        coffee.setStyleSheet("")
-        coffee.clicked.connect(lambda _=False: open_browser(DONATION_LINKS["kofi"]))
-        self._pay_buttons.append(coffee)
-        actions.addWidget(coffee, 0, Qt.AlignLeft)
-
-        bmc = QPushButton(tr("donate_buy_me_a_coffee"))
-        bmc.setCursor(Qt.ArrowCursor)
-        bmc.setStyleSheet("")
-        bmc.clicked.connect(lambda _=False: open_browser(DONATION_LINKS["bmc"]))
-        self._pay_buttons.append(bmc)
-        self._last_button = bmc
-        actions.addWidget(bmc, 0, Qt.AlignLeft)
+        route = fx.donation_route()
+        if route == "boosty":
+            links = [("donate_boosty", "boosty")]
+        elif route == "bmc":
+            links = [("donate_buy_me_a_coffee", "bmc")]
+        else:
+            links = [("donate_buy_coffee", "kofi"), ("donate_buy_me_a_coffee", "bmc")]
+        for key, link in links:
+            btn = QPushButton(tr(key))
+            btn.setCursor(Qt.ArrowCursor)
+            btn.setStyleSheet("")
+            btn.clicked.connect(lambda _=False, u=DONATION_LINKS[link]: open_browser(u))
+            self._pay_buttons.append(btn)
+            self._last_button = btn
+            actions.addWidget(btn, 0, Qt.AlignLeft)
         actions.addStretch(1)
         layout.addLayout(actions)
 
@@ -1171,18 +1170,19 @@ class DonationDialog(QDialog):
 
     def _donor_lines(self):
         raw_items = []
+        _symbol, code = fx.pair()
         for d in self.donations:
             if d.get("amount", 0) <= 0:
                 continue
             name = d.get("name", tr("donate_supporter"))
             amt = float(d.get("amount", 0))
-            amt_s = f"{int(amt)}" if amt.is_integer() else f"{amt:.2f}"
+            amt_s = fx.money(amt, code)
             method = d.get("method", tr("donate_method_generic"))
             url = d.get("url", "")
             when = relative_date(d.get("dt"))
             t = T()
             anchor = f'<a href="{url}" style="color:{t.fg}; font-weight:bold;">{name}</a>' if url else name
-            line = tr("donate_ticker_fmt").format(anchor=anchor, amount=amt_s, method=method, when=when)
+            line = tr("donate_ticker_fmt").replace("$", "").format(anchor=anchor, amount=amt_s, method=method, when=when)
             raw_items.append((line, amt, d.get("dt"), amt >= 20.0))
         lines = _order_bar_slots(self, raw_items)
         pool = getattr(self, "_donor_pool", None) or lines
@@ -1191,12 +1191,11 @@ class DonationDialog(QDialog):
         return list(pool)
 
     def _refresh_goal(self):
-        raised, _, pct, target = get_monthly_goal_stats(self.donations)
-        raised = float(raised)
-        r_s = f"{int(raised)}" if raised.is_integer() else f"{raised:.2f}"
+        stats = get_goal_stats(self.donations)
+        line = format_goal_line(stats)
         _os_k, _ew, g_ok, _p_ok, _ = _resolve_bar_state(self)
-        self._goal_suppressed = (raised <= 0.0 or raised > 199.0 or not g_ok)
-        self._goal_reached = raised >= float(target)
+        self._goal_suppressed = (not line or not g_ok)
+        self._goal_reached = bool(stats.get("reached"))
         if self._goal_suppressed:
             self._showing_goal = False
             self._goal_target = 0
@@ -1208,8 +1207,8 @@ class DonationDialog(QDialog):
             self._goal_target = 1000
             self._goal_bar.setValue(self._goal_target)
         else:
-            self._goal_label.setText(tr("donate_goal_fmt").format(raised=r_s, target=target))
-            self._goal_target = int(round(pct * 10))
+            self._goal_label.setText(line)
+            self._goal_target = int(round(float(stats.get("shown_percent") or 0) * 10))
             self._goal_bar.setValue(self._goal_target)
 
     def _next_ticker_message(self) -> str:

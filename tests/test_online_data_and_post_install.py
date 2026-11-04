@@ -459,6 +459,37 @@ def test_rebuilding_notice_cards_hands_back_their_appkit_chips(qapp):
         page.deleteLater()
 
 
+def test_replacing_notice_cards_never_makes_them_top_level_windows(qapp):
+    """A dismissed notice's card is hidden, not unparented into a small window.
+
+    The list rebuilds while the card's dismiss chip is handling its click.
+    Unparenting the visible card made it a top-level window until deleteLater
+    ran, which could flash as a small window over the page.
+    """
+    from src.ui.dialogs import NoticesPage
+
+    page = NoticesPage()
+    try:
+        first = Notice(id="a", title="First", content="Body.", full_content="Body.")
+        second = Notice(id="b", title="Second", content="Body.", full_content="Body.")
+        page.set_notices([first, second])
+        qapp.processEvents()
+        rows = [
+            page._body_layout.itemAt(i).widget()
+            for i in range(page._body_layout.count())
+        ]
+        rows = [row for row in rows if row is not None and row.objectName() == "noticeRow"]
+        assert len(rows) == 2
+
+        page.set_notices([second])
+        for row in rows:
+            assert not row.isWindow(), "a replaced card must stay inside the page"
+            assert row.isHidden()
+    finally:
+        page.set_notices([])
+        page.deleteLater()
+
+
 def test_window_auto_fit_never_grows_past_the_height_ceiling(qapp):
     """Tall page content scrolls; it never stretches the window past 600 px."""
     from PySide6.QtWidgets import QWidget

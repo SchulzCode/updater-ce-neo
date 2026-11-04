@@ -1375,11 +1375,24 @@ _STRINGS: dict = {
         "fr": "Fonctionner en arrière-plan pour les notifications",
         "es": "Ejecutar en segundo plano para las notificaciones",
     },
-    "settings_run_in_background_desc": {
-        "zh-CN": "关闭窗口后保留在菜单栏或系统托盘中，以便接收应用和播放器固件更新的通知。",
-        "en": "Keep the app in the menu bar or system tray after the window closes, so you still get app and player firmware update notifications. Off: closing the window quits the app.",
-        "fr": "Garder l'application dans la barre de menus ou la zone de notification après la fermeture de la fenêtre, pour recevoir les notifications de mise à jour. Désactivé : fermer la fenêtre quitte l'application.",
-        "es": "Mantiene la aplicación en la barra de menús o en la bandeja tras cerrar la ventana, para recibir notificaciones de actualización. Desactivado: cerrar la ventana cierra la aplicación.",
+    # The surface the app lives in when its window is closed. macOS has a menu
+    # bar; Windows and Linux have a system tray. Naming both told every reader
+    # about a place their own desktop does not have.
+    "settings_run_in_background_desc_menu_bar": {
+        "zh-CN": "关闭窗口后保留在菜单栏中，以便继续接收应用和播放器固件更新通知。关闭此选项：关闭窗口即退出应用。",
+        "en": "Keep the app in the menu bar after the window closes, so you still get app and player firmware update notifications. Off: closing the window quits the app.",
+        "fr": "Garder l'application dans la barre de menus après la fermeture de la fenêtre, pour recevoir les notifications de mise à jour. Désactivé : fermer la fenêtre quitte l'application.",
+        "es": "Mantiene la aplicación en la barra de menús tras cerrar la ventana, para seguir recibiendo notificaciones de actualización. Desactivado: cerrar la ventana cierra la aplicación.",
+        "de": "Behält die App nach dem Schließen des Fensters in der Menüleiste, damit du weiterhin Benachrichtigungen zu App- und Player-Updates erhältst. Aus: Das Schließen des Fensters beendet die App.",
+        "ja": "ウィンドウを閉じた後もメニューバーにアプリを残し、アプリとプレーヤーのファームウェア更新通知を受け取れるようにします。オフ：ウィンドウを閉じるとアプリが終了します。",
+    },
+    "settings_run_in_background_desc_system_tray": {
+        "zh-CN": "关闭窗口后保留在系统托盘中，以便继续接收应用和播放器固件更新通知。关闭此选项：关闭窗口即退出应用。",
+        "en": "Keep the app in the system tray after the window closes, so you still get app and player firmware update notifications. Off: closing the window quits the app.",
+        "fr": "Garder l'application dans la zone de notification après la fermeture de la fenêtre, pour recevoir les notifications de mise à jour. Désactivé : fermer la fenêtre quitte l'application.",
+        "es": "Mantiene la aplicación en la bandeja del sistema tras cerrar la ventana, para seguir recibiendo notificaciones de actualización. Desactivado: cerrar la ventana cierra la aplicación.",
+        "de": "Behält die App nach dem Schließen des Fensters im System-Tray, damit du weiterhin Benachrichtigungen zu App- und Player-Updates erhältst. Aus: Das Schließen des Fensters beendet die App.",
+        "ja": "ウィンドウを閉じた後もシステムトレイにアプリを残し、アプリとプレーヤーのファームウェア更新通知を受け取れるようにします。オフ：ウィンドウを閉じるとアプリが終了します。",
     },
     "settings_offline_mode_desc": {
         "zh-CN": "隐藏在线社区软件目录，仅使用本地软件文件进行安装。",
@@ -1585,12 +1598,28 @@ _STRINGS: dict = {
         "ja": "別のコピーが開かれているか、バックグラウンドで実行中です。2つのコピーはプレーヤーの USB 接続を取り合うため、こちらは起動しません。",
     },
     "single_instance_focus_failed": {
-        "en": "The running copy did not respond to the request to show its window. Close it, then start the updater again.",
-        "zh-CN": "正在运行的副本未响应显示窗口的请求。请先关闭它，然后重新启动更新器。",
-        "fr": "L'autre copie n'a pas répondu à la demande d'afficher sa fenêtre. Fermez-la, puis relancez le programme.",
-        "es": "La otra copia no respondió a la solicitud de mostrar su ventana. Ciérrela y vuelva a iniciar el actualizador.",
-        "de": "Die laufende Kopie hat nicht auf die Anforderung reagiert, ihr Fenster anzuzeigen. Schließen Sie sie und starten Sie den Updater erneut.",
-        "ja": "実行中のコピーはウィンドウ表示の要求に応答しませんでした。そのコピーを終了してから、もう一度起動してください。",
+        "en": "The running copy did not answer the request to show its window. It may be busy or hung. Force quitting it will interrupt anything it is installing.",
+        "zh-CN": "正在运行的副本未响应显示窗口的请求，可能正忙或已无响应。强制退出会中断它正在进行的安装。",
+        "fr": "L'autre copie n'a pas répondu à la demande d'afficher sa fenêtre. Elle est peut-être occupée ou bloquée. La forcer à quitter interrompra toute installation en cours.",
+        "es": "La otra copia no respondió a la solicitud de mostrar su ventana. Puede estar ocupada o bloqueada. Forzar su cierre interrumpirá cualquier instalación en curso.",
+        "de": "Die laufende Kopie hat nicht auf die Anforderung reagiert, ihr Fenster anzuzeigen. Sie ist möglicherweise beschäftigt oder hängt. Ein erzwungenes Beenden unterbricht eine laufende Installation.",
+        "ja": "実行中のコピーはウィンドウ表示の要求に応答しませんでした。ビジーかハングしている可能性があります。強制終了すると進行中のインストールは中断されます。",
+    },
+    "single_instance_force_quit": {
+        "en": "Force Quit and Relaunch",
+        "zh-CN": "强制退出并重新启动",
+        "fr": "Forcer la fermeture et relancer",
+        "es": "Forzar cierre y reiniciar",
+        "de": "Beenden und neu starten",
+        "ja": "強制終了して再起動",
+    },
+    "single_instance_force_failed": {
+        "en": "The running copy could not be ended. Quit it yourself, then start the updater again.",
+        "zh-CN": "无法结束正在运行的副本。请手动退出它，然后重新启动更新器。",
+        "fr": "Impossible de fermer l'autre copie. Quittez-la vous-même, puis relancez le programme.",
+        "es": "No se pudo cerrar la otra copia. Ciérrela usted mismo y vuelva a iniciar el actualizador.",
+        "de": "Die laufende Kopie konnte nicht beendet werden. Beenden Sie sie selbst und starten Sie den Updater erneut.",
+        "ja": "実行中のコピーを終了できませんでした。手動で終了してから、もう一度起動してください。",
     },
     "notices_see_more": {
         "en": "See More",
@@ -1639,6 +1668,31 @@ _STRINGS: dict = {
         "es": "Haz clic para ver todos los avisos",
         "de": "Klicken, um alle Hinweise anzuzeigen",
         "ja": "クリックしてすべてのお知らせを表示",
+    },
+
+    "notices_summary_title_one": {
+        "en": "New Community Notice",
+        "zh-CN": "新的社区公告",
+        "fr": "Nouvel avis de la communauté",
+        "es": "Nuevo aviso de la comunidad",
+        "de": "Neuer Community-Hinweis",
+        "ja": "新しいコミュニティのお知らせ",
+    },
+    "notices_summary_title_many": {
+        "en": "{count} New Community Notices",
+        "zh-CN": "{count} 条新的社区公告",
+        "fr": "{count} nouveaux avis de la communauté",
+        "es": "{count} nuevos avisos de la comunidad",
+        "de": "{count} neue Community-Hinweise",
+        "ja": "{count} 件の新しいコミュニティのお知らせ",
+    },
+    "notices_summary_body": {
+        "en": "Open Notices in the app to read them.",
+        "zh-CN": "打开应用中的公告即可阅读。",
+        "fr": "Ouvrez Avis dans l'application pour les lire.",
+        "es": "Abre Avisos en la aplicación para leerlos.",
+        "de": "Öffnen Sie die Hinweise in der App, um sie zu lesen.",
+        "ja": "アプリのお知らせを開いて読んでください。",
     },
     "toast_dismiss": {
         "zh-CN": "关闭",
@@ -1981,6 +2035,14 @@ _STRINGS: dict = {
         "es": "Tus archivos en la tarjeta microSD siempre permanecen intactos",
         "de": "Deine Medien auf der microSD-Karte bleiben immer erhalten",
         "ja": "microSDのメディアは常にそのまま保持されます",
+    },
+    "keep_data_compatible_list_fmt": {
+        "en": "Keep Data works from: {software}",
+        "zh-CN": "可从以下软件保留数据：{software}",
+        "fr": "Conserver les données fonctionne depuis : {software}",
+        "es": "Conservar datos funciona desde: {software}",
+        "de": "Daten behalten funktioniert ab: {software}",
+        "ja": "データ保持は次のソフトウェアから利用できます: {software}",
     },
     "keep_data_erase_prompt_y1": {
         "en": "Install and erase settings on your {model}?",
@@ -2654,6 +2716,16 @@ _STRINGS: dict = {
         "fr": "Installation terminée",
         "es": "Instalación completada",
     },
+    # Shown on the install card between the last write and the backend's own
+    # success signal, while MTKclient closes USB or SP Flash Tool exits.
+    "flash_finishing": {
+        "zh-CN": "正在收尾，请稍候……",
+        "en": "Finishing up, please wait…",
+        "fr": "Finalisation, veuillez patienter…",
+        "es": "Terminando, espera un momento…",
+        "de": "Wird abgeschlossen, bitte warten…",
+        "ja": "仕上げ中です。しばらくお待ちください…",
+    },
     "flash_conn_waiting": {
         "zh-CN": "等待连接",
         "en": "Waiting",
@@ -2815,6 +2887,38 @@ _STRINGS: dict = {
         "en": "Reselect Package",
         "fr": "Rechoisir le paquet",
         "es": "Volver a seleccionar paquete",
+    },
+    "err_btn_cancel_install": {
+        "en": "Cancel Install",
+        "zh-CN": "取消安装",
+        "fr": "Annuler l'installation",
+        "es": "Cancelar instalación",
+        "de": "Installation abbrechen",
+        "ja": "インストールを中止",
+    },
+    "startup_splash_ready": {
+        "en": "Innioasis Updater is getting ready…",
+        "zh-CN": "正在准备 Innioasis Updater…",
+        "fr": "Innioasis Updater se prépare…",
+        "es": "Innioasis Updater se está preparando…",
+        "de": "Innioasis Updater wird vorbereitet…",
+        "ja": "Innioasis Updater を準備しています…",
+    },
+    "startup_splash_install_firmware": {
+        "en": "Install Firmware",
+        "zh-CN": "安装固件",
+        "fr": "Installer le firmware",
+        "es": "Instalar firmware",
+        "de": "Firmware installieren",
+        "ja": "ファームウェアをインストール",
+    },
+    "startup_splash_firmware": {
+        "en": "Getting ready to install your firmware…",
+        "zh-CN": "正在准备固件安装…",
+        "fr": "Préparation de l'installation du firmware…",
+        "es": "Preparando la instalación del firmware…",
+        "de": "Firmware-Installation wird vorbereitet…",
+        "ja": "ファームウェアのインストールを準備しています…",
     },
     "err_error_code": {
         "zh-CN": "错误码",
@@ -3240,19 +3344,31 @@ _STRINGS: dict = {
     },
     "donate_goal_fmt": {
         "zh-CN": "<b>您已帮助我们筹集了本月 ${target:.0f} 美元中的 ${raised} 美元</b>",
-        "en": "<b>You've helped us raise ${raised} of our ${target:.0f} for this month</b>",
-        "fr": "<b>Vous nous avez aidés à collecter ${raised} sur nos ${target:.0f} pour couvrir les frais ce mois-ci</b>",
+        "en": "<b>You've helped us raise {raised} of our {target} costs for this month</b>",
+        "fr": "<b>Vous nous avez aidés à collecter {raised} sur nos {target} de frais pour ce mois-ci</b>",
         "es": "<b>Nos has ayudado a recaudar ${raised} de nuestros ${target:.0f} para este mes</b>",
         "de": "<b>Du hast uns geholfen, ${raised} unserer ${target:.0f} für diesen Monat zu sammeln</b>",
         "ja": "<b>今月の目標 ${target:.0f} のうち ${raised} のご支援をいただきました</b>",
     },
     "donate_goal_status_fmt": {
         "zh-CN": "<b>本月你已帮我们筹集 ${raised}，目标成本 ${target:.0f}</b>",
-        "en": "<b>You've helped us raise ${raised} of our ${target:.0f} costs this month</b>",
+        "en": "<b>You've helped us raise {raised} of our {target} costs for this month</b>",
         "fr": "<b>Vous nous avez aidé à collecter ${raised} sur nos ${target:.0f} de frais ce mois-ci</b>",
         "es": "<b>Nos has ayudado a recaudar ${raised} de nuestros ${target:.0f} de costes este mes</b>",
         "de": "<b>Diesen Monat: ${raised} / ${target:.0f}</b>",
         "ja": "<b>今月：${raised} / ${target:.0f}</b>",
+    },
+    "donate_goal_week_fmt": {
+        "en": "<b>You've helped us raise {raised} of our {target} costs for this week</b>",
+        "fr": "<b>Vous nous avez aidés à collecter {raised} sur nos {target} de frais cette semaine</b>",
+        "es": "<b>Nos has ayudado a recaudar {raised} de nuestros {target} para cubrir los costes de esta semana</b>",
+        "zh-CN": "<b>本周你已帮我们筹集了 {raised}，用于我们 {target} 的每周成本</b>",
+    },
+    "donate_goal_day_fmt": {
+        "en": "<b>You've helped us raise {raised} of our {target} costs for today</b>",
+        "fr": "<b>Vous nous avez aidés à collecter {raised} sur nos {target} de frais pour aujourd'hui</b>",
+        "es": "<b>Nos has ayudado a recaudar {raised} de nuestros {target} para cubrir los costes de hoy</b>",
+        "zh-CN": "<b>今天你已帮我们筹集了 {raised}，用于我们 {target} 的今日成本</b>",
     },
     "err_usb_disconnected_recovery": {
         "en": "Your {model} got disconnected. Please disconnect the USB and use a paperclip / pin to press the button between headphone jack and USB Port, then press next.",
@@ -3334,6 +3450,41 @@ _STRINGS: dict = {
         "de": "Rockbox und das Themenpaket sind auf deinem {model} installiert.",
         "ja": "{model} に Rockbox とテーマパックをインストールしました。",
     },
+    # Variants about the person and the quiet costs behind the app. Each says
+    # one thing once: the headline already thanked the reader, so none of
+    # these restate the install or repeat another variant's ask.
+    "donate_completion_body_family": {
+        "zh-CN": "这个应用是一个人的作品，也和我的家人共享一个家。如果今天的安装让你轻松了一些，一杯咖啡就是支持背后那些时间和心血最温暖的方式。",
+        "en": "This app is one person's work, and it shares a home with my family. If today's install made things a little easier, a coffee is a kind way to support the hours and heart behind it.",
+        "fr": "Cette application est le travail d'une seule personne, et elle partage un foyer avec ma famille. Si l'installation d'aujourd'hui vous a simplifié la vie, un café soutient doucement les heures et le cœur mis dans ce projet.",
+        "es": "Esta app es el trabajo de una sola persona, y comparte un hogar con mi familia. Si la instalación de hoy te facilitó las cosas, un café apoya con cariño las horas y el esfuerzo que hay detrás.",
+        "de": "Diese App ist die Arbeit einer einzelnen Person und teilt sich ein Zuhause mit meiner Familie. Wenn dir die heutige Installation etwas leichter gemacht hat, unterstützt ein Kaffee die Stunden und das Herzblut dahinter.",
+        "ja": "このアプリは一人の手で作られていて、私の家族と同じ暮らしの中にあります。今日のインストールが少しでも楽につながったなら、コーヒー一杯が、その背景にある時間と想いへの温かい支えになります。",
+    },
+    "donate_completion_body_running_costs": {
+        "zh-CN": "服务器、存储和域名每个月都要续费，无论当天有没有人安装。如果今天的安装顺利，一杯咖啡就能帮助分担这些看不见的日常开销。",
+        "en": "Servers, storage and domains are paid for every month, whether anyone installs that day or not. If today's install was a smooth one, a coffee helps cover those quiet running costs.",
+        "fr": "Serveurs, stockage et domaines se paient chaque mois, que quelqu'un installe ce jour-là ou non. Si l'installation d'aujourd'hui s'est bien passée, un café aide à couvrir ces frais discrets.",
+        "es": "Servidores, almacenamiento y dominios se pagan cada mes, haya o no instalaciones ese día. Si la instalación de hoy salió bien, un café ayuda a cubrir esos gastos silenciosos.",
+        "de": "Server, Speicher und Domains kosten jeden Monat Geld, egal ob an diesem Tag jemand installiert. Wenn deine Installation heute gut lief, hilft ein Kaffee, diese stillen Kosten zu tragen.",
+        "ja": "サーバー、ストレージ、ドメインは、その日に誰がインストールしていてもいなくても毎月費用がかかります。今日のインストールがうまくいったなら、コーヒー一杯がそうした静かな維持費の支えになります。",
+    },
+    "donate_completion_body_kindness": {
+        "zh-CN": "这里没有订阅，也没有任何功能被锁起来。如果这个应用今天帮到了你，请下一杯咖啡，就是把这份善意传给下一个人。",
+        "en": "There is no subscription and nothing is locked away. If the app was useful today, paying a coffee forward is a small kindness that keeps it free for the next person.",
+        "fr": "Il n'y a ni abonnement ni fonction réservée. Si l'application vous a été utile aujourd'hui, offrir un café est une petite attention qui la garde gratuite pour la personne suivante.",
+        "es": "No hay suscripción ni funciones bloqueadas. Si la app te resultó útil hoy, invitar un café es un pequeño gesto que la mantiene gratis para la próxima persona.",
+        "de": "Es gibt kein Abo und keine gesperrten Funktionen. Wenn dir die App heute geholfen hat, ist ein Kaffee eine kleine Freundlichkeit, die sie für den nächsten Menschen kostenlos hält.",
+        "ja": "サブスクリプションも、制限された機能もありません。今日このアプリが役に立ったなら、コーヒー一杯を次の誰かへつなぐことが、無料で使い続けてもらう小さな親切になります。",
+    },
+    "donate_completion_body_small_hours": {
+        "zh-CN": "这个项目大多是在一天的正事结束后、用零碎的时间一点点做出来的。一杯咖啡，就是温柔地告诉我们这些时间没有被辜负。谢谢你在这里。",
+        "en": "Most of this project happens in small hours after the day job, and a coffee is a gentle way to say it was worth it. Thank you for being here.",
+        "fr": "Ce projet avance surtout par petites heures, une fois la journée de travail finie, et un café est une façon douce de dire que cela en valait la peine. Merci d'être là.",
+        "es": "Este proyecto avanza sobre todo en ratos libres, cuando termina la jornada, y un café es una forma amable de decir que valió la pena. Gracias por estar aquí.",
+        "de": "Dieses Projekt entsteht vor allem in kleinen Stunden nach der Arbeit, und ein Kaffee ist eine sanfte Art zu sagen, dass es sich gelohnt hat. Danke, dass du hier bist.",
+        "ja": "このプロジェクトは、本業が終わったあとの小さな時間に少しずつ進んでいます。コーヒー一杯は、その時間が無駄ではなかったとそっと教えてくれるものです。ここにいてくれてありがとう。",
+    },
     "donate_completion_body": {
         "zh-CN": "更新程序 完全免费，没有广告，也不追踪你, , 它靠大家的小额捐助运行。如果它今天帮到了你，请我们喝杯咖啡，就能让下载和服务器继续跑下去。",
         "en": "Updater CE is free, has no ads and no tracking, it runs on small donations from people like you. If it saved you a job today, buying us a coffee keeps the downloads and the servers running.",
@@ -3381,6 +3532,16 @@ _STRINGS: dict = {
         "es": "100% abierto, transparente y apoyado por usuarios — sin muros de pago ni funciones bloqueadas. Un café en Ko-fi nos ayuda a cubrir el ancho de banda y almacenamiento que usaste hoy.",
         "de": "100% offen, transparent und nutzergetragen – keine Paywalls oder gesperrten Funktionen. Ein Kaffee auf Ko-fi hilft uns, Bandbreite und Speicher zu finanzieren, die deine Installation ermöglicht haben.",
         "ja": "100%オープン、透明でユーザー主導——有料機能や広告は一切ありません。Ko-fiでのコーヒー一杯が、本日のインストールを支えた帯域とストレージ費用の支払いにつながります。",
+    },
+    # The letter signs off with the maintainer's name and picture. The picture
+    # is the appeal's, not the heading's: it belongs to the personal note.
+    "donate_completion_signature": {
+        "zh-CN": "- Ryan - Updater CE 维护者",
+        "en": "- Ryan - Maintainer of Updater CE",
+        "fr": "- Ryan - Mainteneur d'Updater CE",
+        "es": "- Ryan - Mantenedor de Updater CE",
+        "de": "- Ryan - Maintainer von Updater CE",
+        "ja": "- Ryan - Updater CE のメンテナー",
     },
     "donate_completion_coffee": {
         "zh-CN": "在 Ko-fi 上捐赠",
@@ -3709,6 +3870,15 @@ _STRINGS: dict = {
         "es": "Invítame a un café",
         "de": "Spendier mir einen Kaffee",
         "ja": "コーヒーをご馳走する",
+    },
+    "donate_boosty": {
+        "zh-CN": "在 Boosty 上捐赠",
+        "en": "Donate on Boosty",
+        "fr": "Faire un don sur Boosty",
+        "es": "Donar en Boosty",
+        "de": "Auf Boosty spenden",
+        "ja": "Boosty で支援",
+        "ru": "Поддержать на Boosty",
     },
     "donate_paypal": {
         "zh-CN": "通过 PayPal 捐赠",
@@ -5623,10 +5793,12 @@ _STRINGS: dict = {
         "es": "Modelo incorrecto conectado",
     },
     "err_sp_wrong_model": {
-        "zh-CN": "连接的播放器型号与本刷机包的目标型号不同。请断开该设备，然后为此播放器安装正确的固件。",
-        "en": "The connected player is a different model than this package targets. Disconnect it, then install the firmware built for this player.",
-        "fr": "Le lecteur connecté n'est pas le modèle visé par ce paquet. Débranchez-le, puis installez le firmware prévu pour ce lecteur.",
-        "es": "El reproductor conectado no es el modelo al que apunta este paquete. Desconéctelo e instale el firmware de este reproductor.",
+        "zh-CN": "您连接的播放器型号不对。请点击 × 取消此次安装，然后为所连接的播放器选择正确的软件。",
+        "en": "You've connected the wrong model of player. Click the × button to cancel this install, then choose software for the player you've connected.",
+        "fr": "Vous avez connecté un modèle de lecteur incorrect. Cliquez sur × pour annuler cette installation, puis choisissez le logiciel du lecteur connecté.",
+        "es": "Ha conectado un modelo de reproductor incorrecto. Pulse × para cancelar esta instalación y elija el software del reproductor conectado.",
+        "de": "Sie haben ein falsches Player-Modell angeschlossen. Klicken Sie auf ×, um diese Installation abzubrechen, und wählen Sie dann die Software für den angeschlossenen Player.",
+        "ja": "接続したプレーヤーのモデルが違います。× を押してこのインストールを中止し、接続したプレーヤー用のソフトウェアを選んでください。",
     },
     "err_sp_timeout": {
         "zh-CN": "工具没有检测到播放器。请让播放器保持关机并断开，然后在提示连接时再插入 USB。",
@@ -6560,6 +6732,41 @@ def catalog_dir() -> Path:
     return candidates[0]
 
 
+def user_catalog_dir() -> Path:
+    """Where translations learned at runtime live, per user.
+
+    The bundled catalogs sit beside the app and are read-only once it is
+    installed, so a string the app had to look up later is kept in the user's
+    own copy instead. Reading those back is what lets a language fill itself in
+    once, rather than paying for the same strings on every launch.
+    """
+    try:
+        from .paths import app_cache_dir
+
+        return app_cache_dir() / "i18n"
+    except Exception:
+        return Path.home() / ".cache" / "updater-ce" / "i18n"
+
+
+def _user_catalog(code: str) -> dict:
+    """The learned ``{string_id: text}`` file for ``code`` (empty when none)."""
+    path = user_catalog_dir() / f"{code}.json"
+    if not code or not path.is_file():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        logger.debug("User catalog %s unreadable", code, exc_info=True)
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        str(key): value
+        for key, value in raw.items()
+        if isinstance(value, str) and value.strip()
+    }
+
+
 def languages() -> dict:
     """``{code: {"native": ..., "english": ...}}`` as shipped in languages.json."""
     if "table" not in _LANGUAGES:
@@ -6588,6 +6795,17 @@ def catalog_codes() -> tuple:
             code = path.stem
             if code != "languages" and code not in found:
                 found.append(code)
+    # A language that only has a user-side catalog still has one: keep it
+    # selectable even if a later build stops shipping that bundled file.
+    try:
+        learned = user_catalog_dir()
+    except Exception:
+        learned = None
+    if learned is not None and learned.is_dir():
+        for path in sorted(learned.glob("*.json")):
+            code = path.stem
+            if code != "languages" and code not in found:
+                found.append(code)
     return tuple(found)
 
 
@@ -6608,6 +6826,13 @@ def catalog(code: str) -> dict:
             }
         except Exception:
             logger.debug("Catalog %s unreadable", code, exc_info=True)
+    # Strings the app learned at runtime fill the shipped copy's gaps: the
+    # bundled catalog is read-only once installed, so this is where a language
+    # becomes complete and stays complete on the next launch. Gaps only — a
+    # curated translation shipped later always wins over a machine one.
+    if not is_english_language(code):
+        for key, value in _user_catalog(code).items():
+            table.setdefault(key, value)
     _CATALOGS[code] = table
     return table
 
@@ -6804,6 +7029,18 @@ def placeholder_safe_text(key: str, text: str) -> str:
     return source
 
 
+def _fallback_codes(code: str) -> tuple:
+    """Catalogs to try after ``code`` itself, closest first.
+
+    A regional variant with no catalog of its own (``de-AT``, ``es-MX``) reads
+    its base language rather than dropping to English: a complete base copy is
+    better copy than an English one.
+    """
+    code = (code or "").strip()
+    base = code.split("-")[0]
+    return (base,) if base and base != code else ()
+
+
 class _Translator:
     def __init__(self):
         self._lang = "en"
@@ -6824,8 +7061,122 @@ class _Translator:
         translated = catalog(self._lang).get(key)
         if translated:
             return placeholder_safe_text(key, translated)
+        for code in _fallback_codes(self._lang):
+            translated = catalog(code).get(key)
+            if translated:
+                return placeholder_safe_text(key, translated)
         english_catalog = catalog("en")
         return table.get(self._lang) or english_catalog.get(key) or table.get("en") or key
+
+
+_ENGLISH_SOURCES: dict[str, tuple] | None = None
+
+
+def english_sources() -> dict[str, tuple]:
+    """Map every English UI string to the keys that can produce it.
+
+    The runtime gap-filler uses this as its allow-list. Only copy the app
+    already owns is ever sent to a translation service: model names, paths and
+    user-entered text can never match one of these strings by accident.
+    """
+    global _ENGLISH_SOURCES
+    if _ENGLISH_SOURCES is None:
+        grouped: dict[str, list] = {}
+        for key, table in _STRINGS.items():
+            if not isinstance(table, dict):
+                continue
+            value = table.get("en")
+            if isinstance(value, str) and value.strip():
+                grouped.setdefault(value, []).append(key)
+        for key, value in catalog("en").items():
+            if isinstance(value, str) and value.strip():
+                keys = grouped.setdefault(value, [])
+                if key not in keys:
+                    keys.append(key)
+        _ENGLISH_SOURCES = {text: tuple(keys) for text, keys in grouped.items()}
+    return _ENGLISH_SOURCES
+
+
+def text_for_language(key: str, lang: str) -> str:
+    """The catalog or hand-table copy for *key* in *lang*, or "".
+
+    Unlike :func:`tr`, this does not read the active language or fall back to
+    English. It is for places that need to inspect another language, such as
+    predicting the name an installer shortcut was given.
+    """
+    table = _STRINGS.get(key)
+    if not table:
+        return ""
+    translated = catalog(lang).get(key)
+    if not translated:
+        translated = table.get(lang) or ""
+    if not translated:
+        return ""
+    return placeholder_safe_text(key, translated)
+
+
+def translation_for_english(text: str, lang: str) -> str:
+    """The best local translation for an English string, or "".
+
+    ``text`` must be one of :func:`english_sources`. The requested language is
+    tried first, then its base language, so a regional variant never falls to
+    English while a usable base copy exists. Returning "" means the catalogs
+    cannot fill this gap and the runtime translator may ask a provider.
+    """
+    if not text or not lang:
+        return ""
+    for key in english_sources().get(text, ()):
+        for code in (lang, *_fallback_codes(lang)):
+            translated = text_for_language(key, code)
+            if translated and translated != text:
+                return translated
+    return ""
+
+
+def remember_translations(lang: str, mapping: dict) -> int:
+    """Keep translations a runtime lookup produced in the user's own catalog.
+
+    ``mapping`` maps English source text to its translation, which is what the
+    runtime gap-filler receives. Only string ids the app itself owns are
+    recorded, and only where the catalog has no copy of its own: a curated
+    translation is never replaced by a machine one. English is the source
+    language and is never written. Returns how many string ids were learned.
+    """
+    code = (lang or "").strip()
+    if not code or not mapping or is_english_language(code):
+        return 0
+    sources = english_sources()
+    table = catalog(code)
+    learned: dict[str, str] = {}
+    for source, translated in mapping.items():
+        if not isinstance(source, str) or not isinstance(translated, str):
+            continue
+        value = translated.strip()
+        if not value or value == source:
+            continue
+        for key in sources.get(source, ()):
+            if table.get(key):
+                continue
+            table[key] = value
+            learned[key] = value
+    if not learned:
+        return 0
+    path = user_catalog_dir() / f"{code}.json"
+    try:
+        existing = _user_catalog(code)
+        existing.update(learned)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+        temporary.write_text(
+            json.dumps(existing, ensure_ascii=False, indent=0),
+            encoding="utf-8",
+        )
+        os.replace(temporary, path)
+    except Exception:
+        # The strings are already usable this session; the file is the bonus
+        # that makes the next launch complete without a provider.
+        logger.debug("Could not write user catalog %s", code, exc_info=True)
+    return len(learned)
 
 
 _global_translator = _Translator()

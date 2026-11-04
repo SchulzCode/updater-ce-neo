@@ -25,6 +25,8 @@ from src.ui.main_window import (
     MainWindow,
     _PAGE_DIAGNOSTICS,
     _PAGE_FLASH,
+    _PAGE_NOTICE,
+    _PAGE_NOTICES,
     _PAGE_SELECT,
     _PAGE_SETTINGS,
 )
@@ -68,6 +70,32 @@ def _start_flash(win):
     win._sync_install_nav_entry()
     win._nav_to_page(_PAGE_FLASH)
     assert win._install_run_active()
+
+
+def test_the_notices_row_keeps_the_page_that_opened_it():
+    """Clicking a notice must light the Notices row, not the previous tab."""
+    app, win = _window()
+    try:
+        win._notices_available = True
+        # Opening the page refreshes from cache; the fetch is not this test's.
+        win._notices_page.refresh = lambda: None
+
+        win._nav_to_page(_PAGE_SELECT)
+        select = win._nav_buttons["nav_select_package"][0]
+        assert select.isChecked()
+
+        win._nav_to_page(_PAGE_NOTICES)
+        app.processEvents()
+        assert win._notices_btn.isCheckable()
+        assert win._notices_btn.isChecked()
+        assert not select.isChecked()
+
+        # One notice's detail is a child view of the same page.
+        win._highlight_nav(_PAGE_NOTICE, False)
+        assert win._notices_btn.isChecked()
+        assert not select.isChecked()
+    finally:
+        _close(win)
 
 
 def test_the_install_entry_never_cancels_or_opens_select():

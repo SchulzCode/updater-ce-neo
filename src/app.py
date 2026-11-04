@@ -324,7 +324,14 @@ def _maybe_shed_redundant_payload():
 
 
 def main():
-    # First, before any Qt call: PySide6 6.12.0 on Python < 3.12 leaks a None
+    # Windows: no helper process (adb, taskkill, powershell ...) may open a
+    # black console window over the launch card. Install the guard before any
+    # import below can spawn one; it is a no-op on other platforms.
+    from . import quiet_subprocess
+
+    quiet_subprocess.install()
+
+    # Next, before any Qt call: PySide6 6.12.0 on Python < 3.12 leaks a None
     # reference per QPainter pen/font change, which aborted the app within a
     # minute of painting ("none_dealloc: deallocating None"). See runtime_guard.
     from . import runtime_guard
@@ -332,13 +339,6 @@ def main():
     runtime_guard.pin_singletons()
     _configure_logging()
     _enable_native_crash_log()
-
-    # Windows: no helper process (adb, taskkill, powershell ...) may open a
-    # black console window over the app. Must happen before anything spawns.
-    from . import quiet_subprocess
-
-    quiet_subprocess.install()
-    _maybe_shed_redundant_payload()
 
     # Say which front end this is, once: a frozen build carries its brand
     # inside, so this is the one line that tells support which app a log came
@@ -553,57 +553,109 @@ def main():
     # Flash Tool's settings files and the shared cache, so a second launch stops
     # here -- after the theme is applied, so the explanation matches the app --
     # and offers to end a copy left behind by a crash or hidden in the tray.
-    from .single_instance import ensure_single_instance
+    from .single_instance import (
+        clear_show_request,
+        ensure_single_instance,
+        show_request_stamp,
+    )
 
+    # Capture the marker before the guard: one left by the launch that started
+    # this one is stale, while one written during startup belongs to a second
+    # launch and must still bring this window forward.
+    startup_show_stamp = show_request_stamp()
     if not ensure_single_instance(app):
         sys.exit(0)
 
-    # Only the copy that owns the app touches the shared online copies
-    # (catalogue, notices, donors, blocklist) or the donation marker. They are
-    # refreshed in the background and only when stale, so the first window still
-    # never waits on the network — but a launch that was refused above never
-    # writes to the cache the running copy is reading.
+    start_in_tray = "--tray" in sys.argv[1:]
+    startup_splash = None
+    if _sys.platform.startswith("win") and not start_in_tray:
+        try:
+            from .ui.splash import show_startup_splash
+
+            portable_ini = None
+            for candidate in (
+                paths.SP_FLASH_TOOL_DIR / "fw_package.ini",
+                paths.BUNDLE_DIR / "fw_package.ini",
+                paths.INSTALL_DIR / "fw_package.ini",
+            ):
+                if candidate.is_file():
+                    portable_ini = candidate
+                    break
+
+            # The card names the software the run will install, so read the
+            # package manifest before the window exists. A manifest that cannot
+            # be read still makes this a portable run; it just has no name.
+            firmware_name = ""
+            firmware_version = ""
+            if portable_ini is not None:
+                try:
+                    from .fw_package import read_fw_package_ini
+
+                    meta = read_fw_package_ini(portable_ini)
+                    if getattr(meta, "enabled", True):
+                        firmware_name = str(meta.name or "")
+                        firmware_version = str(meta.version or "")
+                except Exception:
+                    logging.getLogger(__name__).debug(
+                        "Portable package manifest unreadable", exc_info=True
+                    )
+
+            startup_splash = show_startup_splash(
+                portable_fw=portable_ini is not None,
+                firmware_name=firmware_name,
+                firmware_version=firmware_version,
+            )
+        except Exception:
+            logging.getLogger(__name__).debug("Startup splash unavailable", exc_info=True)
+
     try:
-        from . import online_data
-
-        online_data.refresh_all_async()
+        window = MainWindow()
     except Exception:
-        logging.getLogger(__name__).debug("Online data refresh could not start", exc_info=True)
-    try:
-        from . import player_update_check
+        if startup_splash is not None:
+            try:
+                startup_splash.close()
+            except Exception:
+                pass
+        raise
 
-        player_update_check.sync_sp_donation_marker()
-    except Exception:
-        logging.getLogger(__name__).debug("Donation marker check failed", exc_info=True)
-
-    # PREPARE LINUX SYSTEM FOR SP FLASH TOOL before showing the window
-    # (only when SP Flash Tool is the selected engine; MTKclient needs no prep)
-    if _sys.platform.startswith("linux") and _linux_sp_selected():
-        _prepare_linux_sp_flash_tool()
-
-    window = MainWindow()
     # A second launch asks this copy to come forward. The channel starts as
     # soon as the lock is held, and stays alive for the app's lifetime.
+    from .notifications import bring_window_to_front
+
+    def _show_existing_window() -> None:
+        # _show_from_tray also resumes the window-only timers; a bare raise
+        # would leave a copy restored from the menu bar polling as though it
+        # were still hidden.
+        show = getattr(window, "_show_from_tray", None)
+        if callable(show):
+            show()
+        else:
+            bring_window_to_front(window)
+
     try:
         from .single_instance import start_focus_server
-        from .notifications import bring_window_to_front
 
         _focus_server = start_focus_server()
         if _focus_server is not None:
-            def _show_existing_window() -> None:
-                # _show_from_tray also resumes the window-only timers; a bare
-                # raise would leave a copy restored from the menu bar polling
-                # as though it were still hidden.
-                show = getattr(window, "_show_from_tray", None)
-                if callable(show):
-                    show()
-                else:
-                    bring_window_to_front(window)
-
             _focus_server.focus_requested.connect(_show_existing_window)
     except Exception:
         logging.getLogger(__name__).debug(
             "Single-instance focus channel could not start", exc_info=True
+        )
+
+    # The file channel is the backstop: a copy started from another folder, an
+    # older build, or a host that refuses local sockets still gets its window
+    # back when the user opens the app from its shortcut. It does not depend on
+    # the socket above, so it starts even when that one could not.
+    try:
+        from .single_instance import watch_show_requests
+
+        app._show_request_watcher = watch_show_requests(
+            _show_existing_window, baseline=startup_show_stamp
+        )
+    except Exception:
+        logging.getLogger(__name__).debug(
+            "Single-instance show-request watcher could not start", exc_info=True
         )
 
     # Reopen window when clicking Dock icon on macOS while hidden in the menu bar / tray
@@ -641,14 +693,49 @@ def main():
     # Before show(): the window must exist to be prepared for glass. After it:
     # every other piece of host chrome, each one guarded.
     _startup_step("prepare_window_for_glass", prepare_window_for_glass, window)
+    # Windows paints the title bar in the host's light chrome until the DWM is
+    # told otherwise, so setting the attributes here (on the native handle,
+    # before the first frame) is what keeps the launch from flashing a white
+    # strip around the dark splash. _apply_native_chrome repeats it harmlessly
+    # once the window is up, and follows later theme changes.
+    _startup_step(
+        "apply_windows_dark_titlebar",
+        apply_windows_dark_titlebar,
+        window,
+        is_dark(),
+    )
     # --tray (start-at-login): stay in the menu bar; the window opens on click.
-    start_in_tray = "--tray" in sys.argv[1:]
     if start_in_tray:
         # The tray keeps the process alive with no window open.
         app.setQuitOnLastWindowClosed(False)
     if not start_in_tray:
         window.show()
+        # The window is up: acknowledge a marker that was waiting at launch.
+        # If a new request arrived meanwhile its stamp differs, so it stays for
+        # the watcher to handle.
+        clear_show_request(startup_show_stamp)
         _apply_native_chrome(window, dark=is_dark())
+        if startup_splash is not None:
+            # Keep the splash over the first layout and fit. Closing it as soon
+            # as show() returns exposed the main window while it was still at
+            # its starting geometry, which read as a small window flashing up
+            # before it settled. The short hold covers that hand-off; the
+            # splash still closes even if the main window never exposes.
+            splash = startup_splash
+            startup_splash = None
+
+            def _close_startup_splash() -> None:
+                try:
+                    splash.finish(window)
+                    splash.deleteLater()
+                except Exception:
+                    logging.getLogger(__name__).debug(
+                        "Splash could not close", exc_info=True
+                    )
+
+            from PySide6.QtCore import QTimer
+
+            QTimer.singleShot(220, _close_startup_splash)
     else:
         if run_in_background_enabled():
             window._hide_to_tray_at_launch()
@@ -657,11 +744,40 @@ def main():
             app.setQuitOnLastWindowClosed(True)
             window.show()
             _apply_native_chrome(window, dark=is_dark())
+        clear_show_request(startup_show_stamp)
+
+    # Work the first screen does not need: the catalogue refresh, the donation
+    # marker, shedding the redundant payload and (on Linux) the SP Flash Tool
+    # system prep. None of it paints anything, and none of it may hold the
+    # window back, so it runs once the window is already up.
+    from PySide6.QtCore import QTimer
+
+    def _deferred_startup() -> None:
+        _maybe_shed_redundant_payload()
+        # Only the copy that owns the app touches the shared online copies
+        # (catalogue, notices, donors, blocklist) or the donation marker.
+        try:
+            from . import online_data
+
+            online_data.refresh_all_async()
+        except Exception:
+            logging.getLogger(__name__).debug(
+                "Online data refresh could not start", exc_info=True
+            )
+        try:
+            from . import player_update_check
+
+            player_update_check.sync_sp_donation_marker()
+        except Exception:
+            logging.getLogger(__name__).debug("Donation marker check failed", exc_info=True)
+        if _sys.platform.startswith("linux") and _linux_sp_selected():
+            _prepare_linux_sp_flash_tool()
+
+    QTimer.singleShot(0, _deferred_startup)
 
     # A previous run that crashed (or a tool the user started by hand) may still
     # be holding the USB port and SP Flash Tool's own settings files. Nothing is
     # installing at this point, so clear it once, off the GUI thread.
-    from PySide6.QtCore import QTimer
     from . import process_guard
 
     def _sweep_on_startup():

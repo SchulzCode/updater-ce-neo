@@ -291,6 +291,12 @@ def _parse_rom_asset_variant(asset, tag_name="", repo="", has_explicit_type_asse
             resolution = "native"
 
         model = _classify_variant_model(name, tag_name, repo)
+        # Whether the asset name itself names the model. A name such as
+        # rom_y2.zip is stronger evidence than a repository called "...-y2":
+        # a Y2 repo can still republish the legacy Y1 rom.zip beside its own
+        # rom_y2.zip, and that unqualified zip must not win a tie just because
+        # it comes first in the release.
+        explicit_model = _classify_variant_model(name) in ("Y1", "Y2", "A5")
         # If model is dual and package specifies a single model, inherit package model
         if model == "dual" and package is not None and getattr(package, "model", "") in ("Y1", "Y2", "A5"):
             model = package.model
@@ -300,6 +306,7 @@ def _parse_rom_asset_variant(asset, tag_name="", repo="", has_explicit_type_asse
             "type": hw_type,
             "resolution": resolution,
             "model": model,
+            "model_explicit": explicit_model,
         }
     except Exception:
         return None
@@ -398,9 +405,17 @@ def _release_rom_variants(assets, tag_name, repo, repo_has_rom=False, package=No
         variants = [_parse_rom_asset_variant(a, tag_name, repo, has_explicit_type_assets=has_explicit, package=package) for a in rom_assets]
         return [v for v in variants if v]
 
-    # Non-rom zips: evaluate all non-source zip assets
+    # A zip that is not named rom*.zip is only a firmware candidate when it is
+    # the sole zip the release offers. A release with several differently named
+    # zips gives no reliable way to tell the models apart; the manifest's
+    # explicit asset_pattern (checked above) is how one is named. Portable
+    # mirror bundles are build artifacts, not firmware, but a mirror release
+    # that carries nothing else keeps them (see _without_portable_bundles).
     zips = [a for a in assets if (a.get("name") or "").lower().endswith(".zip")]
-    if zips:
+    portable_only = bool(zips) and all(
+        _is_portable_bundle_name(a.get("name")) for a in zips
+    )
+    if len(zips) == 1 or portable_only:
         variants = [_parse_rom_asset_variant(a, tag_name, repo, has_explicit_type_assets=has_explicit, package=package) for a in zips]
         variants = [v for v in variants if v]
         if variants:
@@ -469,12 +484,22 @@ def select_preferred_rom_asset(variants, selected_type=None, model=None, prefer_
             variants = type_matched
         else:
             return None
-    # Sort: resolution first (honoring prefer_240p), then model (exact > dual).
-    # Model is the *last* key so it acts as a tiebreaker — a rom_y2.zip
-    # always beats a dual rom.zip even if the latter has a nicer resolution.
-    variants = sorted(variants, key=lambda v: _resolution_priority(v.get("resolution"), prefer_240p=prefer_240p))
+    # Sort order (least to most significant): model exactness, whether the
+    # asset name itself names the model, then resolution (honoring
+    # prefer_240p). The last sort is the primary key, so a 360p build still
+    # wins over a native one; within the same resolution an explicit
+    # rom_y2.zip beats an unqualified rom.zip that only looked like Y2 because
+    # its repository is called "...-y2". Without a selected model the original
+    # resolution order is unchanged.
     if model:
+        variants = sorted(variants, key=lambda v: 0 if v.get("model_explicit") else 1)
         variants = sorted(variants, key=lambda v: _model_priority(v.get("model"), model))
+    variants = sorted(
+        variants,
+        key=lambda v: _resolution_priority(
+            v.get("resolution"), prefer_240p=prefer_240p
+        ),
+    )
     return variants[0]
 
 
@@ -2095,8 +2120,26 @@ class ReleasesClient:
                     continue
             # Re-pick the preferred asset with the model filter so the
             # download URL points to the correct rom*.zip for this model.
+            # Rebuild the variants from the raw assets when they are present:
+            # a release cache written before an asset_pattern shim existed
+            # still contains the old rom_variants, which would keep pointing
+            # at the wrong model's zip until the cache expired.
+            raw_assets = rel.get("assets") or []
+            if raw_assets:
+                rom_variants = _release_rom_variants(
+                    raw_assets,
+                    tag_name,
+                    rel.get("source_repo", "") or package.repo,
+                    package=package,
+                )
+                if not rom_variants and not getattr(package, "asset_pattern", ""):
+                    # Rows built by the APK path carry application assets, not
+                    # firmware zips; their rom_variants were prepared already.
+                    rom_variants = list(rel.get("rom_variants") or [])
+            else:
+                rom_variants = list(rel.get("rom_variants") or [])
             rom_variants = filter_rom_variants_for_model(
-                rel.get("rom_variants") or [],
+                rom_variants,
                 model,
                 package.model,
                 rel.get("source_repo", "") or "",

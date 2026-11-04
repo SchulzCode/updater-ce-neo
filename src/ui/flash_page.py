@@ -43,7 +43,13 @@ from ..flash_service import (
 )
 from ..i18n import tr, tr_brand
 from ..progress_model import format_eta_seconds
-from .support_appeal import COMPLETION_KEYS, THEMES_COMPLETION_KEYS, SupportIntro
+from .support_appeal import (
+    COMPLETION_BODY_KEYS,
+    COMPLETION_KEYS,
+    THEMES_COMPLETION_KEYS,
+    DeveloperPortrait,
+    SupportIntro,
+)
 from .widgets import (
     Banner,
     Card,
@@ -1746,6 +1752,12 @@ class FlashPage(QWidget):
         self._keep_data_hint.linkActivated.connect(self._on_keep_data_hint_link)
         self._keep_data_hint.setVisible(False)
         copy.addWidget(self._keep_data_hint)
+        # The releases Keep Data can carry data from, as a list below the tick.
+        self._keep_data_software = QLabel("")
+        self._keep_data_software.setWordWrap(True)
+        self._keep_data_software.setProperty("cssClass", "hint")
+        self._keep_data_software.setVisible(False)
+        copy.addWidget(self._keep_data_software)
         self._keep_data_warning = QLabel("")
         self._keep_data_warning.setWordWrap(True)
         self._keep_data_warning.setProperty("cssClass", "hint")
@@ -2019,7 +2031,9 @@ class FlashPage(QWidget):
         appeal_layout = QVBoxLayout(self._appeal)
         appeal_layout.setContentsMargins(8, 8, 8, 0)
         appeal_layout.setSpacing(10)
-        self._intro = SupportIntro()
+        # The completion letter's heading carries the firmware icon instead
+        # of the portrait: the picture belongs to the signature below.
+        self._intro = SupportIntro(show_portrait=False, show_icon=True)
         self._appeal_label = self._intro.headline
         appeal_layout.addWidget(self._intro)
 
@@ -2042,6 +2056,29 @@ class FlashPage(QWidget):
         self._appeal_body.setStyleSheet("")
         _apply_card_text(self._appeal_body)
         appeal_layout.addWidget(self._appeal_body)
+
+        # The picture belongs to the letter, not the banner: it sits below the
+        # completion text and directly above the buttons, signed the way a
+        # short personal note is. Beside the headline it read as a product
+        # shot rather than as a message from the person who wrote the app.
+        self._appeal_signature_row = QWidget()
+        signature = QHBoxLayout(self._appeal_signature_row)
+        signature.setContentsMargins(0, 0, 0, 0)
+        signature.setSpacing(10)
+        self._appeal_portrait = DeveloperPortrait(44)
+        self._appeal_signature = QLabel(tr("donate_completion_signature"))
+        self._appeal_signature.setWordWrap(True)
+        self._appeal_signature.setProperty("cssClass", "dimmed")
+        self._appeal_signature.setAutoFillBackground(False)
+        self._appeal_signature.setStyleSheet("")
+        signature_font = self._appeal_signature.font()
+        signature_font.setItalic(True)
+        self._appeal_signature.setFont(signature_font)
+        _apply_card_text(self._appeal_signature)
+        signature.addWidget(self._appeal_portrait, 0, Qt.AlignVCenter)
+        signature.addWidget(self._appeal_signature, 0, Qt.AlignVCenter)
+        signature.addStretch(1)
+        appeal_layout.addWidget(self._appeal_signature_row)
 
         actions = QHBoxLayout()
         actions.setSpacing(8)
@@ -2070,15 +2107,6 @@ class FlashPage(QWidget):
         actions.addWidget(self._not_now_btn)
         actions.addStretch(1)
         appeal_layout.addLayout(actions)
-
-        self._appeal_body_below = QLabel()
-        self._appeal_body_below.setWordWrap(True)
-        self._appeal_body_below.setProperty("cssClass", "dimmed")
-        self._appeal_body_below.setAutoFillBackground(False)
-        self._appeal_body_below.setStyleSheet("")
-        _apply_card_text(self._appeal_body_below)
-        self._appeal_body_below.setVisible(False)
-        appeal_layout.addWidget(self._appeal_body_below)
 
         self._appeal_dont = QLabel(self._dont_ask_html())
         self._appeal_dont.setTextFormat(Qt.TextFormat.RichText)
@@ -2388,6 +2416,7 @@ class FlashPage(QWidget):
         # completion screen reached without one from failing.
         self._post_install_url = ""
         self._post_install_url_2 = ""
+        self._post_install_url_2_source = ""
         self._clear_post_install_doc()
 
     def show_preparing(self):
@@ -2692,8 +2721,19 @@ class FlashPage(QWidget):
         bar.setValue(val)
         bar.setTextVisible(True)
 
-    def show_install_failure(self, message: str, explanation: str = "", percent: int = 0) -> None:
-        """Keep the failure on the install progress card, with Retry and Cancel beneath."""
+    def show_install_failure(
+        self,
+        message: str,
+        explanation: str = "",
+        percent: int = 0,
+        wrong_model: bool = False,
+    ) -> None:
+        """Keep the failure on the install progress card.
+
+        An ordinary failure offers Retry and Cancel. A wrong player offers only
+        the ×: no retry can turn the connected model into the package's model,
+        so the useful next step is to cancel and choose the right software.
+        """
         self.update_partition_progress("")
         self.dismiss_prompt_stop()
         self._failed = True
@@ -2704,6 +2744,8 @@ class FlashPage(QWidget):
             self._keep_data_cb.setVisible(False)
         if hasattr(self, "_keep_data_warning"):
             self._keep_data_warning.setVisible(False)
+        if hasattr(self, "_keep_data_software"):
+            self._keep_data_software.setVisible(False)
         self.show_flashing()
         self._warning.setVisible(False)
         if hasattr(self, "_appeal"):
@@ -2753,6 +2795,20 @@ class FlashPage(QWidget):
             self._cancel_btn.setVisible(True)
             self._cancel_btn.setEnabled(True)
             self._cancel_btn.set_symbol("cancel")
+        if wrong_model:
+            # The only action that can help: stop this install and pick the
+            # software for the player that is actually connected.
+            if hasattr(self, "_flash_retry_btn"):
+                self._flash_retry_btn.setVisible(False)
+                self._flash_retry_btn.setEnabled(False)
+            if hasattr(self, "_wait_continue_btn"):
+                self._wait_continue_btn.setVisible(False)
+            if hasattr(self, "_cancel_btn"):
+                self._cancel_btn.setVisible(True)
+                self._cancel_btn.setEnabled(True)
+                self._cancel_btn.set_symbol("cancel")
+                self._cancel_btn.setToolTip(tr("btn_cancel"))
+                self._cancel_btn.setAccessibleName(tr("btn_cancel"))
         if message == "CACHE_FILE_MISSING":
             self._flash_retry_btn.setToolTip(tr("sel_cache_retry_tooltip"))
             self._flash_retry_btn.setAccessibleName(tr("sel_cache_retry_button"))
@@ -2930,6 +2986,8 @@ class FlashPage(QWidget):
             self._keep_data_cb.setVisible(False)
         if hasattr(self, "_keep_data_warning"):
             self._keep_data_warning.setVisible(False)
+        if hasattr(self, "_keep_data_software"):
+            self._keep_data_software.setVisible(False)
         msg = self._power_off_prompt_text()
         self._wait_prompt_label.setText(msg)
         if hasattr(self._wait_progress_bar, "set_failed"):
@@ -3711,6 +3769,9 @@ class FlashPage(QWidget):
             return
         visible = self._keep_data_visible()
         cb.setVisible(visible)
+        software = getattr(self, "_keep_data_software", None)
+        if software is not None:
+            software.setVisible(visible and bool(software.text()))
         if hasattr(self, "_keep_data_microsd_note"):
             self._keep_data_microsd_note.setVisible(visible)
         if not visible:
@@ -3724,13 +3785,24 @@ class FlashPage(QWidget):
             self._keep_data_cb.setChecked(self._has_userdata and bool(preserve_data_default))
         self._sync_keep_data_visibility()
 
-    def set_keep_data_available(self, available: bool, label: str = "") -> None:
-        """Gate the tick by the catalogue's derivative compatibility rule."""
+    def set_keep_data_available(self, available: bool, label: str = "", compatible=()) -> None:
+        """Gate the tick, and name the software it can carry data from.
+
+        The tick itself stays one short phrase: a firmware name in brackets
+        beside it read like a property of the option. The compatible releases
+        belong on the line below, where a list reads as a list.
+        """
         self._keep_data_allowed = bool(available)
         if hasattr(self, "_keep_data_cb"):
             text = label or tr("flash_keep_data_option")
             self._keep_data_cb.setText(text)
             self._keep_data_cb.setAccessibleName(text)
+        software = getattr(self, "_keep_data_software", None)
+        if software is not None:
+            names = ", ".join(str(n).strip() for n in (compatible or ()) if str(n).strip())
+            software.setText(
+                tr("keep_data_compatible_list_fmt").format(software=names) if names else ""
+            )
         self._sync_keep_data_visibility()
 
     def _update_keep_data_warning(self) -> None:
@@ -3782,6 +3854,8 @@ class FlashPage(QWidget):
         self._keep_data_cb.setVisible(False)
         if hasattr(self, "_keep_data_warning"):
             self._keep_data_warning.setVisible(False)
+        if hasattr(self, "_keep_data_software"):
+            self._keep_data_software.setVisible(False)
         names = [str(c) for c in (choices or ()) if str(c).strip()]
         self._keep_data_choice.clear()
         self._keep_data_choice.addItems(names)
@@ -4058,8 +4132,15 @@ class FlashPage(QWidget):
         globe that opens it. ``post_install_2`` is for donations-shown users: View
         Guide and Buy Us A Coffee open it.
         """
+        from .. import fx
+
         self._post_install_url = str(post_install or "").strip()
-        self._post_install_url_2 = str(post_install_2 or "").strip()
+        self._post_install_url_2_source = str(post_install_2 or "").strip()
+        # The second URL is the donation page; Russian readers are sent to
+        # Boosty in Russia or Buy Me a Coffee outside it instead.
+        self._post_install_url_2 = (
+            "" if fx.donation_route() else self._post_install_url_2_source
+        )
         self._load_post_install_doc(self._post_install_url)
         self._apply_post_install_state()
 
@@ -4107,13 +4188,23 @@ class FlashPage(QWidget):
                 self._view_guide_btn.setVisible(donations_shown)
             else:
                 self._view_guide_btn.setVisible(False)
+        from .. import fx
+
+        route = fx.donation_route()
         if hasattr(self, "_coffee_btn"):
-            if post_install_2:
+            if route == "boosty":
+                self._coffee_btn.setText(tr("donate_boosty"))
+            elif route == "bmc":
+                self._coffee_btn.setText(tr("donate_buy_me_a_coffee"))
+            elif post_install_2:
                 self._coffee_btn.setText(tr("donate_completion_coffee_guide"))
             else:
                 self._coffee_btn.setText(tr("donate_completion_coffee"))
         if hasattr(self, "_bmc_btn"):
             self._bmc_btn.setText(tr("donate_buy_me_a_coffee"))
+            # Boosty/BMC is the only method offered for a Russian reader, so
+            # the second coffee page is hidden rather than left as a dead end.
+            self._bmc_btn.setVisible(not route)
 
     # -- post-install guide -------------------------------------------------
 
@@ -4266,9 +4357,17 @@ class FlashPage(QWidget):
             open_browser(_with_donation_preference(self._post_install_open_url(url)))
 
     def _open_coffee_page(self) -> None:
+        from .. import fx
         from ..browser import open_browser, _with_donation_preference
         from ..config import DONATION_LINKS
 
+        route = fx.donation_route()
+        if route == "boosty":
+            open_browser(DONATION_LINKS["boosty"])
+            return
+        if route == "bmc":
+            open_browser(DONATION_LINKS["bmc"])
+            return
         post_install_2 = getattr(self, "_post_install_url_2", "")
         if post_install_2:
             open_browser(_with_donation_preference(post_install_2))
@@ -4310,26 +4409,20 @@ class FlashPage(QWidget):
             self._completion_guide_hint.setText(tr("post_install_explain_completion"))
             self._completion_guide_hint.setVisible(has_guide)
             _apply_card_text(self._completion_guide_hint)
-        appeal_variants = (
-            "donate_completion_body",
-            "donate_completion_body_reciprocity",
-            "donate_completion_body_community",
-            "donate_completion_body_effort",
-            "donate_completion_body_momentum",
-            "donate_completion_body_transparency",
-        )
-        if not getattr(self, "_active_appeal_key", None):
+        if getattr(self, "_active_appeal_key", None) not in COMPLETION_BODY_KEYS:
             import random
-            self._active_appeal_key = random.choice(appeal_variants)
+            self._active_appeal_key = random.choice(COMPLETION_BODY_KEYS)
         appeal_text = tr(self._active_appeal_key)
         if hasattr(self, "_appeal_body"):
             self._appeal_body.setText(appeal_text)
-            self._appeal_body.setVisible(not has_guide)
+            # One letter layout: headline, message, signature, buttons. A
+            # guide hint may sit above the message; it never moves it below
+            # the row, where it read as an afterthought.
+            self._appeal_body.setVisible(True)
             _apply_card_text(self._appeal_body)
-        if hasattr(self, "_appeal_body_below"):
-            self._appeal_body_below.setText(appeal_text)
-            self._appeal_body_below.setVisible(has_guide)
-            _apply_card_text(self._appeal_body_below)
+        if hasattr(self, "_appeal_signature"):
+            self._appeal_signature.setText(tr("donate_completion_signature"))
+            _apply_card_text(self._appeal_signature)
         self._apply_post_install_state()
         if hasattr(self, "_not_now_btn"):
             self._not_now_btn.setText(tr("donate_not_now"))
@@ -4393,15 +4486,7 @@ class FlashPage(QWidget):
         if hasattr(self, "_intro"):
             self._intro.set_keys(THEMES_COMPLETION_KEYS if themes_installed else COMPLETION_KEYS)
         import random
-        appeal_variants = (
-            "donate_completion_body",
-            "donate_completion_body_reciprocity",
-            "donate_completion_body_community",
-            "donate_completion_body_effort",
-            "donate_completion_body_momentum",
-            "donate_completion_body_transparency",
-        )
-        self._active_appeal_key = random.choice(appeal_variants)
+        self._active_appeal_key = random.choice(COMPLETION_BODY_KEYS)
         self._render_appeal_copy()
         self._appeal.setVisible(bool(visible))
         self.view_generation = getattr(self, "view_generation", 0) + 1
@@ -4533,6 +4618,10 @@ class FlashPage(QWidget):
             if label is not None:
                 label.setPixmap(painted)
                 label.setText("")
+        # The completion heading's icon is the same release squircle; a
+        # release without artwork keeps the generic placeholder beside it.
+        if hasattr(self, "_intro"):
+            self._intro.set_icon(source if not source.isNull() else None)
 
     def _generic_install_title(self) -> str:
         """Name the device a package is installing to when its title is unknown."""
@@ -4644,6 +4733,52 @@ class FlashPage(QWidget):
             return False
         return not self.themes.transfer_running
 
+    def show_finishing(self) -> None:
+        """Hold the install card up while the backend closes its session.
+
+        ``STEP_DONE`` means every partition was written, but the worker emits
+        ``finished`` only after the backend has closed USB (MTKclient) or the
+        SP Flash Tool process has exited. Showing the completion screen at
+        that point blanked the window for the wait: completion with donations
+        hides this card, and the appeal cannot appear until success routing
+        runs. The card stays, reading that it is finishing up.
+        """
+        self._complete = False
+        self._failed = False
+        self._donations_shown = False
+        self._step_key = "flash_finishing"
+        if hasattr(self, "_complete_note"):
+            self._complete_note.setVisible(False)
+        if hasattr(self, "_appeal"):
+            self._appeal.setVisible(False)
+        if hasattr(self, "_progress_card"):
+            self._progress_card.setVisible(True)
+        if hasattr(self, "_warning"):
+            # The session is still open, so "do not unplug" still applies.
+            self._warning.setVisible(True)
+        if hasattr(self, "_flash_banner"):
+            self._flash_banner.set_type("info")
+            self._flash_banner.set_key("flash_banner_flashing")
+        if hasattr(self, "_step_label"):
+            self._step_label.setText(tr("flash_finishing"))
+        if hasattr(self, "_eta_label"):
+            self._eta_label.setText("")
+        if hasattr(self, "_progress_bar"):
+            self._set_determinate(self._progress_bar, 100)
+        if hasattr(self, "_partition_progress_label"):
+            self._partition_progress_label.setVisible(False)
+        if hasattr(self, "_flash_retry_btn"):
+            self._flash_retry_btn.setVisible(False)
+        if hasattr(self, "_cancel_btn"):
+            self._cancel_btn.setVisible(False)
+        if hasattr(self, "_done_mark"):
+            self._done_mark.setVisible(False)
+        if hasattr(self, "_status_flow"):
+            self._status_flow.refresh()
+        self._switch_view(self._flashing_view)
+        self.view_generation = getattr(self, "view_generation", 0) + 1
+        self._notify_geometry_change()
+
     def set_device_done(self, donations_shown: bool | None = None):
         """Finish the install card. With donations shown, the donation message says it is complete.
 
@@ -4655,6 +4790,11 @@ class FlashPage(QWidget):
         self.dismiss_prompt_stop()
         self._complete = True
         self._failed = False
+        # show_finishing() renamed the step; completion puts the last real
+        # step back so the card never claims it is still finishing.
+        self._step_key = "step_done"
+        if hasattr(self, "_step_label"):
+            self._step_label.setText(tr("step_done"))
         if donations_shown is not None:
             self._donations_shown = bool(donations_shown)
         donations_shown = getattr(self, "_donations_shown", False)
@@ -4973,6 +5113,15 @@ class FlashPage(QWidget):
         for key, lbl in self._guide_texts:
             lbl.setText(tr(key))
         self._warning.setText(tr("flash_warning"))
+        if hasattr(self, "_post_install_url_2_source"):
+            from .. import fx
+
+            # The chosen language can change while a download is running, so
+            # the completion card re-derives its route instead of keeping the
+            # one from when the firmware was selected.
+            self._post_install_url_2 = (
+                "" if fx.donation_route() else self._post_install_url_2_source
+            )
         if hasattr(self, "_intro"):
             # The block keeps whichever wording it was set to: a language change
             # must not turn a finished install's appeal back into the generic
@@ -5015,7 +5164,7 @@ class FlashPage(QWidget):
             "_prep_pkg_label", "_prep_step", "_wait_pkg_label", "_wait_prompt_label",
             "_flash_pkg_label", "_step_label", "_eta_label", "_partition_progress_label",
             "_warning", "_download_pkg_label", "_download_status_label", "_download_heading",
-            "_appeal_label", "_appeal_body", "_appeal_body_below", "_completion_guide_hint",
+            "_appeal_label", "_appeal_body", "_appeal_signature", "_completion_guide_hint",
             "_paperclip_hint", "_keep_data_cb", "_keep_data_microsd_note",
         )
         for name in names:

@@ -130,8 +130,32 @@ def territory():
     return _territory()
 
 
+def _russian_ui() -> bool:
+    """Whether the app is currently showing Russian copy."""
+    try:
+        from .i18n import current_language
+
+        return str(current_language() or "").strip().lower().split("-")[0] == "ru"
+    except Exception:
+        return False
+
+
+def donation_route() -> str:
+    """The donation method for this reader, or "" for the normal worldwide row.
+
+    A Russian card cannot be used on the international coffee pages, so Russian
+    readers in Russia get Boosty alone. A Russian reader outside Russia gets the
+    Buy Me a Coffee page in Boosty's place, which also makes that fallback
+    testable from a non-Russian machine.
+    """
+    if not _russian_ui():
+        return ""
+    return "boosty" if territory() == "RU" else "bmc"
+
+
 def routed():
-    return "boosty" if territory() == "RU" else ""
+    """Back-compat alias for :func:`donation_route`."""
+    return donation_route()
 
 
 def _detect():
@@ -179,10 +203,10 @@ def local(usd, code="USD"):
     return round(float(usd or 0) * rate(code) / q) * q
 
 
-def amount(usd, code="USD"):
-    """The converted figure alone, grouped and rounded to the currency's unit."""
+def local_amount(value, code="USD"):
+    """Format an amount that is already in ``code``, without converting again."""
     code = (code or "USD").upper()
-    value = local(usd, code)
+    value = float(value or 0)
     if code in _ZERO:
         return f"{value:,.0f}"
     big = abs(value) >= 1000
@@ -191,9 +215,32 @@ def amount(usd, code="USD"):
     return f"{value:,.2f}" if big else f"{value:.2f}"
 
 
+def amount(usd, code="USD"):
+    """The converted figure alone, grouped and rounded to the currency's unit."""
+    code = (code or "USD").upper()
+    return local_amount(local(usd, code), code)
+
+
+def _with_symbol(amount_text, code):
+    code = (code or "USD").upper()
+    symbol = _mark(code)
+    gap = " " if len(symbol) > 1 or (symbol and symbol[-1].isalpha()) else ""
+    return f"{symbol}{gap}{amount_text}"
+
+
+def money(usd, code="USD"):
+    """A converted amount with the reader's currency mark."""
+    return _with_symbol(amount(usd, code), code)
+
+
+def money_local(value, code="USD"):
+    """A local-currency amount with its mark, without converting again."""
+    return _with_symbol(local_amount(value, code), code)
+
+
 def goal(usd, code="USD"):
-    r = rate(code)
-    value = float(usd or 0) * (r if r > 1.0 else 1.0)
+    """The target in the reader's currency, rounded up to a friendly unit."""
+    value = float(usd or 0) * rate(code)
     q = 1000.0 if value >= 20000 else (100.0 if value >= 2000 else (10.0 if value >= 200 else 1.0))
     return math.ceil(value / q - 1e-9) * q
 

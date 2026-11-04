@@ -143,6 +143,43 @@ def unseen_notices(notices) -> list:
     return [n for n in (notices or []) if getattr(n, "id", "") not in seen]
 
 
+_SUMMARY_FALLBACK_ONE = "New Community Notice"
+_SUMMARY_FALLBACK_MANY = "{count} New Community Notices"
+_SUMMARY_FALLBACK_BODY = "Open Notices in the app to read them."
+
+
+def _summary_copy(key: str, fallback: str, *, forbidden=(), **values) -> str:
+    """Localized summary copy, never a catalogue key or notice identifier.
+
+    A packaged build can lag behind the catalogue. When a key has no entry, a
+    catalogue entry contains the key, or a bad entry is just a notice ID, use
+    readable English instead of putting an identifier in the operating system's
+    notification title.
+    """
+    from .i18n import tr
+
+    text = str(tr(key) or "").strip()
+    forbidden_ids = {str(value).strip() for value in forbidden if str(value).strip()}
+    if (
+        not text
+        or text == key
+        or text.startswith("notices_summary_")
+        or text in forbidden_ids
+    ):
+        text = fallback
+    try:
+        return text.format(**values)
+    except (KeyError, IndexError, ValueError):
+        return fallback.format(**values)
+
+
+def _notice_headline(notice) -> str:
+    """A notice's human headline, never its feed identifier."""
+    title = str(getattr(notice, "title", "") or "").strip()
+    identifier = str(getattr(notice, "id", "") or "").strip()
+    return title if title and title != identifier else ""
+
+
 def notify_new_notices(notices, tray=None, route: str = "notices") -> bool:
     """Announce a batch of new notices as one counted notification.
 
@@ -151,19 +188,36 @@ def notify_new_notices(notices, tray=None, route: str = "notices") -> bool:
     notices still unseen are passed in, and only categories the user kept on
     are counted, so a category switched off never inflates the number.
     """
-    from .i18n import tr
-
     fresh = [n for n in (notices or []) if category_enabled(notice_category(n))]
     if not fresh:
         return False
+    notice_ids = [getattr(notice, "id", "") for notice in fresh]
     if len(fresh) == 1:
-        title = tr("notices_summary_title_one")
+        title = _summary_copy(
+            "notices_summary_title_one",
+            _SUMMARY_FALLBACK_ONE,
+            forbidden=notice_ids,
+        )
         # The notice's own headline says more than a bare count would here.
-        body = str(getattr(fresh[0], "title", "") or tr("notices_summary_body"))
+        body = _notice_headline(fresh[0]) or _summary_copy(
+            "notices_summary_body", _SUMMARY_FALLBACK_BODY
+        )
     else:
-        title = tr("notices_summary_title_many").format(count=len(fresh))
-        body = tr("notices_summary_body")
-    return deliver(title, body, tray=tray, route=route)
+        title = _summary_copy(
+            "notices_summary_title_many",
+            _SUMMARY_FALLBACK_MANY,
+            forbidden=notice_ids,
+            count=len(fresh),
+        )
+        body = _summary_copy("notices_summary_body", _SUMMARY_FALLBACK_BODY)
+    # A click opens the notice itself, not merely the list. For a batch the
+    # first (newest) notice is the one the banner's headline describes.
+    target_route = route
+    if route == "notices" and fresh:
+        notice_id = str(getattr(fresh[0], "id", "") or "")
+        if notice_id:
+            target_route = f"notices:{notice_id}"
+    return deliver(title, body, tray=tray, route=target_route)
 
 
 def deliver(title: str, message: str, tray=None, route: str = "") -> bool:

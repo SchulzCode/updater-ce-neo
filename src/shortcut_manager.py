@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Dict, Iterable, Iterator, List, Optional, Tuple
 
 from . import paths
+from .i18n import current_language, text_for_language
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,44 @@ DESKTOP_APP_NAME_MEDIATEK = "MediaTek Installer"
 LINUX_APP_FILE = "innioasis-updater.desktop"
 LINUX_TOOL_FILE = "sp-flash-tool.desktop"
 LEGACY_COMMUNITY_FOLDER = "Innioasis Community"
+
+# The languages Inno Setup offers in scripts/build_windows_installer.iss. The
+# app is translated more widely, but shortcut generation follows the installer:
+# outside this set the installer's English name remains the correct name.
+INNO_SHORTCUT_LANGUAGES: dict[str, tuple[str, ...]] = {
+    "english": ("en",),
+    "arabic": ("ar",),
+    "armenian": ("hy",),
+    "brazilianportuguese": ("pt-BR", "pt"),
+    "bulgarian": ("bg",),
+    "catalan": ("ca",),
+    "chinesesimplified": ("zh-CN",),
+    "chinesetraditional": ("zh-TW",),
+    "corsican": ("co",),
+    "czech": ("cs",),
+    "danish": ("da",),
+    "dutch": ("nl",),
+    "finnish": ("fi",),
+    "french": ("fr",),
+    "german": ("de",),
+    "hebrew": ("he",),
+    "hungarian": ("hu",),
+    "icelandic": ("is",),
+    "italian": ("it",),
+    "japanese": ("ja",),
+    "korean": ("ko",),
+    "norwegian": ("no",),
+    "polish": ("pl",),
+    "portuguese": ("pt",),
+    "russian": ("ru",),
+    "slovak": ("sk",),
+    "slovenian": ("sl",),
+    "spanish": ("es",),
+    "swedish": ("sv",),
+    "tamil": ("ta",),
+    "turkish": ("tr",),
+    "ukrainian": ("uk",),
+}
 
 SHORTCUT_SUFFIXES = (".lnk", ".url")
 # Our menu folders are a couple of levels deep at most; the bound keeps a
@@ -87,10 +126,57 @@ def _foreign_app_names() -> Tuple[str, ...]:
     return (APP_NAME,) if _is_mediatek_brand() else (DESKTOP_APP_NAME_MEDIATEK,)
 
 
+def _inno_language_for(lang: str) -> str:
+    """The Inno Setup language whose shortcut name matches *lang*, or ""."""
+    value = (lang or "").strip()
+    if not value:
+        return ""
+    for inno_name, app_codes in INNO_SHORTCUT_LANGUAGES.items():
+        if value in app_codes:
+            return inno_name
+    base = value.split("-")[0]
+    for inno_name, app_codes in INNO_SHORTCUT_LANGUAGES.items():
+        if base in app_codes:
+            return inno_name
+    return ""
+
+
+def _localized_creation_name(lang: str = "") -> str:
+    """The localized app shortcut name for an installer language, or ""."""
+    if _is_mediatek_brand():
+        return ""
+    inno_name = _inno_language_for(lang or current_language())
+    if not inno_name or inno_name == "english":
+        return ""
+    for code in INNO_SHORTCUT_LANGUAGES[inno_name]:
+        name = text_for_language("app_name", code).strip()
+        if name:
+            return name
+    return ""
+
+
+def _localized_shortcut_names(shortcut_id: str) -> Tuple[str, ...]:
+    """Localized app names an Inno Setup shortcut may carry."""
+    if shortcut_id != APP_ID or _is_mediatek_brand():
+        return ()
+    names: List[str] = []
+    for inno_name, codes in INNO_SHORTCUT_LANGUAGES.items():
+        if inno_name == "english":
+            continue
+        for code in codes:
+            name = text_for_language("app_name", code).strip()
+            if name and name not in names:
+                names.append(name)
+    return tuple(names)
+
+
 def _creation_name(shortcut_id: str, kind: str) -> str:
     """The name a shortcut created by this app should carry (installer parity)."""
     if shortcut_id == TOOL_ID:
         return TOOL_NAME
+    localized = _localized_creation_name()
+    if localized:
+        return localized
     if kind == "menu":
         return APP_NAME
     return DESKTOP_APP_NAME_MEDIATEK if _is_mediatek_brand() else DESKTOP_APP_NAME
@@ -258,11 +344,39 @@ def _name_matches(stem: str, names: Iterable[str]) -> bool:
     return False
 
 
-def _belongs(path: Path, owned_folder: str, shortcut_id: str) -> bool:
-    """True when *path* is this app's shortcut for *shortcut_id*."""
+def _active_localized_names(shortcut_id: str) -> Tuple[str, ...]:
+    """The installer-language name for the language the app is using now."""
+    if shortcut_id != APP_ID or _is_mediatek_brand():
+        return ()
+    inno_name = _inno_language_for(current_language())
+    if not inno_name or inno_name == "english":
+        return ()
+    names: List[str] = []
+    for code in INNO_SHORTCUT_LANGUAGES[inno_name]:
+        name = text_for_language("app_name", code).strip()
+        if name and name not in names:
+            names.append(name)
+    return tuple(names)
+
+
+def _belongs(path: Path, owned_folder: str, shortcut_id: str, target: str = "") -> bool:
+    """True when *path* is this app's shortcut for *shortcut_id*.
+
+    English names stand on their own. A localized name is only trusted inside
+    one of our own folders, when the .lnk target proves the app, or when it is
+    the installer's name for the language the app is using now; otherwise a
+    generic translated word for "updater" could claim an unrelated icon.
+    """
     if _name_matches(path.stem, _foreign_app_names()):
         return False
     if _name_matches(path.stem, shortcut_names(shortcut_id)):
+        return True
+    localized = _name_matches(path.stem, _localized_shortcut_names(shortcut_id))
+    if localized and (
+        owned_folder
+        or shortcut_id in _target_ids(target)
+        or _name_matches(path.stem, _active_localized_names(shortcut_id))
+    ):
         return True
     if not owned_folder:
         return False
@@ -281,7 +395,7 @@ def _path_key(path: Path) -> str:
 
 
 def _lnk_targets(files: Iterable[Path]) -> Dict[str, str]:
-    """Resolve the executable each .lnk starts, in one PowerShell call.
+    """Resolve the executable each .lnk starts, through the shell API.
 
     A shortcut the person renamed still belongs to the app its target starts,
     which the file name alone cannot say. Targets are cached per modification
@@ -304,41 +418,137 @@ def _lnk_targets(files: Iterable[Path]) -> Dict[str, str]:
             pending.append(path)
     if not pending or not paths.IS_WINDOWS:
         return resolved
-    script = (
-        "$sh = New-Object -ComObject WScript.Shell; "
-        "foreach ($p in ($env:INNIO_LNKS -split \"`n\")) { "
-        "if (-not $p) { continue }; "
-        "try { $t = $sh.CreateShortcut($p).TargetPath } catch { $t = '' }; "
-        "Write-Output ($p + \"`t\" + $t) "
-        "}"
-    )
-    env = dict(os.environ, INNIO_LNKS="\n".join(str(p) for p in pending))
     try:
-        completed = subprocess.run(
-            ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
-            capture_output=True,
-            text=True,
-            env=env,
-            timeout=30,
-            creationflags=0x08000000,  # CREATE_NO_WINDOW
-        )
-        output = completed.stdout or ""
+        read = _read_windows_lnk_targets(pending)
     except Exception:
         logger.debug("Could not read shortcut targets", exc_info=True)
-        output = ""
-    for line in output.splitlines():
-        if "\t" not in line:
-            continue
-        raw, target = line.split("\t", 1)
-        broken = Path(raw)
-        key = _path_key(broken)
-        target = target.strip()
+        read = {}
+    for path in pending:
+        key = _path_key(path)
+        target = read.get(key, "")
         resolved[key] = target
         try:
-            _LNK_TARGET_CACHE[key] = (broken.stat().st_mtime_ns, target)
+            _LNK_TARGET_CACHE[key] = (path.stat().st_mtime_ns, target)
         except OSError:
             pass
     return resolved
+
+
+def _read_windows_lnk_targets(files: Iterable[Path]) -> Dict[str, str]:
+    """Read .lnk targets through the wide-string shell API.
+
+    The previous PowerShell reader passed the paths in an environment variable,
+    which the shell's ANSI layer turned into "????" for a localized name. A
+    shortcut the installer created in Russian or Japanese then could not prove
+    which program it started after the app's UI language changed. IShellLinkW
+    loads the same file with Unicode paths and returns a Unicode target.
+    """
+    import ctypes
+    import ctypes.wintypes as wintypes
+    import uuid
+
+    class GUID(ctypes.Structure):
+        _fields_ = [
+            ("Data1", wintypes.DWORD),
+            ("Data2", wintypes.WORD),
+            ("Data3", wintypes.WORD),
+            ("Data4", ctypes.c_ubyte * 8),
+        ]
+
+    def guid(value: str) -> GUID:
+        parsed = uuid.UUID(value)
+        return GUID(
+            parsed.time_low,
+            parsed.time_mid,
+            parsed.time_hi_version,
+            (ctypes.c_ubyte * 8)(*parsed.bytes[8:]),
+        )
+
+    def method(interface, index: int, *argument_types):
+        table = ctypes.cast(
+            interface, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))
+        ).contents
+        prototype = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, *argument_types)
+        return prototype(table[index])
+
+    def check(result: int, what: str) -> None:
+        if result < 0:
+            raise OSError(f"{what} failed (0x{result & 0xFFFFFFFF:08X})")
+
+    ole32 = ctypes.windll.ole32
+    ole32.CoInitializeEx.argtypes = [ctypes.c_void_p, wintypes.DWORD]
+    ole32.CoInitializeEx.restype = ctypes.c_long
+    ole32.CoCreateInstance.argtypes = [
+        ctypes.POINTER(GUID),
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        ctypes.POINTER(GUID),
+        ctypes.POINTER(ctypes.c_void_p),
+    ]
+    ole32.CoCreateInstance.restype = ctypes.c_long
+
+    initialized = False
+    targets: Dict[str, str] = {}
+    try:
+        result = ole32.CoInitializeEx(None, 0x2)  # COINIT_APARTMENTTHREADED
+        if result in (0, 1):  # S_OK / S_FALSE
+            initialized = True
+        elif (result & 0xFFFFFFFF) != 0x80010106:  # RPC_E_CHANGED_MODE is usable
+            check(result, "CoInitializeEx")
+        for path in files:
+            link = ctypes.c_void_p()
+            persist = ctypes.c_void_p()
+            try:
+                check(
+                    ole32.CoCreateInstance(
+                        ctypes.byref(guid("00021401-0000-0000-C000-000000000046")),
+                        None,
+                        0x1,  # CLSCTX_INPROC_SERVER
+                        ctypes.byref(guid("000214F9-0000-0000-C000-000000000046")),
+                        ctypes.byref(link),
+                    ),
+                    "IShellLinkW",
+                )
+                check(
+                    method(
+                        link,
+                        0,  # QueryInterface
+                        ctypes.POINTER(GUID),
+                        ctypes.POINTER(ctypes.c_void_p),
+                    )(
+                        link,
+                        ctypes.byref(guid("0000010B-0000-0000-C000-000000000046")),
+                        ctypes.byref(persist),
+                    ),
+                    "IPersistFile",
+                )
+                check(
+                    method(persist, 5, ctypes.c_wchar_p, wintypes.DWORD)(
+                        persist, str(path), 0  # STGM_READ
+                    ),
+                    "Load",
+                )
+                buffer = ctypes.create_unicode_buffer(4096)
+                result = method(
+                    link,
+                    3,  # GetPath
+                    ctypes.c_wchar_p,
+                    ctypes.c_int,
+                    ctypes.c_void_p,
+                    wintypes.DWORD,
+                )(link, buffer, len(buffer), None, 0)
+                if result >= 0 and buffer.value:
+                    targets[_path_key(path)] = buffer.value
+            except Exception:
+                logger.debug("Could not read shortcut target for %s", path, exc_info=True)
+            finally:
+                for interface in (persist, link):
+                    if interface.value:
+                        method(interface, 2)(interface)  # Release
+    finally:
+        if initialized:
+            ole32.CoUninitialize()
+    return targets
 
 
 def _foreign_target_names() -> Tuple[str, ...]:
@@ -384,7 +594,10 @@ def _shortcut_files(
         target = targets.get(key, "")
         if Path(target).name.lower() in _foreign_target_names():
             continue
-        if not (_belongs(path, owned_folder, shortcut_id) or shortcut_id in _target_ids(target)):
+        if not (
+            _belongs(path, owned_folder, shortcut_id, target)
+            or shortcut_id in _target_ids(target)
+        ):
             continue
         seen.add(key)
         found.append(path)
@@ -516,26 +729,122 @@ def _launch_target(shortcut_id: str) -> Tuple[str, str]:
 
 
 def _write_windows_lnk(target: Path, shortcut_id: str) -> None:
+    """Write a .lnk through the Unicode shell API.
+
+    Shortcut names are localized, and the old PowerShell/WScript.Shell route
+    passed the destination through the ANSI environment block: a Russian,
+    Japanese, Chinese or Arabic name arrived as "????" and ``Save()`` failed.
+    Removing the installer's shortcut then made the switch impossible to turn
+    back on. ``IShellLinkW`` takes wide strings, so the name and the install
+    path survive whatever the system code page is.
+    """
     exe, workdir = _launch_target(shortcut_id)
-    script = (
-        "$s=(New-Object -ComObject WScript.Shell).CreateShortcut($env:INNIO_LNK);"
-        "$s.TargetPath=$env:INNIO_EXE;$s.WorkingDirectory=$env:INNIO_WD;"
-        "$s.IconLocation=$env:INNIO_EXE;$s.Save()"
-    )
-    env = dict(os.environ, INNIO_LNK=str(target), INNIO_EXE=exe, INNIO_WD=workdir)
-    subprocess.run(
-        ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
-        check=True,
-        env=env,
-        capture_output=True,
-        creationflags=0x08000000,  # CREATE_NO_WINDOW
-        timeout=30,
-    )
+    _write_windows_lnk_com(Path(target), exe, workdir)
+
+
+def _write_windows_lnk_com(target: Path, exe: str, workdir: str) -> None:
+    import ctypes
+    import ctypes.wintypes as wintypes
+    import uuid
+
+    class GUID(ctypes.Structure):
+        _fields_ = [
+            ("Data1", wintypes.DWORD),
+            ("Data2", wintypes.WORD),
+            ("Data3", wintypes.WORD),
+            ("Data4", ctypes.c_ubyte * 8),
+        ]
+
+    def guid(value: str) -> GUID:
+        parsed = uuid.UUID(value)
+        return GUID(
+            parsed.time_low,
+            parsed.time_mid,
+            parsed.time_hi_version,
+            (ctypes.c_ubyte * 8)(*parsed.bytes[8:]),
+        )
+
+    def method(interface, index: int, *argument_types):
+        table = ctypes.cast(
+            interface, ctypes.POINTER(ctypes.POINTER(ctypes.c_void_p))
+        ).contents
+        prototype = ctypes.WINFUNCTYPE(ctypes.c_long, ctypes.c_void_p, *argument_types)
+        return prototype(table[index])
+
+    def check(result: int, what: str) -> None:
+        if result < 0:
+            raise OSError(f"{what} failed (0x{result & 0xFFFFFFFF:08X})")
+
+    ole32 = ctypes.windll.ole32
+    ole32.CoInitializeEx.argtypes = [ctypes.c_void_p, wintypes.DWORD]
+    ole32.CoInitializeEx.restype = ctypes.c_long
+    ole32.CoCreateInstance.argtypes = [
+        ctypes.POINTER(GUID),
+        ctypes.c_void_p,
+        wintypes.DWORD,
+        ctypes.POINTER(GUID),
+        ctypes.POINTER(ctypes.c_void_p),
+    ]
+    ole32.CoCreateInstance.restype = ctypes.c_long
+
+    initialized = False
+    link = ctypes.c_void_p()
+    persist = ctypes.c_void_p()
+    try:
+        result = ole32.CoInitializeEx(None, 0x2)  # COINIT_APARTMENTTHREADED
+        if result in (0, 1):  # S_OK / S_FALSE
+            initialized = True
+        elif (result & 0xFFFFFFFF) != 0x80010106:  # RPC_E_CHANGED_MODE is usable
+            check(result, "CoInitializeEx")
+        check(
+            ole32.CoCreateInstance(
+                ctypes.byref(guid("00021401-0000-0000-C000-000000000046")),  # ShellLink
+                None,
+                0x1,  # CLSCTX_INPROC_SERVER
+                ctypes.byref(guid("000214F9-0000-0000-C000-000000000046")),  # IShellLinkW
+                ctypes.byref(link),
+            ),
+            "IShellLinkW",
+        )
+        check(method(link, 20, ctypes.c_wchar_p)(link, exe), "SetPath")
+        check(
+            method(link, 9, ctypes.c_wchar_p)(link, workdir),
+            "SetWorkingDirectory",
+        )
+        check(
+            method(link, 17, ctypes.c_wchar_p, ctypes.c_int)(link, exe, 0),
+            "SetIconLocation",
+        )
+        check(
+            method(
+                link,
+                0,  # QueryInterface
+                ctypes.POINTER(GUID),
+                ctypes.POINTER(ctypes.c_void_p),
+            )(
+                link,
+                ctypes.byref(guid("0000010B-0000-0000-C000-000000000046")),  # IPersistFile
+                ctypes.byref(persist),
+            ),
+            "IPersistFile",
+        )
+        check(
+            method(persist, 6, ctypes.c_wchar_p, wintypes.BOOL)(
+                persist, str(target), 1
+            ),
+            "Save",
+        )
+    finally:
+        for interface in (persist, link):
+            if interface.value:
+                method(interface, 2)(interface)  # Release
+        if initialized:
+            ole32.CoUninitialize()
 
 
 def _write_linux_desktop(target: Path, shortcut_id: str) -> None:
     exe, workdir = _launch_target(shortcut_id)
-    name = APP_NAME if shortcut_id == APP_ID else TOOL_NAME
+    name = _creation_name(shortcut_id, "menu")
     body = (
         "[Desktop Entry]\n"
         "Type=Application\n"

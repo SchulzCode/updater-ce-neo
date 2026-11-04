@@ -71,6 +71,52 @@ def test_completion_appeal_subtitle_names_the_model_once():
         app.processEvents()
 
 
+def test_completion_notification_routes_to_the_install_card(monkeypatch):
+    from src import notifications
+
+    sent = {}
+    monkeypatch.setattr(
+        notifications,
+        "show_system_notification",
+        lambda title, message, **kwargs: sent.update(kwargs) or True,
+    )
+
+    notifications.show_completion_notification("Done", "Y2", window=None)
+    assert sent.get("route") == "install"
+
+
+def test_install_notification_opens_the_install_card(monkeypatch):
+    import types
+
+    from src import notifications
+    from src.ui import main_window as mw
+
+    calls = []
+    fake = types.SimpleNamespace(
+        _bring_notification_window_forward=lambda: calls.append("front"),
+        _nav_to_page=lambda page: calls.append(page),
+    )
+
+    mw.MainWindow._on_notification_clicked(fake, "install")
+    assert calls == ["front", mw._PAGE_FLASH]
+
+
+def test_notification_click_restores_a_tray_hidden_window():
+    import types
+
+    from src.ui import main_window as mw
+
+    calls = []
+    fake = types.SimpleNamespace(
+        _window_hidden_in_tray=lambda: True,
+        _show_from_tray=lambda: calls.append("tray"),
+        isVisible=lambda: False,
+    )
+
+    mw.MainWindow._bring_notification_window_forward(fake)
+    assert calls == ["tray"]
+
+
 def test_names_that_only_look_like_the_model_are_left_alone():
     from src.ui.flash_page import _software_without_model
 

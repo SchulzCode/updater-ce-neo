@@ -1950,12 +1950,12 @@ def test_flash_flow_launch():
     assert w._flash_page._warning.isVisible()
     assert "Do not unplug" in w._flash_page._warning.text()
 
-    # When done, warning is hidden and the top banner flips to completion
-    # (the completion dialog is shown over this page).
+    # Every partition is written, but the backend still has to close USB:
+    # the card stays up saying it is finishing instead of blanking.
     w.service.step_changed.emit(STEP_DONE)
-    assert not w._flash_page._warning.isVisible()
-    assert w._flash_page._flash_banner.text() == "Install complete"
-    assert w._flash_page._wait_status.text() == "Complete"
+    assert "Finishing up" in w._flash_page._step_label.text()
+    assert w._flash_page._progress_card.isVisible()
+    assert w._flash_page._warning.isVisible()
     w.close()
     app.processEvents()
 
@@ -2566,13 +2566,15 @@ def test_success_dialog_flow():
         w.service.step_changed.emit(STEP_WRITE)
         assert w._flash_page._flash_banner.text() == "Install in Progress"
         w.service.step_changed.emit(STEP_DONE)
-        assert w._flash_page._flash_banner.text() == "Install complete"
+        # Not complete yet: the backend is still closing its session.
+        assert "Finishing up" in w._flash_page._step_label.text()
 
         # Donation prompt enabled (default): stay on the install screen.
         w.settings.setValue("donation_install_prompt_disabled", False)
         w._package_name = "Stock OS (Y1)"
         w._flash_method = "sp"
         w._handle_flash_success()
+        assert w._flash_page._flash_banner.text() == "Install complete"
         assert shown == [], shown
         assert w._stack.currentIndex() == mw._PAGE_FLASH
         assert w._install_complete is True

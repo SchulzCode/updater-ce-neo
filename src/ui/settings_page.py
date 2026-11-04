@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import catalog, device_tracking, paths, shortcut_manager
+from .. import catalog, device_tracking, fx, paths, shortcut_manager
 from ..config import (
     DEVICE_MODELS,
     device_label_for_model,
@@ -45,6 +45,22 @@ from .widgets import Card, close_layout_gap, layout_gap_closing
 def terminal_install_desc() -> str:
     """Terminal install description, worded for this platform's console app."""
     key = "settings_terminal_desc_windows" if paths.IS_WINDOWS else "settings_terminal_desc"
+    return tr(key)
+
+
+def run_in_background_desc(platform: str | None = None) -> str:
+    """Run-in-background copy, worded for the surface this host actually has.
+
+    macOS keeps the app in the menu bar; Windows and Linux keep it in the
+    system tray. Naming both told every reader about a place their desktop
+    does not have.
+    """
+    host = (platform or sys.platform).lower()
+    key = (
+        "settings_run_in_background_desc_menu_bar"
+        if host == "darwin"
+        else "settings_run_in_background_desc_system_tray"
+    )
     return tr(key)
 
 logger = logging.getLogger(__name__)
@@ -221,19 +237,37 @@ class SettingsPage(QWidget):
             switch.setVisible(visible)
 
     def _cards_in_column(self):
-        """Every card that shares the Settings column, in no particular order."""
+        """Every card that shares the Settings column, in column order.
+
+        Read from the column layout rather than a hand-kept list of attribute
+        names: a card added to Settings later is part of the column and must be
+        hidden with the rest while one card is focused. The shortcut card was
+        missing from that list, so it stayed on screen behind a focused journey.
+        """
         cards = []
-        for name in (
-            "_method_card", "_terminal_card", "_reminders_card", "_rockbox_card",
-            "_donations_card", "_cache_card", "_prep_card", "_offline_mode_card",
-            "_install_themes_card", "_notifications_card",
-            "_background_card",
-            "_legacy_cleanup_card", "_advanced_card",
-        ):
+        for widget in self._column_widgets():
+            if isinstance(widget, Card) and widget not in cards:
+                cards.append(widget)
+        for name in ("_checker_card", "_prep_card"):
             card = getattr(self, name, None)
             if card is not None and card not in cards:
                 cards.append(card)
         return cards
+
+    def _column_widgets(self):
+        """The Settings scroll column's top-level widgets, in order."""
+        scroll = getattr(self, "_settings_scroll", None)
+        container = scroll.widget() if scroll is not None else None
+        layout = container.layout() if container is not None else None
+        if layout is None:
+            return []
+        widgets = []
+        for index in range(layout.count()):
+            item = layout.itemAt(index)
+            widget = item.widget() if item is not None else None
+            if widget is not None:
+                widgets.append(widget)
+        return widgets
 
     def _may_show_card(self, card) -> bool:
         """False for every card but the focused one, while one is focused."""
@@ -264,13 +298,25 @@ class SettingsPage(QWidget):
             return max(1, height)
         return max(1, int(self.sizeHint().height()))
 
-    def show_card_alone(self, card) -> None:
+    def show_card_alone(self, card) -> bool:
         """Put one card on screen by itself and hide the rest.
 
         The Linux entry point and the removal offer both want the user's whole
         attention, and neither is a pop-out window: focusing the page is what
         lets the main window size itself to the single card.
+
+        Refuses a card this host does not offer. The launch check can find a
+        pre-3.0 folder on a platform whose Settings column never shows the
+        removal card; focusing it anyway hid every other card behind a journey
+        that could not finish, with the scroll switched off.
         """
+        if card is None:
+            return False
+        if (
+            card is getattr(self, "_legacy_cleanup_card", None)
+            and not self.legacy_offer_available()
+        ):
+            return False
         self._solo_card = card
         for other in self._cards_in_column():
             # One card, nothing else: a focused journey (Linux setup, removal
@@ -292,6 +338,7 @@ class SettingsPage(QWidget):
 
             if win._stack.currentIndex() == _PAGE_SETTINGS:
                 win._highlight_nav(_PAGE_SETTINGS, win._install_run_active())
+        return True
 
     def clear_card_focus(self) -> None:
         """Give the column back to the ordinary per-card visibility rules."""
@@ -617,6 +664,7 @@ class SettingsPage(QWidget):
         actions.addWidget(self._settings_reddit_btn, 0, Qt.AlignVCenter)
         actions.addStretch(1)
         don_layout.addWidget(self._donations_actions, alignment=Qt.AlignLeft)
+        self._sync_donation_methods()
         # This opt-out link only appears after donations are disabled. Keep it
         # on its own row so it cannot widen the entire Settings scroll area
         # when its (usually longer) localized text becomes visible.
@@ -742,7 +790,7 @@ class SettingsPage(QWidget):
         )
         self._cb_notifications_background.setStyleSheet("")
         self._cb_notifications_background.setToolTip(
-            tr("settings_run_in_background_desc")
+            run_in_background_desc()
         )
         self._cb_notifications_background.toggled.connect(
             self._on_notifications_background_toggled
@@ -757,13 +805,13 @@ class SettingsPage(QWidget):
         bg_layout.setSpacing(8)
         self._cb_run_in_background = self._add_title_row_switch(
             self._background_card, "settings_run_in_background_group",
-            tooltip=tr("settings_run_in_background_desc"),
+            tooltip=run_in_background_desc(),
         )
         self._cb_run_in_background.setStyleSheet("")  # no host style override
         from ..tray import run_in_background_enabled
         self._cb_run_in_background.setChecked(run_in_background_enabled())
         self._cb_run_in_background.toggled.connect(self._on_run_in_background_toggled)
-        self._background_desc = QLabel(tr("settings_run_in_background_desc"))
+        self._background_desc = QLabel(run_in_background_desc())
         self._background_desc.setWordWrap(True)
         self._background_desc.setProperty("cssClass", "dimmed")
         bg_layout.addWidget(self._background_desc)
@@ -853,6 +901,7 @@ class SettingsPage(QWidget):
         sc_layout = QVBoxLayout()
         sc_layout.setSpacing(8)
         self._shortcut_switches: dict[tuple[str, str], QCheckBox] = {}
+        self._shortcut_label_keys: dict[tuple[str, str], tuple[str, str]] = {}
         for sid, name_key in (
             ("updater", "settings_shortcut_updater"),
             ("sp_flash_tool", "settings_shortcut_sp_flash"),
@@ -867,6 +916,7 @@ class SettingsPage(QWidget):
                     lambda checked, s=sid, k=kind: self._on_shortcut_toggled(s, k, checked)
                 )
                 self._shortcut_switches[(sid, kind)] = sw
+                self._shortcut_label_keys[(sid, kind)] = (name_key, kind_key)
         self._shortcuts_card.set_layout(sc_layout)
         layout.addWidget(self._shortcuts_card)
         self._shortcuts_card.setVisible(
@@ -1373,6 +1423,37 @@ class SettingsPage(QWidget):
         shortcut_manager.set_shortcut(shortcut_id, kind, checked)
         self.refresh_shortcut_state()
 
+    def _retranslate_shortcut_switches(self) -> None:
+        """Relabel the shortcut rows in place, without touching their layout."""
+        if not hasattr(self, "_shortcuts_card"):
+            return
+        self._shortcuts_card.retranslate()
+        for key, switch in self._shortcut_switches.items():
+            labels = self._shortcut_label_keys.get(key)
+            if labels is None:
+                continue
+            name_key, kind_key = labels
+            self._set_switch_caption(switch, tr(kind_key))
+            switch.setText(f"{tr(name_key)} — {tr(kind_key)}")
+
+    def legacy_offer_available(self) -> bool:
+        """Whether the pre-3.0 removal offer may be shown at all.
+
+        One rule for the card and for anything that wants to put the reader in
+        front of it: not on Windows, not in the generic MediaTek Installer
+        build, and only for a real pre-3.0 install. The launch check asks this
+        before it opens Settings, so a host without the offer never lands in a
+        focused card it cannot see.
+        """
+        if is_mediatek_installer() or paths.IS_WINDOWS:
+            return False
+        try:
+            from ..legacy_cleanup import detect_legacy_installations
+
+            return bool(detect_legacy_installations().get("has_legacy"))
+        except Exception:
+            return False
+
     def _update_legacy_cleanup_visibility(self):
         """Show the removal card only while a pre-3.0 install is on disk.
 
@@ -1381,16 +1462,7 @@ class SettingsPage(QWidget):
         general cleaner: stray Android platform tools alone do not raise it,
         and the card disappears again once the old app is gone.
         """
-        if is_mediatek_installer() or paths.IS_WINDOWS:
-            self._legacy_cleanup_card.setVisible(False)
-            return
-        try:
-            from ..legacy_cleanup import detect_legacy_installations
-
-            info = detect_legacy_installations()
-            visible = bool(info.get("has_legacy"))
-        except Exception:
-            visible = False
+        visible = self.legacy_offer_available()
         self._legacy_cleanup_card.setVisible(
             visible and self._may_show_card(self._legacy_cleanup_card)
         )
@@ -2134,13 +2206,36 @@ class SettingsPage(QWidget):
 
     def _open_settings_coffee(self) -> None:
         from ..browser import open_browser
-        open_browser("https://ko-fi.com/teamslide")
+        from ..config import DONATION_LINKS
+
+        route = fx.donation_route()
+        if route == "boosty":
+            open_browser(DONATION_LINKS["boosty"])
+        elif route == "bmc":
+            open_browser(DONATION_LINKS["bmc"])
+        else:
+            open_browser(DONATION_LINKS["kofi"])
 
     def _open_settings_bmc(self) -> None:
         from ..browser import open_browser
         from ..config import DONATION_LINKS
 
         open_browser(DONATION_LINKS["bmc"])
+
+    def _sync_donation_methods(self) -> None:
+        """Show Boosty/BMC alone for Russian readers, as the region dictates."""
+        route = fx.donation_route()
+        if hasattr(self, "_settings_coffee_btn"):
+            key = {
+                "boosty": "donate_boosty",
+                "bmc": "donate_buy_me_a_coffee",
+            }.get(route, "donate_coffee_btn")
+            self._settings_coffee_btn.setText(tr(key))
+        if hasattr(self, "_settings_bmc_btn"):
+            self._settings_bmc_btn.setText(tr("donate_buy_me_a_coffee"))
+            # Set both ways: a language switch back to English has to restore
+            # the second coffee page, not leave the row one button short.
+            self._settings_bmc_btn.setVisible(not route)
 
     def _community_icon(self, name: str):
         """Render a bundled community SVG in the current interface foreground color."""
@@ -2203,6 +2298,7 @@ class SettingsPage(QWidget):
                 button.setVisible(True)
         if hasattr(self, "_dismiss_donations_link"):
             self._dismiss_donations_link.setVisible(disabled)
+        self._sync_donation_methods()
 
     def _apply_donations_section_visibility(self) -> None:
         """The dismiss link removes this card. The donation switch does not."""
@@ -2592,6 +2688,7 @@ class SettingsPage(QWidget):
             self._settings_coffee_btn.setText(tr("donate_coffee_btn"))
         if hasattr(self, "_settings_bmc_btn"):
             self._settings_bmc_btn.setText(tr("donate_buy_me_a_coffee"))
+        self._sync_donation_methods()
         if hasattr(self, "_settings_discord_btn"):
             self._settings_discord_btn.setText(tr("community_discord"))
         if hasattr(self, "_settings_reddit_btn"):
@@ -2639,7 +2736,7 @@ class SettingsPage(QWidget):
                 tr("settings_notifications_background"),
             )
             self._cb_notifications_background.setToolTip(
-                tr("settings_run_in_background_desc")
+                run_in_background_desc()
             )
         self._notifications_unavailable.setText(
             tr("settings_notifications_unavailable")
@@ -2649,9 +2746,9 @@ class SettingsPage(QWidget):
             self._cb_run_in_background, tr("settings_run_in_background_group")
         )
         self._cb_run_in_background.setToolTip(
-            tr("settings_run_in_background_desc")
+            run_in_background_desc()
         )
-        self._background_desc.setText(tr("settings_run_in_background_desc"))
+        self._background_desc.setText(run_in_background_desc())
         if hasattr(self, "_install_themes_card"):
             self._install_themes_card.retranslate()
         if hasattr(self, "_install_themes_desc"):
@@ -2668,6 +2765,7 @@ class SettingsPage(QWidget):
         if hasattr(self, "_refresh_themes_btn"):
             self._refresh_themes_btn.setText(tr("settings_refresh_themes_btn"))
             self._refresh_themes_btn.setIcon(get_symbol_icon("refresh", 14, color=T().fg))
+        self._retranslate_shortcut_switches()
         self._sp_auth_label.setText(tr("settings_sp_auth"))
         self._sp_auth_browse.setText(tr("settings_sp_auth_browse"))
         self._sp_auth_clear.setText(tr("settings_sp_auth_clear"))

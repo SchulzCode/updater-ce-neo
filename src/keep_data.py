@@ -131,6 +131,11 @@ def tracked_package(model: str, pkg, settings: Optional[QSettings] = None, hardw
     return None
 
 
+def declares_family(pkg) -> bool:
+    """True when the catalogue names the firmware ``pkg`` was built from."""
+    return bool(_norm(getattr(pkg, "derivative", "")))
+
+
 def tracked_is_compatible(model: str, pkg, settings: Optional[QSettings] = None, hardware_type: str = "") -> Optional[bool]:
     """True/False for a tracked install, ``None`` when nothing is tracked."""
     tracked = tracked_package(model, pkg, settings=settings, hardware_type=hardware_type)
@@ -138,7 +143,18 @@ def tracked_is_compatible(model: str, pkg, settings: Optional[QSettings] = None,
         return None
     if _norm(getattr(tracked, "repo", "")) == _norm(getattr(pkg, "repo", "")):
         return True
-    return bool(family_repos(pkg).intersection(family_repos(tracked)))
+    if family_repos(pkg).intersection(family_repos(tracked)):
+        return True
+    # Neither package names the firmware it was built from, so the catalogue
+    # cannot say whether they share a data partition. That is unknown, not a
+    # refusal: Reborn (Y2Linux) installs and updates itself outside this app,
+    # so the tracked record can still name whatever came before it. The
+    # install asks which firmware is running (``needs_confirmation``) instead
+    # of hiding Keep Data. A declared family on either side *is* evidence, so
+    # a mismatch there stays incompatible.
+    if not declares_family(pkg) and not declares_family(tracked):
+        return None
+    return False
 
 
 def keep_data_available(model: str, pkg, settings: Optional[QSettings] = None, hardware_type: str = "") -> bool:
