@@ -30,7 +30,8 @@ from PySide6.QtWidgets import (
 from .config import DONATION_LINKS, device_label_for_model
 from .donors import (
     fetch_remote_donors_async,
-    get_monthly_goal_stats,
+    format_goal_amount,
+    get_goal_stats,
     is_anonymous_donor,
     relative_date,
 )
@@ -208,6 +209,44 @@ def _resolve_bar_state(inst):
         st = (os_k, ew, g_ok, p_ok, n > 2)
         inst._bar_st = st
     return st
+
+
+def _goal_is_suppressed(inst, stats) -> bool:
+    """True when the goal line must not be drawn for ``stats``.
+
+    A completed goal is never mentioned, only an outstanding one, so both
+    scopes drop the line the moment they are met and fall back to donor lines
+    and the usual encouragement. The monthly line also stays away at $0, where
+    it would read as a $200 shortfall in the first hour of the month; the
+    weekly line keeps its $0, which is the point of asking by the week.
+    """
+    _os_k, _ew, g_ok, _p_ok, _ = _resolve_bar_state(inst)
+    raised = float(stats["raised"])
+    target = float(stats["target"])
+    return bool(
+        not g_ok
+        or stats["reached"]
+        or (stats["scope"] == "monthly" and raised <= 0.0)
+        or (target - raised) < 1.0
+    )
+
+
+def _goal_line(stats, short: bool):
+    """The goal sentence and bar value for ``stats``'s scope.
+
+    Weekly and monthly are mutually exclusive: only the scope this day of the
+    month names is rendered, so the week's costs and the month's never appear
+    side by side.
+    """
+    if stats["scope"] == "weekly":
+        key = "donate_goal_week_status_fmt" if short else "donate_goal_week_fmt"
+    else:
+        key = "donate_goal_status_fmt" if short else "donate_goal_fmt"
+    text = tr(key).format(
+        raised=format_goal_amount(stats["raised"]),
+        target=float(stats["target"]),
+    )
+    return text, int(round(float(stats["percent"]) * 10))
 
 
 def _order_bar_slots(inst, items):
@@ -755,14 +794,16 @@ class DonationStatusBar(QStatusBar):
         lines = _order_bar_slots(self, raw_items)
         return lines or [tr("donate_thanks_status")]
 
+    def _goal_stats(self):
+        """Goal numbers for this day of the month (monthly, or the week's own)."""
+        return get_goal_stats(self.donations, now=getattr(self, "_goal_now", None))
+
     def _refresh_goal(self):
-        raised, _remaining, percent, target = get_monthly_goal_stats(self.donations)
-        raised = float(raised)
-        _os_k, _ew, g_ok, _p_ok, _ = _resolve_bar_state(self)
-        self._goal_suppressed = (raised <= 0.0 or raised > 199.0 or not g_ok)
-        self._goal_reached = raised >= float(target)
-        raised_text = str(int(raised)) if raised.is_integer() else f"{raised:.2f}"
-        if self._goal_suppressed or self._goal_reached:
+        stats = self._goal_stats()
+        self._goal_scope = stats["scope"]
+        self._goal_reached = bool(stats["reached"])
+        self._goal_suppressed = _goal_is_suppressed(self, stats)
+        if self._goal_suppressed:
             self._showing_goal = False
             self._goal_label.setVisible(False)
             self._goal_bar.setVisible(False)
@@ -770,14 +811,13 @@ class DonationStatusBar(QStatusBar):
             if not self._donor_label.text():
                 self._donor_label.setText(self._donor_lines[0] if self._donor_lines else tr("donate_thanks_status"))
         else:
+            text, value = _goal_line(stats, short=True)
             self._showing_goal = True
             self._goal_label.setVisible(True)
             self._goal_bar.setVisible(True)
             self._donor_label.setVisible(False)
-            self._goal_label.setText(
-                tr("donate_goal_status_fmt").format(raised=raised_text, target=target)
-            )
-            self._goal_bar.setValue(int(round(percent * 10)))
+            self._goal_label.setText(text)
+            self._goal_bar.setValue(value)
 
     def _show_next_donor_line(self):
         if not self._donor_lines:
@@ -797,11 +837,8 @@ class DonationStatusBar(QStatusBar):
 
     def _show_next_message_line(self):
         import random
-        raised, _remaining, percent, target = get_monthly_goal_stats(self.donations)
-        raised = float(raised)
+        stats = self._goal_stats()
         os_k, ew, g_ok, _p_ok, _ = _resolve_bar_state(self)
-        goal_suppressed = (raised <= 0.0 or raised > 199.0 or not g_ok)
-        goal_reached = raised >= float(target)
 
         if not g_ok and random.random() < 0.78:
             self._show_next_donor_line()
@@ -822,17 +859,15 @@ class DonationStatusBar(QStatusBar):
         self._msg_turn += 1
 
         freq_hit = (ew == 1 or os_k == 1 or (self._msg_turn % 2 == 1))
-        show_goal = (not goal_suppressed and not goal_reached and freq_hit)
+        show_goal = (not _goal_is_suppressed(self, stats) and freq_hit)
         if show_goal:
-            raised_text = str(int(raised)) if raised.is_integer() else f"{raised:.2f}"
+            text, value = _goal_line(stats, short=True)
             self._showing_goal = True
             self._goal_label.setVisible(True)
             self._goal_bar.setVisible(True)
             self._donor_label.setVisible(False)
-            self._goal_label.setText(
-                tr("donate_goal_status_fmt").format(raised=raised_text, target=target)
-            )
-            self._goal_bar.setValue(int(round(percent * 10)))
+            self._goal_label.setText(text)
+            self._goal_bar.setValue(value)
             self._goal_label.repaint()
             self._goal_bar.repaint()
         else:
@@ -1179,25 +1214,21 @@ class DonationDialog(QDialog):
         return list(pool)
 
     def _refresh_goal(self):
-        raised, _, pct, target = get_monthly_goal_stats(self.donations)
-        raised = float(raised)
-        r_s = f"{int(raised)}" if raised.is_integer() else f"{raised:.2f}"
-        _os_k, _ew, g_ok, _p_ok, _ = _resolve_bar_state(self)
-        self._goal_suppressed = (raised <= 0.0 or raised > 199.0 or not g_ok)
-        self._goal_reached = raised >= float(target)
+        stats = get_goal_stats(self.donations, now=getattr(self, "_goal_now", None))
+        self._goal_scope = stats["scope"]
+        self._goal_reached = bool(stats["reached"])
+        self._goal_suppressed = _goal_is_suppressed(self, stats)
         if self._goal_suppressed:
+            # A completed goal is never mentioned: the card shows donor lines
+            # and the ordinary encouragement instead of a finished target.
             self._showing_goal = False
             self._goal_target = 0
             self._goal_view.setVisible(False)
             self._donor_view.setVisible(True)
-        elif self._goal_reached:
-            self._showing_goal = False
-            self._goal_label.setText(tr("donate_rely_on_you"))
-            self._goal_target = 1000
-            self._goal_bar.setValue(self._goal_target)
         else:
-            self._goal_label.setText(tr("donate_goal_fmt").format(raised=r_s, target=target))
-            self._goal_target = int(round(pct * 10))
+            text, value = _goal_line(stats, short=False)
+            self._goal_label.setText(text)
+            self._goal_target = value
             self._goal_bar.setValue(self._goal_target)
 
     def _next_ticker_message(self) -> str:

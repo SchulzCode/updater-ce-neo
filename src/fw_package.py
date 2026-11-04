@@ -13,7 +13,9 @@ Such a folder only needs the optional ``fw_package.ini``, the optional
 the scatter lists. Anything else a firmware release carries (the SP Flash Tool
 executables a Windows/Linux pack puts around the ROM files, readmes, archives) is
 ignored and does not need to be packed. A scatter whose name contains ``preserve`` is
-a data-preserving variant of the release, not the package's own scatter.
+a data-preserving variant of the release, not the package's own scatter: the
+package's ``*_Android_scatter.txt`` outranks both it and any other
+``*scatter*.txt`` naming, and a lone scatter is accepted whatever it is called.
 
 If the folder contains a ``*rockbox*.txt`` file, Rockbox themes and fontpacks are
 automatically marked for installation with the firmware.
@@ -213,16 +215,55 @@ def _single_scatter(folder: Path) -> Optional[Path]:
         return None
 
 
+def scatter_sort_key(path: Union[str, Path]) -> tuple:
+    """Order scatter files by how closely they match the package's own scatter.
+
+    A stock MediaTek release ships exactly one ``*_Android_scatter.txt``. Any
+    other scatter beside it is a variant: a
+    ``*_Android_scatter_preserve_data.txt`` keeps user data instead of writing
+    it, and a bare ``*scatter*.txt`` names no known layout at all. Lower sorts
+    first, so the original Android scatter always wins and the rest are
+    ignored while it is there.
+    """
+    stem = Path(str(path)).name.lower()
+    if stem.endswith(".txt"):
+        stem = stem[:-4]
+    variant = any(tag in stem for tag in ("preserve", "keep_data", "keepdata", "nodata"))
+    if variant:
+        return (1, stem)
+    if stem.endswith("android_scatter"):
+        return (0, stem)
+    return (2, stem)
+
+
+def ranked_scatters(paths) -> list:
+    """The best-ranked scatter file(s) among ``paths``.
+
+    Every lower-ranked scatter is ignored while a better one is present, which
+    is how a package's own ``*_Android_scatter.txt`` displaces its
+    preserve-data copy and any stray ``*scatter*.txt``. More than one entry
+    survives only when files match equally well, which means two packages.
+    """
+    items = [Path(p) for p in paths]
+    if not items:
+        return []
+    # Compared on the rank alone: the name breaks a tie for ordering, never
+    # for choosing, so two stock scatters from two chips stay ambiguous.
+    best = min(scatter_sort_key(p)[0] for p in items)
+    return [p for p in items if scatter_sort_key(p)[0] == best]
+
+
 def pick_scatter(folder: Union[str, Path]) -> Optional[Path]:
-    """Return the best *scatter*.txt from folder.
+    """Return the scatter naming this folder's firmware layout, else ``None``.
 
     Selection rules:
-    1. Collect all *.txt files with "scatter" in the name.
-    2. Drop *preserve* scatters (e.g. ``MT6582_Android_scatter_preserve_data.txt``)
-       when another scatter is present: they are a data-preserving variant of the
-       release, not the package's own scatter.
-    3. Preference *ndroid_scatter*.txt over generic *scatter*.txt.
-    4. If exactly one scatter matches the preferred criteria, return it.
+    1. Only ``*scatter*.txt`` files count, and a lone one is accepted whatever
+       it is called: some releases are not strictly named.
+    2. With several, the best-ranked name wins and the rest are ignored:
+       ``*_Android_scatter.txt``, then its ``preserve_data`` variant, then any
+       other scatter naming (see :func:`scatter_sort_key`).
+    3. Two files at the same rank are two different packages, so no single
+       scatter is chosen and the caller reports the ambiguity.
     """
     try:
         folder_p = Path(folder)
@@ -238,24 +279,8 @@ def pick_scatter(folder: Union[str, Path]) -> Optional[Path]:
     if len(matches) == 1:
         return matches[0]
 
-    # A preserve scatter is only a variant: it never names the package while a
-    # real scatter is there. Keep it as the sole match so a release that ships
-    # nothing else can still be opened.
-    non_preserve = [p for p in matches if "preserve" not in p.name.lower()]
-    candidates = non_preserve if non_preserve else matches
-
-    if len(candidates) == 1:
-        return candidates[0]
-
-    # Preference *ndroid_scatter*.txt over generic *scatter*.txt only when
-    # every other scatter is an alias/duplicate named "scatter.txt".
-    android = [p for p in candidates if "ndroid_scatter" in p.name.lower()]
-    if len(android) == 1:
-        others = [p for p in candidates if p not in android]
-        if all(p.name.lower() in ("scatter.txt",) for p in others):
-            return android[0]
-
-    return None
+    best = ranked_scatters(matches)
+    return best[0] if len(best) == 1 else None
 
 
 def scatter_has_preserve_data_variant(folder: Union[str, Path]) -> bool:

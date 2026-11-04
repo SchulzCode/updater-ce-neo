@@ -26,31 +26,120 @@ def test_get_appeal_messages():
     assert "family" in full_text.lower() or "free" in full_text.lower()
 
 
-def test_donation_status_bar_goal_suppression(qapp):
-    # When raised == 0, goal bar should be suppressed (hidden)
-    bar = DonationStatusBar(donations=[])
+def _draw_goal_at(bar, when):
+    """Draw the bar's goal line for a pinned date, with the goal always offered.
+
+    The bar otherwise picks a random appetite for the goal slot and the current
+    date, and both decide what is shown; pinning them keeps these assertions
+    about the goal itself rather than about what day the test ran.
+    """
+    bar._goal_now = when
+    bar._bar_st = (1, 1, 1, 0, len(getattr(bar, "donations", None) or ()) > 2)
     bar._refresh_goal()
+
+
+def test_donation_status_bar_goal_suppression(qapp):
+    from datetime import datetime
+
+    # Days 1-5 name the monthly target: nothing raised in the month leaves the
+    # goal line off the bar entirely.
+    monthly_day = datetime(2026, 11, 3, 12, 0)
+    bar = DonationStatusBar(donations=[])
+    _draw_goal_at(bar, monthly_day)
+    assert bar._goal_scope == "monthly"
     assert bar._goal_suppressed is True
     assert not bar._goal_bar.isVisible()
     assert not bar._goal_label.isVisible()
     assert not bar._donor_label.isHidden()
 
     # When raised is 50 (< 200), goal bar is visible
-    donations_mid = [{"amount": 50.0, "name": "Alice", "dt": None}]
-    from datetime import datetime
-    donations_mid[0]["dt"] = datetime.now()
+    donations_mid = [{"amount": 50.0, "name": "Alice", "dt": datetime(2026, 11, 2)}]
     bar2 = DonationStatusBar(donations=donations_mid)
-    bar2._refresh_goal()
+    _draw_goal_at(bar2, monthly_day)
     assert bar2._goal_suppressed is False
     assert not bar2._goal_bar.isHidden()
     assert not bar2._goal_label.isHidden()
 
-    # When raised is 250 (>= 200), goal bar is suppressed
-    donations_high = [{"amount": 250.0, "name": "Bob", "dt": datetime.now()}]
+    # When raised is 250 (>= 200), the goal is complete and is never mentioned
+    donations_high = [{"amount": 250.0, "name": "Bob", "dt": datetime(2026, 11, 2)}]
     bar3 = DonationStatusBar(donations=donations_high)
-    bar3._refresh_goal()
+    _draw_goal_at(bar3, monthly_day)
+    assert bar3._goal_reached is True
     assert bar3._goal_suppressed is True
     assert not bar3._goal_bar.isVisible()
+
+
+def test_goal_scope_is_monthly_on_the_months_edge_days_only():
+    from datetime import datetime
+
+    from src.donors import get_goal_stats, weekly_goal_usd
+
+    donations = [
+        {"amount": 30.0, "dt": datetime(2026, 2, 2)},   # opening days
+        {"amount": 10.0, "dt": datetime(2026, 2, 9)},   # first week block
+    ]
+    # February 2026 has 28 days: monthly on 1-5 and 22-28, weekly from 6 to 21.
+    assert get_goal_stats(donations, now=datetime(2026, 2, 5, 12, 0))["scope"] == "monthly"
+    assert get_goal_stats(donations, now=datetime(2026, 2, 6, 12, 0))["scope"] == "weekly"
+    assert get_goal_stats(donations, now=datetime(2026, 2, 21, 12, 0))["scope"] == "weekly"
+    assert get_goal_stats(donations, now=datetime(2026, 2, 22, 12, 0))["scope"] == "monthly"
+
+    opening = get_goal_stats(donations, now=datetime(2026, 2, 3, 12, 0))
+    assert opening["raised"] == 30.0 and opening["target"] == 200.0
+
+    week = get_goal_stats(donations, now=datetime(2026, 2, 9, 12, 0))
+    # The opening days' $30 belongs to the month, not to this week.
+    assert week["raised"] == 10.0
+    assert week["target"] == weekly_goal_usd(datetime(2026, 2, 9, 12, 0))
+    assert 0 < week["target"] < 200.0
+
+    closing = get_goal_stats(donations, now=datetime(2026, 2, 24, 12, 0))
+    assert closing["scope"] == "monthly" and closing["raised"] == 40.0
+
+    # A met goal reports itself as met, so the display can drop it entirely.
+    met = get_goal_stats(
+        [{"amount": 60.0, "dt": datetime(2026, 2, 9)}], now=datetime(2026, 2, 10, 12, 0)
+    )
+    assert met["reached"] is True
+
+
+def test_status_bar_names_only_the_weeks_costs_mid_month(qapp):
+    from datetime import datetime
+
+    from src.i18n import translator
+
+    translator().set_language("en")
+    try:
+        donations = [{"amount": 30.0, "name": "Alice", "dt": datetime(2026, 11, 2)}]
+
+        # Day 6: the opening days' $30 was counted against the month, so the
+        # bar asks for the week's own costs starting from $0.
+        weekly = DonationStatusBar(donations=donations)
+        _draw_goal_at(weekly, datetime(2026, 11, 6, 12, 0))
+        assert weekly._goal_scope == "weekly"
+        assert weekly._showing_goal is True
+        weekly_text = weekly._goal_label.text()
+        assert "$0" in weekly_text
+        assert "week" in weekly_text
+        assert "$200" not in weekly_text
+
+        # Day 4 shows the month, and the $30 raised this month with it.
+        monthly = DonationStatusBar(donations=donations)
+        _draw_goal_at(monthly, datetime(2026, 11, 4, 12, 0))
+        assert monthly._goal_scope == "monthly"
+        monthly_text = monthly._goal_label.text()
+        assert "$30" in monthly_text and "$200" in monthly_text and "month" in monthly_text
+
+        # The last seven days go back to the monthly figure.
+        closing = DonationStatusBar(donations=donations)
+        _draw_goal_at(closing, datetime(2026, 11, 25, 12, 0))
+        assert closing._goal_scope == "monthly"
+        assert "$30" in closing._goal_label.text()
+
+        for bar in (weekly, monthly, closing):
+            bar.deleteLater()
+    finally:
+        translator().set_language("en")
 
 
 def test_support_page_narratives_and_methods(qapp):

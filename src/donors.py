@@ -1,7 +1,9 @@
-"""Donors data — CSV parsing, monthly goal stats, live remote fetch.
+"""Donors data — CSV parsing, funding-goal stats, live remote fetch.
 
 Ported from CE's ``load_donors_data`` / ``parse_donors_csv_text`` /
-``get_monthly_goal_stats`` / ``fetch_remote_donors_async``.
+``get_monthly_goal_stats`` / ``fetch_remote_donors_async``, plus the funding
+phases: the monthly figure on the month's opening five and closing seven days,
+the week's own share of the same costs on every day between them.
 """
 
 import csv
@@ -192,6 +194,107 @@ def get_monthly_goal_stats(donations, now=None):
     percent = min(100.0, max(0.0, (raised / target) * 100.0))
     remaining = max(0.0, target - raised)
     return raised, remaining, percent, target
+
+
+#: Days of the month whose goal display names the monthly target: the opening
+#: five and the closing seven. Every day between them names the week's own
+#: costs instead — a fraction of the monthly figure — so the ask keeps its
+#: urgency instead of going quiet once the month's total looks healthy.
+GOAL_MONTHLY_OPENING_DAYS = 5
+GOAL_MONTHLY_CLOSING_DAYS = 7
+
+
+def days_in_month(now=None) -> int:
+    """Number of days in ``now``'s calendar month."""
+    now = now or datetime.now()
+    if now.month == 12:
+        first_next = datetime(now.year + 1, 1, 1)
+    else:
+        first_next = datetime(now.year, now.month + 1, 1)
+    return (first_next - datetime(now.year, now.month, 1)).days
+
+
+def goal_scope(now=None) -> str:
+    """``"monthly"`` on the month's edge days, ``"weekly"`` on the days between.
+
+    The two are mutually exclusive by design: a reader is shown one funding
+    figure, for the period that is short right now.
+    """
+    now = now or datetime.now()
+    if now.day <= GOAL_MONTHLY_OPENING_DAYS:
+        return "monthly"
+    if now.day > days_in_month(now) - GOAL_MONTHLY_CLOSING_DAYS:
+        return "monthly"
+    return "weekly"
+
+
+def goal_period_start(now=None) -> datetime:
+    """First day of the period the goal names.
+
+    The weekly phase opens on day 6, so its periods are seven-day blocks from
+    there (6-12, 13-19, ...). Each block counts from zero: donations from the
+    opening days were already shown against the monthly figure, and counting
+    them again would hide the week that is actually short.
+    """
+    now = now or datetime.now()
+    if goal_scope(now) == "monthly":
+        return datetime(now.year, now.month, 1)
+    block = (now.day - GOAL_MONTHLY_OPENING_DAYS - 1) // 7
+    start_day = GOAL_MONTHLY_OPENING_DAYS + 1 + block * 7
+    return datetime(now.year, now.month, start_day)
+
+
+def weekly_goal_usd(now=None) -> float:
+    """The month's costs spread across its days, seven days at a time."""
+    now = now or datetime.now()
+    return MONTHLY_GOAL_USD * 7.0 / max(1, days_in_month(now))
+
+
+def format_goal_amount(amount) -> str:
+    """Whole dollars without cents, cents kept when the amount has them."""
+    amount = float(amount or 0)
+    return str(int(amount)) if amount.is_integer() else f"{amount:.2f}"
+
+
+def get_goal_stats(donations, now=None):
+    """Raised against the target this day of the month's display should name.
+
+    Returns ``{"scope", "raised", "remaining", "percent", "target",
+    "period_start", "reached"}``. ``reached`` reports a complete goal, which
+    the callers use to drop the goal line altogether: a finished target is
+    never mentioned, only an outstanding one.
+    """
+    now = now or datetime.now()
+    scope = goal_scope(now)
+    target = float(MONTHLY_GOAL_USD if scope == "monthly" else weekly_goal_usd(now))
+    start = goal_period_start(now)
+    start_day = start.date()
+    raised = 0.0
+    for donation in donations or ():
+        dt = donation.get("dt")
+        if not dt:
+            continue
+        amount = float(donation.get("amount", 0) or 0)
+        if amount <= 0:
+            continue
+        day = dt.date() if hasattr(dt, "date") else dt
+        if day.year != now.year or day.month != now.month:
+            continue
+        # A donation dated later in the month has not happened yet, so it is
+        # not part of what this period has raised.
+        if day < start_day or day > now.date():
+            continue
+        raised += amount
+    percent = min(100.0, max(0.0, (raised / target) * 100.0)) if target > 0 else 0.0
+    return {
+        "scope": scope,
+        "raised": raised,
+        "remaining": max(0.0, target - raised),
+        "percent": percent,
+        "target": target,
+        "period_start": start,
+        "reached": raised >= target,
+    }
 
 
 def cached_donors_path() -> Path:

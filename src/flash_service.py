@@ -2114,12 +2114,20 @@ def find_scatter_files(directory):
 
 
 def _find_scatter(directory, allow_raise=True):
-    """Find the scatter file in a directory or its nested subfolder.
-    If multiple scatter files are found across different packages/folders,
-    preferences *ndroid_scatter*.txt over other *scatter*.txt files, and
-    filters out *preserve_data* variant scatters.
-    If multiple scatter files are still ambiguous, raises ScatterDiscoveryError
-    if allow_raise is True, else returns None.
+    """Find the scatter file that decides this package's layout.
+
+    More than one ``*scatter*.txt`` can sit in a release, but only one names
+    the layout to flash, so they are ranked (``fw_package.scatter_sort_key``):
+    the package's own ``*_Android_scatter.txt`` first, then a data-preserving
+    ``*_Android_scatter_preserve_data.txt`` variant, then any other
+    ``*scatter*.txt`` naming. A better-ranked file makes the rest irrelevant,
+    so a stock scatter sitting beside its preserve copy — or beside a stray
+    ``*scatter*.txt`` — is no longer ambiguous. A lone ``*scatter*.txt`` is
+    accepted whatever it is called.
+
+    Two files matching equally well mean two packages or two models, which
+    this call cannot choose between: ``ScatterDiscoveryError`` names them, or
+    ``None`` comes back when ``allow_raise`` is False.
     """
     scatters = find_scatter_files(directory)
     if not scatters:
@@ -2127,19 +2135,11 @@ def _find_scatter(directory, allow_raise=True):
     if len(scatters) == 1:
         return scatters[0]
 
-    # Preference non-preserve_data scatters when present
-    non_preserve = [s for s in scatters if "preserve_data" not in s.name.lower()]
-    candidates = non_preserve if non_preserve else scatters
+    from .fw_package import ranked_scatters
 
-    # Preference *ndroid_scatter*.txt over generic *scatter*.txt
-    android = [s for s in candidates if "ndroid_scatter" in s.name.lower()]
-    if len(android) == 1:
-        return android[0]
-    elif len(android) > 1:
-        candidates = android
-
-    if len(candidates) == 1:
-        return candidates[0]
+    best = ranked_scatters(scatters)
+    if len(best) == 1:
+        return best[0]
 
     if allow_raise:
         raise ScatterDiscoveryError(

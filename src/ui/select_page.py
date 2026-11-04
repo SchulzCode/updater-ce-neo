@@ -3060,6 +3060,27 @@ class SelectPackagePage(QWidget):
             retire_worker(self._prep_worker, self._active_workers)
             self._prep_worker = None
 
+    def _multiple_scatters_message(self) -> str:
+        """Explain a release that carries more than one scatter it could flash.
+
+        An online release is somebody else's build: the reader cannot repack
+        it, so the sentence names the software whose developer has to publish a
+        single scatter. A browsed folder keeps the generic wording, because
+        choosing a different folder is something the reader can do.
+        """
+        info = getattr(self, "_current_installed_release_info", None) or {}
+        software = str(info.get("software_name") or "").strip()
+        if not software:
+            try:
+                software = str(self.current_software() or "").strip()
+            except Exception:
+                software = ""
+        if not software:
+            software = str(getattr(self, "_current_package_name", "") or "").strip()
+        if software:
+            return tr("sel_multiple_scatters_release_error").format(software=software)
+        return tr("sel_multiple_scatters_error")
+
     def _on_online_prep_done(self, ok, extract_dir, err):
         self._download_bar.setVisible(False)
         if not ok:
@@ -3069,7 +3090,7 @@ class SelectPackagePage(QWidget):
                 QMessageBox.warning(
                     self,
                     tr("sel_multiple_scatters_title"),
-                    tr("sel_multiple_scatters_error"),
+                    self._multiple_scatters_message(),
                 )
             else:
                 self._say(f"{tr('sel_prepare_failed')} \u2014 {err}", 15000)
