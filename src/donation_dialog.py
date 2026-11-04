@@ -39,21 +39,17 @@ from .ui.glass import apply_dialog_theme
 
 logger = logging.getLogger(__name__)
 
-
 class _DonationRefreshBridge(QObject):
     updated = Signal(object)
     rates_ready = Signal()
 
-
 def decorative_updates_needed(widget) -> bool:
-    """True when a decorative ticker/animation is worth running at all."""
     if not widget.isVisible():
         return False
     window = widget.window()
     if window is None or not window.isVisible() or window.isMinimized():
         return False
     return True
-
 
 class _LineLabel(QLabel):
     clicked = Signal(str)
@@ -63,15 +59,14 @@ class _LineLabel(QLabel):
         self.linkActivated.connect(self.clicked.emit)
 
     def mousePressEvent(self, ev):
-        super().mousePressEvent(ev)  # QLabel records the pressed link
-        ev.accept()  # claim the click so the release is delivered here
-
-    def mouseReleaseEvent(self, ev):
-        super().mouseReleaseEvent(ev)  # emits linkActivated when on a link
-        if not ev.isAccepted():  # QLabel ignores plain-text clicks
-            self.clicked.emit("")
+        super().mousePressEvent(ev)
         ev.accept()
 
+    def mouseReleaseEvent(self, ev):
+        super().mouseReleaseEvent(ev)
+        if not ev.isAccepted():
+            self.clicked.emit("")
+        ev.accept()
 
 class _Ticker(QWidget):
     def __init__(self, parent=None):
@@ -80,10 +75,6 @@ class _Ticker(QWidget):
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self._label = _LineLabel(self)
         label = self._label
-        # The host is a bare widget with no layout, so a QVBoxLayout would give
-        # it no height at all and the line would sit in a zero-height row. Ask
-        # for exactly the label's height instead: the middle slot then owns its
-        # row on every style, Windows and Fusion included.
         self.setMinimumHeight(max(1, label.sizeHint().height()))
         orig_set_text = label.setText
         orig_set_visible = label.setVisible
@@ -108,7 +99,7 @@ class _Ticker(QWidget):
     def label(self) -> _LineLabel:
         return self._label
 
-    def resizeEvent(self, event):  # noqa: N802 (Qt naming)
+    def resizeEvent(self, event):
         super().resizeEvent(event)
         self.sync()
 
@@ -140,7 +131,6 @@ class _Ticker(QWidget):
             self._hold = 36
         self._label.move(-self._offset, 0)
 
-
 class _LinkButton(QPushButton):
     def __init__(self, text="", parent=None):
         super().__init__(text, parent)
@@ -148,16 +138,7 @@ class _LinkButton(QPushButton):
         self.setCursor(Qt.PointingHandCursor)
         self.setAutoDefault(False)
 
-
 def get_appeal_messages() -> list[str]:
-    """One-line appeals the status ticker cycles through.
-
-    The Support page rotates a much larger, varied pool (servers, testing
-    hours, independence, archive work); the ticker only ever cycled three
-    sentences, so a window left open read the same ask over and over. Reuse
-    that pool here, minus the legacy lead/followup pair, which is a headline
-    and a paragraph rather than a single line.
-    """
     from .config import is_mediatek_installer
     from .i18n import tr
     from .ui.support_appeal import LEGACY_APPEAL_KEY, SUPPORT_APPEAL_KEYS
@@ -168,12 +149,9 @@ def get_appeal_messages() -> list[str]:
     msgs = []
     for key in keys:
         text = tr(key)
-        # A catalog that has not caught up falls back to the key itself; the
-        # ticker must never scroll a string id at the user.
         if text and text != key:
             msgs.append(text)
     return msgs or [tr("donate_appeal_always_free")]
-
 
 def _resolve_bar_state(inst):
     st = getattr(inst, "_bar_st", None)
@@ -194,7 +172,6 @@ def _resolve_bar_state(inst):
         inst._bar_st = st
     return st
 
-
 def _goal_is_suppressed(inst, stats) -> bool:
     _os_k, _ew, g_ok, _p_ok, _ = _resolve_bar_state(inst)
     if not g_ok or stats.get("covered") or not stats.get("scope"):
@@ -207,7 +184,6 @@ def _goal_is_suppressed(inst, stats) -> bool:
         or (stats["scope"] == "monthly" and raised <= 0.0)
         or (target - raised) < 1.0
     )
-
 
 def _goal_line(stats, short: bool):
     if not stats.get("scope"):
@@ -225,7 +201,6 @@ def _goal_line(stats, short: bool):
         sym=sym,
     )
     return text, int(round(float(stats.get("shown_percent", stats["percent"])) * 10))
-
 
 def _order_bar_slots(inst, items):
     if not items:
@@ -275,7 +250,6 @@ def _order_bar_slots(inst, items):
         pool = [head] + rest
     inst._donor_pool = pool
     return ordered
-
 
 class DonationStatusBar(QStatusBar):
 
@@ -327,7 +301,6 @@ class DonationStatusBar(QStatusBar):
         return self._credits_link
 
     def _style_link(self, btn, t, align="left"):
-        """Text-link styling for the bar's corner actions."""
         side = "left" if align == "left" else "right"
         btn.setStyleSheet(
             f"QPushButton {{ color: {t.fg}; border: none;"
@@ -351,7 +324,6 @@ class DonationStatusBar(QStatusBar):
         btn.setPalette(pal)
 
     def _style_bar_label(self, label, *, weight: int) -> None:
-        """Theme foreground, no background fill."""
         from .ui.dark import apply_explicit_foreground
         apply_explicit_foreground(
             label,
@@ -359,7 +331,6 @@ class DonationStatusBar(QStatusBar):
         )
 
     def _apply_bar_material(self, t) -> None:
-        """Use the window surface. This bar does not paint its own plate."""
         from PySide6.QtGui import QColor, QPalette
         from .ui.surfaces import glass_surfaces_enabled, show_glass_backdrop
 
@@ -405,8 +376,7 @@ class DonationStatusBar(QStatusBar):
             from .ui.dark import apply_readable_palette
             apply_readable_palette(self)
 
-    def paintEvent(self, event):  # noqa: N802 (Qt naming)
-        """Leave the window material in place. The native panel is the plate."""
+    def paintEvent(self, event):
         from .ui.surfaces import glass_surfaces_enabled
         if glass_surfaces_enabled():
             from PySide6.QtGui import QColor, QPainter
@@ -462,8 +432,6 @@ class DonationStatusBar(QStatusBar):
 
     def _build_ui(self, on_support, on_credits=None):
         t = T()
-        # The bar is the same surface as the window. An opaque fill here is
-        # the solid strip that no longer matches the translucent window.
         self._apply_bar_material(t)
         self.setMinimumHeight(30)
 
@@ -555,7 +523,7 @@ class DonationStatusBar(QStatusBar):
             self._support_btn.setVisible(False)
             self._support_btn.setFixedWidth(0)
 
-    def resizeEvent(self, event):  # noqa: N802 (Qt naming)
+    def resizeEvent(self, event):
         super().resizeEvent(event)
         self._balance_links()
         for name in ("_goal_ticker", "_donor_ticker", "_status_ticker"):
@@ -566,7 +534,7 @@ class DonationStatusBar(QStatusBar):
     def _relayout_links(self):
         for link in (self._credits_link, self._support_btn):
             link.setMinimumWidth(0)
-            link.setMaximumWidth(16777215)  # QWIDGETSIZE_MAX
+            link.setMaximumWidth(16777215)
         self._balance_links()
 
     def _handle_label_click(self, href):
@@ -897,9 +865,6 @@ class DonationStatusBar(QStatusBar):
                 self.setVisible(False)
 
     def _refresh_remote_donors(self, force: bool = False):
-        # A hidden or minimised bar shows nobody the result of a fetch, so the
-        # next visible tick does it instead. The first fetch asks for the feed
-        # while the window is still being built, hence ``force``.
         if not force and not decorative_updates_needed(self):
             return
         fetch_remote_donors_async(self._refresh_bridge.updated.emit)
@@ -917,13 +882,11 @@ class DonationStatusBar(QStatusBar):
         self._credits_link.setToolTip(tr("nav_credits"))
         self._support_btn.setText(tr("nav_donate"))
         self._support_btn.setToolTip(tr_brand("donate_title"))
-        # New wording means new widths: re-balance before the display shifts.
         self._relayout_links()
         self._donor_lines = self._build_donor_lines()
         self._refresh_goal()
         if not self._showing_goal:
             self._donor_label.setText(self._donor_lines[0])
-
 
 class DonationDialog(QDialog):
     def __init__(self, parent=None, context="general", model="Y1", software_name="",
@@ -962,8 +925,6 @@ class DonationDialog(QDialog):
         title_color = t.fg
         intro_color = t.fg_dim
 
-        # Kept initialized as a hidden child widget for API / test compatibility,
-        # but omitted from the visible dialog layout per user specification.
         self._alt_container = QWidget(self)
         self._alt_container.hide()
         alt_box = QVBoxLayout(self._alt_container)
@@ -1030,7 +991,6 @@ class DonationDialog(QDialog):
                 tb_layout.addLayout(tb_row)
                 layout.addWidget(self._theme_box)
 
-        # 2. Developer header
         header_row = QHBoxLayout()
         title = QLabel(
             f"<h2 style='margin:0; font-size:18px; font-weight:800; color:{title_color};'>"
@@ -1050,7 +1010,6 @@ class DonationDialog(QDialog):
         header_row.addStretch()
         layout.addLayout(header_row)
 
-        # 3. Intro copy
         formatted = self.software_name or tr("donate_this_firmware")
         if self.context == "install_success":
             intro_text = tr_brand("donate_intro_success").format(
@@ -1076,7 +1035,6 @@ class DonationDialog(QDialog):
             )
             layout.addWidget(self._steps_label)
 
-        # 4. Opt-out
         if self.context == "install_success":
             self._dont_ask = QCheckBox(tr("donate_dont_ask"))
             layout.addWidget(self._dont_ask)
@@ -1100,7 +1058,6 @@ class DonationDialog(QDialog):
         pay_row.addStretch(1)
         layout.addLayout(pay_row)
 
-        # 7. Bottom row with status message & Close button
         bottom_row = QHBoxLayout()
         bottom_row.setContentsMargins(0, 4, 0, 0)
         self._status_label = QLabel()
@@ -1121,9 +1078,6 @@ class DonationDialog(QDialog):
         btn = QPushButton(text)
         btn.setCursor(Qt.PointingHandCursor)
         btn.setMinimumHeight(32)
-        # Native OS button widget — left to the host platform QStyle so
-        # the OS renders its authentic native controls (Aqua on macOS, Fluent/standard on Windows/Linux)
-        # without overriding custom QSS background or border styling.
         btn.clicked.connect(lambda _=False, u=url: open_browser(u))
         if hasattr(self, "_pay_buttons"):
             self._pay_buttons.append(btn)
@@ -1238,7 +1192,6 @@ class DonationDialog(QDialog):
             QTimer.singleShot(150, self._trigger_goal_anim)
 
     def _tick(self):
-        """Start one fade step, unless nobody can see it right now."""
         if not decorative_updates_needed(self):
             return
         self._fade_out.start()
@@ -1298,7 +1251,6 @@ class DonationDialog(QDialog):
             self._theme_btn.setEnabled(False)
         self.adjustSize()
 
-
     def _copy_donation_value(self, label, value):
         msg = tr("donate_copied").format(label=label)
         self._donor_label.setText(msg)
@@ -1314,7 +1266,6 @@ class DonationDialog(QDialog):
         if getattr(self, "_dont_ask", None) and self._dont_ask.isChecked() and self.on_dont_ask_again:
             self.on_dont_ask_again()
         self.reject()
-
 
 def show_donation_dialog(parent, context="general", model="Y1", software_name="",
                          donations=None, on_dont_ask_again=None, is_360p_rockbox=False):

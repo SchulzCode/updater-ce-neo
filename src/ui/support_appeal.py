@@ -1,17 +1,3 @@
-"""Short support headline: a round portrait beside a warm one-line pitch.
-
-The same block is used in two places, and they do not say the same thing:
-
-* the Support page introduces the project (``INTRO_KEYS``), and
-* the appeal under a finished install speaks about the install that just
-  succeeded (``COMPLETION_KEYS``) — the install is why the reader is here, so
-  it is the natural thing to name before asking for anything.
-
-The portrait is circle-cropped. A bundled copy is shown immediately, and the
-network image replaces it when it can be loaded. Nothing here paints a solid
-plate; the window material shows through the square outside the circle.
-"""
-
 from __future__ import annotations
 
 import datetime as _dt
@@ -30,17 +16,10 @@ from ..i18n import tr
 PORTRAIT_URL = "https://innioasis.app/mtkclient/gui/images/developer.png"
 PORTRAIT_DIAMETER = 56
 
-# (headline, subtitle) key pairs. The Support page keeps the project pitch;
-# the post-install appeal uses the completion wording.
 INTRO_KEYS = ("donate_headline", "donate_subtitle")
 COMPLETION_KEYS = ("donate_completion_headline", "donate_completion_subtitle")
-# Firmware plus themes pack: the power-on steps already ran before placement.
 THEMES_COMPLETION_KEYS = ("donate_completion_headline", "donate_completion_themes_subtitle")
 
-#: The Support Us paragraph rotates through these, so the ask is not the same
-#: sentence every time the page or its pop-out modal is opened. Most are single
-#: appeals with their own angle (servers, hours, testing, independence); one is
-#: the original lead/followup pair, rendered with its bold lead.
 LEGACY_APPEAL_KEY = "donate_support_appeal_lead"
 SUPPORT_APPEAL_KEYS = (
     LEGACY_APPEAL_KEY,
@@ -67,8 +46,6 @@ SUPPORT_APPEAL_KEYS = (
     "donate_support_appeal_coffee_math",
 )
 
-#: Ryan and his partner are expecting a child. These are only ever shown to the
-#: cohort below, only while the window is open, and never after 17 April 2027.
 FAMILY_APPEAL_KEYS = (
     "donate_family_appeal_expected",
     "donate_family_appeal_new_arrival",
@@ -78,49 +55,26 @@ FAMILY_COHORT_KEY = "donation_family_appeal_cohort"
 FAMILY_COHORT_FRACTION = 0.30
 FAMILY_APPEAL_LAST_DAY = _dt.date(2027, 4, 17)
 
-# Relative weights, not probabilities: the family wording shares the rotation
-# with every general appeal, and its weight grows on a day with no donations
-# logged and on the days the daily/weekly goal is the one being shown.
 FAMILY_APPEAL_WEIGHT = 3.0
 FAMILY_NO_DONATION_BOOST = 2.0
 FAMILY_SHORT_GOAL_BOOST = 1.8
 
-# The last few wordings, so reopening the page does not repeat the same line.
 _RECENT_KEYS: list[str] = []
 
 _SENTENCE_BREAK = re.compile(r"(?<=[.!?])\s+|(?<=[。！？])\s*")
 
-
 def _fill(text: str, **fields) -> str:
-    """Substitute the placeholders the caller actually has.
-
-    A subtitle is only rewritten for the fields passed in with a real value, so
-    a language that phrases the sentence without ``{model}`` — or a caller that
-    has no model to name — never leaves a literal ``{model}`` on screen.
-    """
     for name, value in fields.items():
         value = str(value or "").strip()
         if value:
             text = text.replace("{%s}" % name, value)
     return text
 
-
 def family_appeal_window_open(now=None) -> bool:
-    """Whether the child-expecting copy may be shown at all.
-
-    It stops the moment 17 April 2027 ends: nothing about the baby is written
-    after that date, whatever the stored cohort says.
-    """
     now = now or _dt.datetime.now()
     return now.date() <= FAMILY_APPEAL_LAST_DAY
 
-
 def family_appeal_cohort(settings=None) -> bool:
-    """Sticky 30% of installs that also see the child-expecting wording.
-
-    The decision is made once and stored, so the same person gets a consistent
-    experience instead of a different coin flip every time the page opens.
-    """
     from PySide6.QtCore import QSettings
 
     store = settings if settings is not None else QSettings("innioasis", "updater")
@@ -135,7 +89,6 @@ def family_appeal_cohort(settings=None) -> bool:
         return chosen
     return str(raw).strip().lower() in ("1", "true", "yes", "on")
 
-
 def _donated_today(donations, now) -> bool:
     for row in donations or ():
         when = row.get("dt")
@@ -149,9 +102,7 @@ def _donated_today(donations, now) -> bool:
                 continue
     return False
 
-
 def _short_period_goal(donations, now) -> bool:
-    """True while the bar names the day's or the week's costs, not the month's."""
     from ..donors import get_goal_stats, goal_scope
 
     scope = None
@@ -162,24 +113,14 @@ def _short_period_goal(donations, now) -> bool:
             scope = None
     return (scope or goal_scope(now)) in ("daily", "weekly")
 
-
 def _choose(pool, rng=random) -> str:
-    """Pick from ``pool``, skipping the last few wordings when it can."""
     fresh = [key for key in pool if key not in _RECENT_KEYS]
     key = rng.choice(fresh or list(pool))
     _RECENT_KEYS.append(key)
     del _RECENT_KEYS[:-4]
     return key
 
-
 def pick_support_appeal_key(donations=None, now=None, settings=None, rng=random) -> str:
-    """The appeal wording for this opening of the Support Us page or modal.
-
-    General appeals all carry the same weight. The family wording, when its
-    cohort and its date window both allow it, weighs more on a day with no
-    donation logged and while a daily or weekly goal is on screen, so it comes
-    round more often exactly when the ask is smallest and most concrete.
-    """
     now = now or _dt.datetime.now()
     weight = 0.0
     if family_appeal_window_open(now) and family_appeal_cohort(settings):
@@ -192,14 +133,7 @@ def pick_support_appeal_key(donations=None, now=None, settings=None, rng=random)
         return _choose(FAMILY_APPEAL_KEYS, rng)
     return _choose(SUPPORT_APPEAL_KEYS, rng)
 
-
 def _bold_lead(text: str) -> str:
-    """Bold the first sentence, leaving the rest as plain copy.
-
-    The whitespace the sentence break consumed is put back exactly as it was:
-    Latin copy had a space there, while Chinese and Japanese punctuation runs
-    straight on, and inventing a space for them would show a gap in the text.
-    """
     text = str(text or "").strip()
     match = _SENTENCE_BREAK.search(text)
     if match is None:
@@ -209,22 +143,16 @@ def _bold_lead(text: str) -> str:
         return text
     return f"<b>{lead}</b>{match.group(0)}{rest}"
 
-
 def support_appeal_html(key: str) -> str:
-    """Rich text for one appeal key, as the Support Us card shows it."""
     key = key or LEGACY_APPEAL_KEY
     if key == LEGACY_APPEAL_KEY:
         return f"<b>{tr('donate_support_appeal_lead')}</b> {tr('donate_support_appeal_followup')}"
     return _bold_lead(tr(key))
 
-
 def bundled_portrait_path():
-    """Shipped portrait, used when the network image cannot be loaded."""
     return paths.RESOURCES_DIR / "developer.png"
 
-
 def circle_pixmap(source: QPixmap, diameter: int = PORTRAIT_DIAMETER) -> QPixmap:
-    """Scale, center-crop, and clip to a circle on a transparent square."""
     diameter = max(1, int(diameter))
     image = QImage(diameter, diameter, QImage.Format.Format_ARGB32_Premultiplied)
     image.fill(Qt.GlobalColor.transparent)
@@ -247,7 +175,6 @@ def circle_pixmap(source: QPixmap, diameter: int = PORTRAIT_DIAMETER) -> QPixmap
         painter.end()
     return QPixmap.fromImage(image)
 
-
 class _PortraitFetch(QThread):
     finished_bytes = Signal(bytes)
 
@@ -268,9 +195,7 @@ class _PortraitFetch(QThread):
             data = b""
         self.finished_bytes.emit(data)
 
-
 class DeveloperPortrait(QLabel):
-    """Circular developer photo. Bundled file first, network image when it arrives."""
 
     def __init__(self, diameter: int = PORTRAIT_DIAMETER, parent=None):
         super().__init__(parent)
@@ -288,7 +213,6 @@ class DeveloperPortrait(QLabel):
         self._maybe_fetch()
 
     def apply_bytes(self, data: bytes) -> bool:
-        """Replace the portrait when ``data`` is an image. Keeps the bundled one otherwise."""
         if not data:
             return False
         pix = QPixmap()
@@ -326,9 +250,7 @@ class DeveloperPortrait(QLabel):
         if thread.isRunning():
             thread.wait(2000)
 
-
 class SupportIntro(QWidget):
-    """Portrait aligned with the headline block. No card behind it."""
 
     def __init__(self, parent=None, keys=INTRO_KEYS):
         super().__init__(parent)
@@ -363,7 +285,6 @@ class SupportIntro(QWidget):
         self.retranslate()
 
     def set_keys(self, keys) -> None:
-        """Choose which wording this block shows (see ``INTRO_KEYS``)."""
         self._keys = tuple(keys)
         self.retranslate()
 

@@ -36,8 +36,8 @@ def test_toggle_defaults_off_and_gates_every_sync_pass(tmp_path):
     from src import theme_sync as sync
 
     qs = _settings(tmp_path)
-    # Fresh settings: the beta toggle is off unless the user turns it on.
-    assert sync.themes_auto_install_enabled(qs) is False
+    # Fresh settings: the toggle defaults on unless the user turns it off.
+    assert sync.themes_auto_install_enabled(qs) is True
 
     # A tracked 360p Rockbox Y1 model means the service *would* spawn a worker...
     tracking.record_device_install(
@@ -48,6 +48,7 @@ def test_toggle_defaults_off_and_gates_every_sync_pass(tmp_path):
     try:
         with patch("src.theme_sync.PassiveThemeSyncWorker") as worker_cls:
             # ...but every pass is gated while the toggle is off.
+            sync.set_themes_auto_install_enabled(False, qs)
             service.run_once()
             assert worker_cls.call_count == 0
 

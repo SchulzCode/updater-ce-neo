@@ -315,7 +315,7 @@ def get_goal_stats(donations, now=None):
         "percent": 0.0,
         "target": 0.0,
         "period_start": None,
-        "reached": False,
+        "reached": scope is None,
         "covered": scope is None,
         "day_raised": day_raised,
         "week_raised": week_raised,
