@@ -25,7 +25,7 @@ from PySide6.QtCore import QThread, Signal
 
 from .config import GITHUB_API
 from .network import requests_module
-from .paths import COMPAT_DIR, INSTALL_DIR, REPO_ROOT
+from .paths import COMPAT_DIR, INSTALL_DIR, REPO_ROOT, get_appimage_dir
 
 logger = logging.getLogger(__name__)
 
@@ -119,10 +119,20 @@ def bundled_dir() -> Path | None:
     """
     candidates = [
         INSTALL_DIR / "SP_Flash_Tool",
+        INSTALL_DIR / "sp_flash_tool",
+    ]
+    appimage_dir = get_appimage_dir()
+    if appimage_dir:
+        candidates.extend([
+            appimage_dir / "SP_Flash_Tool",
+            appimage_dir / "sp_flash_tool",
+            appimage_dir,
+        ])
+    candidates.extend([
         REPO_ROOT / "SP_Flash_Tool",
         REPO_ROOT / "tools" / "SP_Flash_Tool",
         REPO_ROOT / "tools" / "linux" / "SP_Flash_Tool_v5.1904_Linux",
-    ]
+    ])
     for cand in candidates:
         try:
             if (cand / FLASH_TOOL_LINUX_BIN).is_file():

@@ -443,6 +443,7 @@ def test_read_package_optional_ini(tmp_path):
 
 
 def test_find_bundled_firmware_in_sp_flash_tool(tmp_path, monkeypatch):
+    monkeypatch.setattr(fw_package, "IS_MAC", False)
     sp_dir = tmp_path / "tools" / "SP_Flash_Tool"
     _firmware(sp_dir, ini="[Firmware]\nsoftware_name = Rockbox\nversion = 2.5\ntarget_model = Y1\n")
     (sp_dir / "rockbox_themes.txt").write_text("rockbox marker")
@@ -454,6 +455,97 @@ def test_find_bundled_firmware_in_sp_flash_tool(tmp_path, monkeypatch):
     assert pkg.display_name == "Rockbox 2.5"
     assert pkg.model == "Y1"
     assert pkg.has_rockbox is True
+
+
+def test_find_bundled_firmware_in_firmware_folder_beside_binary(tmp_path, monkeypatch):
+    monkeypatch.setattr(fw_package, "IS_MAC", False)
+    fw_dir = tmp_path / "Firmware"
+    _firmware(fw_dir, ini="[Firmware]\nsoftware_name = Rockbox\nversion = 3.0\ntarget_model = Y1\n")
+    pkg = fw_package.find_bundled_firmware(app_dir=tmp_path)
+    assert pkg is not None
+    assert pkg.folder == fw_dir.resolve()
+    assert pkg.display_name == "Rockbox 3.0"
+
+
+def test_find_bundled_firmware_in_sp_flash_tool_beside_binary(tmp_path, monkeypatch):
+    monkeypatch.setattr(fw_package, "IS_MAC", False)
+    sp_dir = tmp_path / "SP_Flash_Tool"
+    _firmware(sp_dir, ini="[Firmware]\nsoftware_name = Solar\nversion = 2.0\ntarget_model = Y2\n")
+    pkg = fw_package.find_bundled_firmware(app_dir=tmp_path)
+    assert pkg is not None
+    assert pkg.folder == sp_dir.resolve()
+    assert pkg.display_name == "Solar 2.0"
+
+
+def test_find_bundled_firmware_appimage_firmware_folder(tmp_path, monkeypatch):
+    monkeypatch.setattr(fw_package, "IS_MAC", False)
+    portable_root = tmp_path / "portable_bundle"
+    portable_root.mkdir()
+    appimage = portable_root / "UpdaterCE.AppImage"
+    appimage.write_bytes(b"dummy appimage binary")
+    monkeypatch.setenv("APPIMAGE", str(appimage))
+
+    # Staged AppDir simulates the mounted squashfs
+    mounted_appdir = tmp_path / ".mount_updater123" / "usr" / "bin"
+    mounted_appdir.mkdir(parents=True)
+
+    fw_dir = portable_root / "Firmware"
+    _firmware(fw_dir, ini="[Firmware]\nsoftware_name = Rockbox\nversion = 2.5\ntarget_model = Y1\n")
+
+    pkg = fw_package.find_bundled_firmware(app_dir=mounted_appdir)
+    assert pkg is not None
+    assert pkg.folder == fw_dir.resolve()
+    assert pkg.display_name == "Rockbox 2.5"
+    assert pkg.model == "Y1"
+
+
+def test_find_bundled_firmware_appimage_sp_flash_tool_folder(tmp_path, monkeypatch):
+    monkeypatch.setattr(fw_package, "IS_MAC", False)
+    portable_root = tmp_path / "portable_bundle"
+    portable_root.mkdir()
+    appimage = portable_root / "UpdaterCE.AppImage"
+    appimage.write_bytes(b"dummy appimage binary")
+    monkeypatch.setenv("APPIMAGE", str(appimage))
+
+    mounted_appdir = tmp_path / ".mount_updater123" / "usr" / "bin"
+    mounted_appdir.mkdir(parents=True)
+
+    sp_dir = portable_root / "SP_Flash_Tool"
+    _firmware(sp_dir, ini="[Firmware]\nsoftware_name = Rockbox\nversion = 2.5\ntarget_model = Y2\n")
+
+    pkg = fw_package.find_bundled_firmware(app_dir=mounted_appdir)
+    assert pkg is not None
+    assert pkg.folder == sp_dir.resolve()
+    assert pkg.display_name == "Rockbox 2.5"
+    assert pkg.model == "Y2"
+
+
+def test_find_bundled_firmware_appimage_with_ini_and_icon_beside_appimage(tmp_path, monkeypatch):
+    monkeypatch.setattr(fw_package, "IS_MAC", False)
+    portable_root = tmp_path / "portable_bundle"
+    portable_root.mkdir()
+    appimage = portable_root / "UpdaterCE.AppImage"
+    appimage.write_bytes(b"dummy appimage binary")
+    monkeypatch.setenv("APPIMAGE", str(appimage))
+
+    (portable_root / fw_package.FW_PACKAGE_INI).write_text(
+        "[Firmware]\nsoftware_name = PortablePack\nversion = 1.0\ntarget_model = Y1\n",
+        encoding="utf-8",
+    )
+    _png(portable_root / "updater.png")
+
+    mounted_appdir = tmp_path / ".mount_updater123" / "usr" / "bin"
+    mounted_appdir.mkdir(parents=True)
+
+    # Firmware folder has no ini or icon; takes from beside AppImage
+    fw_dir = portable_root / "Firmware"
+    _firmware(fw_dir, ini=None)
+
+    pkg = fw_package.find_bundled_firmware(app_dir=mounted_appdir)
+    assert pkg is not None
+    assert pkg.folder == fw_dir.resolve()
+    assert pkg.display_name == "PortablePack 1.0"
+    assert pkg.image == (portable_root / "updater.png").resolve()
 
 
 def test_find_bundled_firmware_macos_app_folder(tmp_path, monkeypatch):

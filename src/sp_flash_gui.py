@@ -137,9 +137,16 @@ def find_sp_flash_tool_dirs() -> List[Path]:
         from . import linux_sp_flash
         add(linux_sp_flash.stage_dir())
         add(Path.home() / ".local" / "share" / "innioasis-updater")
+        appimage_dir = paths.get_appimage_dir()
+        if appimage_dir:
+            add(appimage_dir / "SP_Flash_Tool")
+            add(appimage_dir / "sp_flash_tool")
+            add(appimage_dir)
         add(paths.INSTALL_DIR / "SP_Flash_Tool")
+        add(paths.INSTALL_DIR / "sp_flash_tool")
         add(paths.INSTALL_DIR)
         add(Path.cwd() / "SP_Flash_Tool")
+        add(Path.cwd() / "sp_flash_tool")
         add(Path.cwd())
     elif paths.IS_WINDOWS:
         add(paths.find_sp_flash_tool())
