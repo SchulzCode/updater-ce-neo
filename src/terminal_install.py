@@ -78,7 +78,13 @@ def sp_flash_tool_command(
         exe = sp_dir / linux_sp_flash.FLASH_TOOL_LINUX_BIN
     if not Path(exe).is_file():
         return None
-    da = Path(da_file) if da_file else sp_dir / "MTK_AllInOne_DA.bin"
+    from .flash_service import _package_download_agent
+
+    da = (
+        Path(da_file)
+        if da_file
+        else (_package_download_agent(scatter) or sp_dir / "MTK_AllInOne_DA.bin")
+    )
     if paths.IS_WINDOWS:
         # flash_tool is an ANSI/Qt4 app: non-ASCII paths or spaces need 8.3 short names.
         from .flash_service import _to_short_path

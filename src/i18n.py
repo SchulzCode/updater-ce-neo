@@ -5890,6 +5890,12 @@ _STRINGS: dict = {
         "fr": "L'outil n'a pas pu initialiser la mémoire du lecteur. Utilisez le paquet prévu pour ce modèle.",
         "es": "La herramienta no pudo iniciar la memoria del reproductor. Use el paquete de este modelo exacto.",
     },
+    "err_sp_da_invalid_type": {
+        "zh-CN": "此播放器的安全下载代理拒绝了该刷机包。请使用该固件自带的下载代理，或该固件要求的 SP Flash Tool 版本。",
+        "en": "The player's secure download agent rejected this package. Use the Download Agent supplied with this firmware, or the SP Flash Tool version it asks for.",
+        "fr": "L'agent de téléchargement sécurisé a rejeté ce paquet. Utilisez l'agent fourni avec ce firmware, ou la version de SP Flash Tool qu'il demande.",
+        "es": "El agente de descarga seguro rechazó este paquete. Use el agente incluido con este firmware o la versión de SP Flash Tool que indica.",
+    },
     "err_sp_storage_read": {
         "zh-CN": "工具无法读取播放器的存储。请检查连接；设备可能存在硬件故障。",
         "en": "The tool could not read the player's storage. Check the connection; the device may have a hardware fault.",

@@ -627,6 +627,7 @@ SP_ERROR_GUIDANCE = {
     "S_BROM_DOWNLOAD_DA_FAIL": "err_sp_brom_da_fail",
     "S_COM_PORT_OPEN_FAIL": "err_sp_com_port",
     "S_FT_ENABLE_DRAM_FAIL": "err_sp_enable_dram",
+    "S_SECURITY_SECURE_USB_DL_DA_RETURN_INVALID_TYPE": "err_sp_da_invalid_type",
     "S_DA_SDMMC_READ_FAILED": "err_sp_storage_read",
     "S_DA_UPDATE_BOOTLOADER_EXIST_MAGIC_NOT_MATCHED": "err_sp_download_fail",
     "S_DA_UPDATE_BOOTLOADER_EXIST_TYPE_NOT_MATCHED": "err_sp_download_fail",
@@ -648,6 +649,7 @@ SP_ERROR_CODE_NAMES = {
     "4008": "S_FT_DOWNLOAD_FAIL",
     "1093": "S_DA_INIT_SYNC_ERROR",
     "4032": "S_FT_ENABLE_DRAM_FAIL",
+    "6104": "S_SECURITY_SECURE_USB_DL_DA_RETURN_INVALID_TYPE",
 }
 
 # Connecting the wrong player cannot be fixed by retrying or by switching
@@ -2342,6 +2344,83 @@ def _is_sp_bootloader_header_mismatch(error_detail="", err_code=None) -> bool:
 #: (``MULTIPLE_SCATTERS``) on the next run.
 KEEP_DATA_SCATTER_NAME = ".updater_keepdata.txt"
 
+# Download Agents a portable firmware package carries beside its scatter.
+PACKAGE_DA_NAMES = ("MTK_AllInOne_DA.bin", "DA_SWSEC.bin", "DA_PL.bin")
+_PRESERVE_SCATTER_TAGS = ("preserve", "keep_data", "keepdata", "nodata")
+
+
+def _package_download_agent(scatter_path):
+    """A Download Agent shipped beside the package's own scatter, or None.
+
+    Portable firmware packages carry the DA the release was authored against
+    (SP Flash Tool's own history points at the file beside the scatter). That
+    agent is the one whose image types match this layout, so it outranks the
+    app's bundled DA; a missing or empty file is ignored.
+    """
+    if not scatter_path:
+        return None
+    try:
+        files = {
+            p.name.lower(): p for p in Path(scatter_path).parent.iterdir() if p.is_file()
+        }
+    except OSError:
+        return None
+    for name in PACKAGE_DA_NAMES:
+        candidate = files.get(name.lower())
+        try:
+            if candidate is not None and candidate.stat().st_size > 0:
+                return candidate
+        except OSError:
+            continue
+    return None
+
+
+def downloaded_partition_names(scatter_path) -> list:
+    """Partition names a scatter marks downloadable, in scatter order."""
+    return [
+        str(entry.get("name") or "").strip().upper()
+        for entry in _parse_scatter_entries(scatter_path)
+        if entry.get("is_download")
+        and str(entry.get("file_name") or "").strip().upper() not in ("", "NONE")
+    ]
+
+
+def find_preserve_data_scatter(scatter_path):
+    """The package's own keep-data scatter beside ``scatter_path``, or None.
+
+    Y2Linux and similar releases ship a second scatter for installs that keep
+    user data. It is the release author's exclusion list, so it is more
+    faithful than guessing from partition names. Only a sibling whose
+    downloadable set is a strict subset of the chosen scatter is accepted: a
+    stray or other-model scatter can never silently drop a partition this
+    install was asked to write.
+    """
+    chosen = Path(scatter_path).resolve()
+    selected = set(downloaded_partition_names(chosen))
+    if not selected:
+        return None
+    try:
+        siblings = [p for p in chosen.parent.iterdir() if p.is_file()]
+    except OSError:
+        return None
+    best = None
+    for candidate in siblings:
+        if candidate.resolve() == chosen:
+            continue
+        if candidate.suffix.lower() != ".txt" or "scatter" not in candidate.name.lower():
+            continue
+        stem = candidate.stem.lower()
+        if not any(tag in stem for tag in _PRESERVE_SCATTER_TAGS):
+            continue
+        names = set(downloaded_partition_names(candidate))
+        if not names or names == selected or not names.issubset(selected):
+            continue
+        # Prefer the copy that gives up the least: it differs from the chosen
+        # scatter only by the partitions this package keeps.
+        if best is None or len(names) > len(best[1]):
+            best = (candidate, names)
+    return best[0] if best else None
+
 
 def _scatter_partition_keeps_data(name, file_name="") -> bool:
     """True for a user data partition the "Keep my data" option keeps.
@@ -3315,6 +3394,7 @@ def build_mtk_write_plan(
     user_size=None,
     block_size=None,
     address_overrides=None,
+    skip_partition_names=None,
 ):
     """Return the ordered write plan the shipped 1.1.7 build performs.
 
@@ -3372,6 +3452,10 @@ def build_mtk_write_plan(
         if skip_data_partitions and _scatter_partition_keeps_data(name, file_name):
             # "Keep my data": the partition is never addressed, so the
             # run issues no write and no erase for it.
+            continue
+        if skip_partition_names and name.strip().upper() in skip_partition_names:
+            # The package's own preserve-data scatter named this partition as
+            # kept; its layout, not our name matching, decides what to leave.
             continue
         image = _resolve_image_file(scatter_dir, file_name)
         if not image.is_file() or _is_empty_placeholder_image(image):
@@ -4408,21 +4492,25 @@ class FlashWorker(QThread):
         self.progress.emit(min(40, 5 + int(pct * 0.35)))
 
     # -- SP Flash Tool backend (Windows + staged Linux) ----------------------
-    def _resolve_da_file(self, sp_dir):
-        """Download agent for this run: the user's choice, else the bundled DA.
+    def _resolve_da_file(self, sp_dir, scatter_file=None):
+        """Download agent for this run.
 
-        Updater CE always flashes with the payload's own ``MTK_AllInOne_DA.bin``
-        (the reference behaviour, and the only DA known to match our packages).
         The MediaTek Installer lets the user point at any vendor's DA, so that
-        file wins when it is present; a path that vanished falls back to the
-        bundled payload with a line saying so rather than flashing with the
-        wrong agent silently.
+        file wins when it is present. Otherwise a package that ships its own
+        agent beside the scatter uses it: that is the agent whose image types
+        match this layout (Y2Linux-style releases are authored against a
+        specific SP Flash Tool). Only then does the bundled payload's DA apply,
+        which remains the reference behaviour for ordinary stock packages.
         """
         chosen = self.da_file
         if chosen:
             if Path(chosen).is_file():
                 return Path(chosen)
             self._log(f"Download agent not found, using the bundled DA: {chosen}")
+        package_da = _package_download_agent(scatter_file)
+        if package_da is not None:
+            self._log(f"Download agent: {package_da.name} (from the firmware package)")
+            return package_da
         return Path(sp_dir) / "MTK_AllInOne_DA.bin"
 
     def _resolve_auth_file(self):
@@ -4448,7 +4536,7 @@ class FlashWorker(QThread):
                 self.finished.emit(False, "SP_FLASH_TOOL_NOT_FOUND")
                 return
             flash_tool_exe = sp_dir / "flash_tool.exe"
-            da_file = self._resolve_da_file(sp_dir)
+            da_file = self._resolve_da_file(sp_dir, scatter_file)
             log_root = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "SP_FT_Logs"
             env = None
             creationflags = _SUBPROCESS_NO_WINDOW
@@ -4464,7 +4552,7 @@ class FlashWorker(QThread):
             sp_dir = linux_sp_flash.stage_dir()
             linux_sp_flash.fix_option_ini(sp_dir)
             flash_tool_exe = sp_dir / linux_sp_flash.FLASH_TOOL_LINUX_BIN
-            da_file = self._resolve_da_file(sp_dir)
+            da_file = self._resolve_da_file(sp_dir, scatter_file)
             log_root = sp_dir / linux_sp_flash.LOG_DIR_NAME
             log_root.mkdir(parents=True, exist_ok=True)
             env = linux_sp_flash.process_env(sp_dir)
@@ -4474,21 +4562,28 @@ class FlashWorker(QThread):
 
         align_scatter_disk_images(scatter_file, log=self._log)
         if getattr(self, "keep_data", False):
-            # Download Only writes what the scatter marks downloadable, so a
-            # user data partition is kept by leaving it out of the copy this
-            # run hands the tool. The package's own scatter is never edited.
-            try:
-                scatter_file = (
-                    _write_scatter_preserving_data(scatter_file, log=self._log)
-                    or scatter_file
-                )
-            except OSError as e:
-                # Without the copy the tool would write user data the user asked
-                # to keep, so this run stops instead of flashing the original.
-                self._log(f'Could not prepare "Keep my data": {e}')
-                self._log("No firmware images were written.")
-                self.finished.emit(False, tr("err_keep_data_failed"))
-                return
+            # Download Only writes what the scatter marks downloadable. When the
+            # package ships its own preserve-data scatter, that file is the
+            # release author's decision about what a keeping install writes; it
+            # is used as-is instead of masking partitions by name.
+            preserve = find_preserve_data_scatter(scatter_file)
+            if preserve is not None:
+                self._log(f"Keep my data: using the package's {preserve.name}")
+                scatter_file = preserve
+            else:
+                try:
+                    scatter_file = (
+                        _write_scatter_preserving_data(scatter_file, log=self._log)
+                        or scatter_file
+                    )
+                except OSError as e:
+                    # Without the copy the tool would write user data the user
+                    # asked to keep, so this run stops instead of flashing the
+                    # original.
+                    self._log(f'Could not prepare "Keep my data": {e}')
+                    self._log("No firmware images were written.")
+                    self.finished.emit(False, tr("err_keep_data_failed"))
+                    return
         if IS_WINDOWS:
             scatter_arg = _to_short_path(scatter_file)
             if not str(scatter_arg).isascii():
@@ -5958,11 +6053,25 @@ class FlashWorker(QThread):
                         for name, address in sorted(y2_addresses.items())
                     )
                 )
+            keep_partitions: set = set()
+            if getattr(self, "keep_data", False):
+                preserve = find_preserve_data_scatter(scatter_file)
+                if preserve is not None:
+                    keep_partitions = set(downloaded_partition_names(scatter_file)) - set(
+                        downloaded_partition_names(preserve)
+                    )
+                    if keep_partitions:
+                        self._log(
+                            "Keep my data: leaving "
+                            + ", ".join(sorted(keep_partitions))
+                            + " untouched"
+                        )
             plan = build_mtk_write_plan(
                 scatter_file,
                 getattr(self, "package_model", "") or self.model,
                 preloader_first=False,
                 skip_data_partitions=getattr(self, "keep_data", False),
+                skip_partition_names=keep_partitions,
                 user_addressing=addressing,
                 user_size=user_size,
                 block_size=block_size,
