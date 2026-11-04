@@ -150,16 +150,29 @@ class _LinkButton(QPushButton):
 
 
 def get_appeal_messages() -> list[str]:
+    """One-line appeals the status ticker cycles through.
+
+    The Support page rotates a much larger, varied pool (servers, testing
+    hours, independence, archive work); the ticker only ever cycled three
+    sentences, so a window left open read the same ask over and over. Reuse
+    that pool here, minus the legacy lead/followup pair, which is a headline
+    and a paragraph rather than a single line.
+    """
     from .config import is_mediatek_installer
     from .i18n import tr
+    from .ui.support_appeal import LEGACY_APPEAL_KEY, SUPPORT_APPEAL_KEYS
 
-    msgs = [
-        tr("donate_appeal_always_free"),
-        tr("donate_appeal_community_archive"),
-    ]
+    keys = [key for key in SUPPORT_APPEAL_KEYS if key != LEGACY_APPEAL_KEY]
     if not is_mediatek_installer():
-        msgs.append(tr("donate_appeal_what_innioasis_dont"))
-    return msgs
+        keys.append("donate_appeal_what_innioasis_dont")
+    msgs = []
+    for key in keys:
+        text = tr(key)
+        # A catalog that has not caught up falls back to the key itself; the
+        # ticker must never scroll a string id at the user.
+        if text and text != key:
+            msgs.append(text)
+    return msgs or [tr("donate_appeal_always_free")]
 
 
 def _resolve_bar_state(inst):
