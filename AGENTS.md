@@ -1,5 +1,18 @@
 # AGENTS.md
 
+## AI skills (all agents and assistants)
+- Reusable, agent-neutral procedures live in **`.agents/skills/`** (open Agent Skills layout):
+  `flash-innioasis-device` (automate a firmware install end to end), `guide-updater-ce-install`
+  (walk a user through the app or a portable ROM.zip pack) and `develop-y1-y2-firmware`
+  (target existing firmware images, `slidia_manifest.xml`, packaging, mirrors, archive rules).
+  `updater-ce-workflow` stays the developer/verification runbook for this repo.
+- `scripts/sync_agent_skills.py` mirrors `.agents/skills/` into `.claude/skills/`, `.cline/skills/`
+  and `.github/skills/` for tools that only read their own directory. **Edit the canonical copy
+  only**, then run it; `--check` validates frontmatter and fails on a stale mirror.
+- `docs/AI_SKILLS.md` indexes the skills, lists where each agent looks, and records the facts all
+  Innioasis repositories must agree on (catalogue URL, archive, donation rule, Download Only).
+  Keep sibling repos' copies identical rather than writing a second procedure.
+
 ## Local dev environment
 - Dependencies live in **`.venv-build/`** (not `.venv/`, despite `.gitignore` listing it); the system
   `python3` has no `requests`/`PySide6`, so tests silently fail on import if you use it.
