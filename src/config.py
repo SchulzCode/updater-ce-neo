@@ -224,6 +224,8 @@ def site_source_urls(path: str) -> tuple[str, ...]:
 
 DONATION_LINKS = {
     "kofi": "https://ko-fi.com/teamslide",
+    "bmac": "https://buymeacoffee.com/ryanspecter",
+    "boosty": "https://boosty.to/ryanspecter",
     "paypal": "https://paypal.me/ryanspecter282",
     "revolut": "https://revolut.me/rspecter",
     "patreon": "https://www.patreon.com/ryanspecter",

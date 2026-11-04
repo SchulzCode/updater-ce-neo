@@ -4018,8 +4018,10 @@ class FlashPage(QWidget):
         globe that opens it. ``post_install_2`` is for donations-shown users: View
         Guide and Buy Us A Coffee open it.
         """
+        from .. import fx
+
         self._post_install_url = str(post_install or "").strip()
-        self._post_install_url_2 = str(post_install_2 or "").strip()
+        self._post_install_url_2 = "" if fx.routed() else str(post_install_2 or "").strip()
         self._load_post_install_doc(self._post_install_url)
         self._apply_post_install_state()
 
@@ -4036,6 +4038,8 @@ class FlashPage(QWidget):
         )
 
     def _apply_post_install_state(self) -> None:
+        from .. import fx
+
         donations_shown = bool(getattr(self, "_donations_shown", False))
         post_install = getattr(self, "_post_install_url", "")
         post_install_2 = getattr(self, "_post_install_url_2", "")
@@ -4068,10 +4072,12 @@ class FlashPage(QWidget):
             else:
                 self._view_guide_btn.setVisible(False)
         if hasattr(self, "_coffee_btn"):
-            if post_install_2:
+            if fx.routed():
+                self._coffee_btn.setText(tr("donate_boosty"))
+            elif post_install_2:
                 self._coffee_btn.setText(tr("donate_completion_coffee_guide"))
             else:
-                self._coffee_btn.setText(tr("donate_completion_coffee"))
+                self._coffee_btn.setText(tr("donate_kofi"))
 
     # -- post-install guide -------------------------------------------------
 
@@ -4224,9 +4230,13 @@ class FlashPage(QWidget):
             open_browser(_with_donation_preference(self._post_install_open_url(url)))
 
     def _open_coffee_page(self) -> None:
+        from .. import fx
         from ..browser import open_browser, _with_donation_preference
         from ..config import DONATION_LINKS
 
+        if fx.routed():
+            open_browser(DONATION_LINKS["boosty"])
+            return
         post_install_2 = getattr(self, "_post_install_url_2", "")
         if post_install_2:
             open_browser(_with_donation_preference(post_install_2))

@@ -370,8 +370,9 @@ def test_support_page_narratives_and_methods(qapp):
         translator().set_language(old_language)
         page.retranslate()
 
-    # Test primary payment methods are created (Ko-fi, PayPal, Revolut, Patreon)
-    assert len(page._method_buttons) == 4
+    # Test primary payment methods are created (Ko-fi, Buy Me a Coffee, PayPal, Revolut, Patreon)
+    assert len(page._method_buttons) == 5
+    assert [key for _btn, key in page._method_buttons][:2] == ["donate_kofi", "donate_bmac"]
     assert hasattr(page, "_honeygain_link")
     assert page._crypto_drawer.isHidden()
     page._toggle_crypto_drawer()
@@ -380,6 +381,36 @@ def test_support_page_narratives_and_methods(qapp):
     btn = page._crypto_drawer.findChildren(QPushButton)[0]
     page._copy_crypto("test_addr", btn)
     assert QApplication.clipboard().text() == "test_addr"
+
+
+def test_buy_me_a_coffee_is_its_own_button():
+    from src.donors import coffee_method, method_label
+    from src.ui.support_page import SupportPage
+
+    for spelling in ("BMAC", "bmac", "Buy Me A Coffee", "buy me a coffee"):
+        assert coffee_method(spelling) == "bmac"
+        assert method_label(spelling) == "Buy Me a Coffee"
+    assert coffee_method("Ko-Fi") == "kofi"
+    assert method_label("ko-fi") == "Ko-Fi"
+    page = SupportPage()
+    keys = [key for _btn, key in page._method_buttons]
+    assert keys.index("donate_bmac") == keys.index("donate_kofi") + 1
+
+
+def test_russia_is_offered_boosty_and_nothing_else(monkeypatch):
+    from src import fx
+    from src.config import DONATION_LINKS
+    from src.ui.support_page import SupportPage
+
+    monkeypatch.setenv("UPDATER_REGION", "RU")
+    assert fx.territory() == "RU"
+    assert fx.routed() == "boosty"
+    assert DONATION_LINKS["boosty"].endswith("boosty.to/ryanspecter")
+    page = SupportPage()
+    assert [key for _btn, key in page._method_buttons] == ["donate_boosty"]
+    assert page._honeygain_link.isHidden()
+    monkeypatch.delenv("UPDATER_REGION")
+    assert fx.routed() == ""
 
 
 def test_donation_appeals_and_community_labels_have_all_catalog_translations():

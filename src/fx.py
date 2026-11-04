@@ -11,6 +11,7 @@ import urllib.request
 log = logging.getLogger(__name__)
 
 _ENV = "UPDATER_CURRENCY"
+_ENV_REGION = "UPDATER_REGION"
 _TTL = 43200.0
 _FEEDS = (
     "https://open.er-api.com/v6/latest/USD",
@@ -95,10 +96,7 @@ def _mark(code):
     return _SYM.get(code) or f"{code}\u00a0"
 
 
-def _detect():
-    env = os.environ.get(_ENV, "").strip().upper()
-    if len(env) == 3 and env.isalpha():
-        return env
+def _territory():
     region = ""
     try:
         from PySide6.QtCore import QLocale
@@ -114,14 +112,34 @@ def _detect():
             region = tail if len(tail) == 2 and tail.isalpha() else ""
     except Exception:
         region = ""
+    if region:
+        return region
+    for var in ("LC_ALL", "LC_MONETARY", "LANG"):
+        part = os.environ.get(var, "").replace("-", "_").split(".")[0]
+        tail = part.rsplit("_", 1)[-1].upper()
+        if len(tail) == 2 and tail.isalpha():
+            return tail
+    return ""
+
+
+def territory():
+    env = os.environ.get(_ENV_REGION, "").strip().upper()
+    if len(env) == 2 and env.isalpha():
+        return env
+    return _territory()
+
+
+def routed():
+    return "boosty" if territory() == "RU" else ""
+
+
+def _detect():
+    env = os.environ.get(_ENV, "").strip().upper()
+    if len(env) == 3 and env.isalpha():
+        return env
+    region = _territory()
     if region in _REGION:
         return _REGION[region]
-    for var in ("LC_ALL", "LC_MONETARY", "LANG"):
-        val = os.environ.get(var, "")
-        for part in val.replace("-", "_").split(".")[:1]:
-            tail = part.rsplit("_", 1)[-1].upper()
-            if len(tail) == 2 and tail.isalpha() and tail in _REGION:
-                return _REGION[tail]
     zone = ""
     try:
         zone = (time.tzname[0] if time.tzname else "").lower()

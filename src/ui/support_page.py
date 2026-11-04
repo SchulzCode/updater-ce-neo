@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..browser import open_browser
+from .. import fx
 from ..config import DONATION_CRYPTO, DONATION_LINKS
 from ..i18n import tr
 from .dark import page_margins, theme_foreground
@@ -165,10 +166,13 @@ class SupportPage(QWidget):
 
         primary_methods = [
             ("donate_kofi", "kofi"),
+            ("donate_bmac", "bmac"),
             ("donate_paypal", "paypal"),
             ("donate_revolut", "revolut"),
             ("donate_patreon", "patreon"),
         ]
+        if fx.routed():
+            primary_methods = [("donate_boosty", "boosty")]
 
         self._method_buttons = []
         for key, link_id in primary_methods:
@@ -248,6 +252,9 @@ class SupportPage(QWidget):
 
         self._crypto_drawer.setVisible(False)
         card_layout.addWidget(self._crypto_drawer)
+        if fx.routed():
+            self._honeygain_link.setVisible(False)
+            self._crypto_toggle_link.setVisible(False)
 
         self._card.set_layout(card_layout)
         layout.addWidget(self._card)

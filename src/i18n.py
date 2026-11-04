@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 # the two written dialects that differ in spelling; each of the latter is the
 # international table plus its own overrides, so a new string only has to be
 # written once.
-_SUPPORTED = ("zh-CN", "en", "en-GB", "en-US", "de", "fr", "es", "ja")
+_SUPPORTED = ("zh-CN", "en", "en-GB", "en-US", "de", "fr", "es", "ja", "ru")
 
 _STRINGS: dict = {
     # The name is the language's own word for "Updater" (アップデーター,
@@ -3257,54 +3257,60 @@ _STRINGS: dict = {
     },
     "donate_goal_fmt": {
         "zh-CN": "<b>您已帮助我们筹集了本月 ${target} 美元中的 ${raised} 美元</b>",
-        "en": "<b>You've helped us raise ${raised} of our ${target} for this month</b>",
+        "en": "<b>You've helped us raise ${raised} of our ${target} costs this month</b>",
         "fr": "<b>Vous nous avez aidés à collecter ${raised} sur nos ${target} pour couvrir les frais ce mois-ci</b>",
         "es": "<b>Nos has ayudado a recaudar ${raised} de nuestros ${target} para este mes</b>",
         "de": "<b>Du hast uns geholfen, ${raised} unserer ${target} für diesen Monat zu sammeln</b>",
-        "ja": "<b>今月の目標 ${target} のうち ${raised} のご支援をいただきました</b>",
+        "ja": "<b>今月の費用 ${target} のうち ${raised} のご支援をいただきました</b>",
+        "ru": "<b>Благодаря вам собрано ${raised} из ${target} — это расходы на этот месяц</b>",
     },
     "donate_goal_status_fmt": {
-        "zh-CN": "<b>本月你已帮我们筹集 ${raised}，目标成本 ${target}</b>",
+        "zh-CN": "<b>本月你已帮我们筹集 ${raised}，开销 ${target}</b>",
         "en": "<b>You've helped us raise ${raised} of our ${target} costs this month</b>",
         "fr": "<b>Vous nous avez aidé à collecter ${raised} sur nos ${target} de frais ce mois-ci</b>",
         "es": "<b>Nos has ayudado a recaudar ${raised} de nuestros ${target} de costes este mes</b>",
         "de": "<b>Diesen Monat: ${raised} / ${target}</b>",
         "ja": "<b>今月：${raised} / ${target}</b>",
+        "ru": "Расходы за месяц: ${raised} / ${target}",
     },
     "donate_goal_week_fmt": {
         "zh-CN": "<b>您已帮助我们筹集了本周 ${target} 美元中的 ${raised} 美元</b>",
-        "en": "<b>You've helped us raise ${raised} of our ${target} for this week</b>",
+        "en": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",
         "fr": "<b>Vous nous avez aidés à collecter ${raised} sur nos ${target} pour cette semaine</b>",
         "es": "<b>Nos has ayudado a recaudar ${raised} de nuestros ${target} para esta semana</b>",
         "de": "<b>Du hast uns geholfen, ${raised} unserer ${target} für diese Woche zu sammeln</b>",
-        "ja": "<b>今週の目標 ${target} のうち ${raised} のご支援をいただきました</b>",
+        "ja": "<b>今週の費用 ${target} のうち ${raised} のご支援をいただきました</b>",
+        "ru": "<b>Благодаря вам собрано ${raised} из ${target} — это расходы на эту неделю</b>",
     },
     "donate_goal_week_status_fmt": {
-        "zh-CN": "<b>本周你已帮我们筹集 ${raised}，目标成本 ${target}</b>",
+        "zh-CN": "<b>本周你已帮我们筹集 ${raised}，开销 ${target}</b>",
         "en": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",
         "fr": "<b>Vous nous avez aidé à collecter ${raised} sur nos ${target} de frais cette semaine</b>",
         "es": "<b>Nos has ayudado a recaudar ${raised} de nuestros ${target} de costes esta semana</b>",
         "de": "<b>Diese Woche: ${raised} / ${target}</b>",
         "ja": "<b>今週：${raised} / ${target}</b>",
+        "ru": "Расходы за неделю: ${raised} / ${target}",
     },
     # The daily goal display: the quiet weekdays mid-month (Monday, Tuesday,
     # Wednesday, Saturday) name that day's own costs target ($10), and a week
     # that filled early hands its ask down to the day.
     "donate_goal_day_fmt": {
         "zh-CN": "<b>您已帮助我们筹集了今天 ${target} 美元中的 ${raised} 美元</b>",
-        "en": "<b>You've helped us raise ${raised} of our ${target} for today</b>",
+        "en": "<b>You've helped us raise ${raised} of our ${target} costs today</b>",
         "fr": "<b>Vous nous avez aidés à collecter ${raised} sur nos ${target} pour aujourd'hui</b>",
         "es": "<b>Nos has ayudado a recaudar ${raised} de nuestros ${target} para hoy</b>",
         "de": "<b>Du hast uns geholfen, ${raised} unserer ${target} für heute zu sammeln</b>",
-        "ja": "<b>本日の目標 ${target} のうち ${raised} のご支援をいただきました</b>",
+        "ja": "<b>本日の費用 ${target} のうち ${raised} のご支援をいただきました</b>",
+        "ru": "<b>Благодаря вам собрано ${raised} из ${target} — это расходы на сегодня</b>",
     },
     "donate_goal_day_status_fmt": {
-        "zh-CN": "<b>今天你已帮我们筹集 ${raised}，目标成本 ${target}</b>",
+        "zh-CN": "<b>今天你已帮我们筹集 ${raised}，开销 ${target}</b>",
         "en": "<b>You've helped us raise ${raised} of our ${target} costs today</b>",
         "fr": "<b>Vous nous avez aidé à collecter ${raised} sur nos ${target} de frais aujourd'hui</b>",
         "es": "<b>Nos has ayudado a recaudar ${raised} de nuestros ${target} de costes hoy</b>",
         "de": "<b>Heute: ${raised} / ${target}</b>",
         "ja": "<b>本日：${raised} / ${target}</b>",
+        "ru": "Расходы за сегодня: ${raised} / ${target}",
     },
     "err_usb_disconnected_recovery": {
         "en": "Your {model} got disconnected. Please disconnect the USB and use a paperclip / pin to press the button between headphone jack and USB Port, then press next.",
@@ -3419,10 +3425,11 @@ _STRINGS: dict = {
         "ja": "ポータブルオーディオのリバースエンジニアリングとツール開発には膨大なボランティア時間が注がれています。Updater CEでスムーズに更新できたなら、継続的な開発のためにコーヒー一杯のご支援をご検討ください。",
     },
     "donate_completion_body_momentum": {
-        "zh-CN": "我们依靠小额赞助来实现每月服务器托管目标并保持独立。即使只请一杯咖啡，也能为保持本工具免费和维护带来巨大帮助。",
-        "en": "We rely on small donations to hit our monthly hosting goals and stay independent. Chipping in just one coffee makes a huge difference in keeping this tool free and maintained.",
-        "fr": "Nous comptons sur de petits dons pour atteindre nos objectifs mensuels d'hébergement et rester indépendants. Même un seul café fait une énorme différence pour garder cet outil gratuit et maintenu.",
-        "es": "Dependemos de pequeñas donaciones para alcanzar nuestras metas mensuales de alojamiento y mantenernos independientes. Aportar un solo café marca una gran diferencia para mantener esta herramienta libre.",
+        "zh-CN": "我们依靠小额赞助来支付每月的服务器托管开销并保持独立。即使只请一杯咖啡，也能为保持本工具免费和维护带来巨大帮助。",
+        "en": "We rely on small donations to cover our monthly hosting costs and stay independent. Chipping in just one coffee makes a huge difference in keeping this tool free and maintained.",
+        "fr": "Nous comptons sur de petits dons pour couvrir nos frais d'hébergement mensuels et rester indépendants. Même un seul café fait une énorme différence pour garder cet outil gratuit et maintenu.",
+        "es": "Dependemos de pequeñas donaciones para cubrir nuestros costes mensuales de alojamiento y mantenernos independientes. Aportar un solo café marca una gran diferencia para mantener esta herramienta libre.",
+        "ru": "Мы полагаемся на небольшие пожертвования, чтобы покрывать ежемесячные расходы на хостинг и оставаться независимыми. Даже одна чашка кофе очень помогает держать этот инструмент бесплатным и поддерживаемым.",
         "de": "Wir setzen auf kleine Spenden, um unsere monatlichen Hosting-Ziele zu erreichen und unabhängig zu bleiben. Schon ein einzelner Kaffee macht einen riesigen Unterschied, damit dieses Tool kostenlos bleibt.",
         "ja": "毎月のサーバー費用を賄い、独立したプロジェクトとして維持するために皆様の支援が必要です。コーヒー一杯だけでも、このツールを無料で維持するために大きな力になります。",
     },
@@ -3441,6 +3448,7 @@ _STRINGS: dict = {
         "es": "Invítanos a un café",
         "de": "Spendier uns einen Kaffee",
         "ja": "コーヒーをおごる",
+        "ru": "Угостить нас кофе",
     },
     "donate_completion_coffee_guide": {
         "en": "View Guide + Donate",
@@ -3449,6 +3457,7 @@ _STRINGS: dict = {
         "es": "Ver guía + Donar",
         "de": "Anleitung anzeigen + Spenden",
         "ja": "ガイドを表示 + 寄付",
+        "ru": "Открыть инструкцию + поддержать",
     },
     "donate_intro_success_mediatek": {
         "zh-CN": "我们已将 <b>{software}</b> 安装到您的 <b>{model}</b>。<br><br>你好！我是 Ryan，MediaTek 安装工具的开发者。我自掏腰包承担托管和存储费用，以保持这个安装工具免费开放。如果它帮到了您，请考虑捐赠, , 这让项目能持续为大家服务。",
@@ -3589,6 +3598,7 @@ _STRINGS: dict = {
         "es": "Un gran patrocinador",
         "de": "Ein Top-Unterstützer",
         "ja": "あるトップサポーター",
+        "ru": "Крупный сторонник",
     },
     "donate_a_supporter": {
         "zh-CN": "一位支持者",
@@ -3597,6 +3607,7 @@ _STRINGS: dict = {
         "es": "Un patrocinador",
         "de": "Ein Unterstützer",
         "ja": "あるサポーター",
+        "ru": "Один из поддержавших",
     },
     "donate_bought_coffee": {
         "zh-CN": "{top_prefix}{anchor} {when} 请我们喝了一杯咖啡。",
@@ -3605,6 +3616,7 @@ _STRINGS: dict = {
         "es": "{top_prefix}{anchor} nos invitó a un café {when}.",
         "de": "{top_prefix}{anchor} hat uns einen Kaffee {when} spendiert.",
         "ja": "{top_prefix}{anchor} が {when} コーヒーを一杯ごちそうしてくれました。",
+        "ru": "{top_prefix}{anchor} {when} угостил нас кофе.",
     },
     "donate_bought_coffees": {
         "zh-CN": "{top_prefix}{anchor} {when} 请我们喝了 {count} 杯咖啡。",
@@ -3613,6 +3625,7 @@ _STRINGS: dict = {
         "es": "{top_prefix}{anchor} nos invitó a {count} cafés {when}.",
         "de": "{top_prefix}{anchor} hat uns {count} Kaffees {when} spendiert.",
         "ja": "{top_prefix}{anchor} が {when} コーヒーを {count} 杯ごちそうしてくれました。",
+        "ru": "{top_prefix}{anchor} {when} угостил нас кофе ({count} шт.).",
     },
     "donate_donated_by_method": {
         "zh-CN": "{top_prefix}{anchor} {when} 通过 {method} 赞助了 ${amount}。",
@@ -3621,6 +3634,7 @@ _STRINGS: dict = {
         "es": "{top_prefix}{anchor} donó ${amount} por {method} {when}.",
         "de": "{top_prefix}{anchor} hat {when} ${amount} via {method} gespendet.",
         "ja": "{top_prefix}{anchor} が {when} {method} で ${amount} を寄付しました。",
+        "ru": "{top_prefix}{anchor} {when} пожертвовал ${amount} через {method}.",
     },
     "donate_donated_amount": {
         "zh-CN": "{top_prefix}{anchor} {when} 赞助了 ${amount}。",
@@ -3629,6 +3643,7 @@ _STRINGS: dict = {
         "es": "{top_prefix}{anchor} donó ${amount} {when}.",
         "de": "{top_prefix}{anchor} hat {when} ${amount} gespendet.",
         "ja": "{top_prefix}{anchor} が {when} ${amount} を寄付しました。",
+        "ru": "{top_prefix}{anchor} {when} пожертвовал ${amount}.",
     },
     "label_for_os": {
         "zh-CN": "适用于系统 {version}",
@@ -3749,10 +3764,31 @@ _STRINGS: dict = {
         "ja": "<b>{anchor}</b> ${amount} 寄付{when}",
     },
     "donate_kofi": {
-        "zh-CN": "请我们喝咖啡 (Buy Us A Coffee)",
-        "en": "Buy Us A Coffee",
-        "fr": "Offrez-nous un café (Buy Us A Coffee)",
-        "es": "Cómpranos un café (Buy Us A Coffee)",
+        "zh-CN": "在 Ko-fi 上捐赠",
+        "en": "Donate on Ko-Fi",
+        "fr": "Faire un don sur Ko-Fi",
+        "es": "Donar en Ko-Fi",
+        "de": "Auf Ko-fi spenden",
+        "ja": "Ko-fi で支援",
+        "ru": "Поддержать на Ko-Fi",
+    },
+    "donate_bmac": {
+        "zh-CN": "在 Buy Me a Coffee 上支持我们",
+        "en": "Buy Me a Coffee",
+        "fr": "Soutenir sur Buy Me a Coffee",
+        "es": "Apoyar en Buy Me a Coffee",
+        "de": "Auf Buy Me a Coffee unterstützen",
+        "ja": "Buy Me a Coffee で支援",
+        "ru": "Поддержать на Buy Me a Coffee",
+    },
+    "donate_boosty": {
+        "zh-CN": "在 Boosty 上捐赠",
+        "en": "Donate on Boosty",
+        "fr": "Faire un don sur Boosty",
+        "es": "Donar en Boosty",
+        "de": "Auf Boosty spenden",
+        "ja": "Boosty で支援",
+        "ru": "Поддержать на Boosty",
     },
     "donate_paypal": {
         "zh-CN": "通过 PayPal 捐赠",
@@ -3803,12 +3839,14 @@ _STRINGS: dict = {
         "es": "¡Gracias, donantes!",
         "de": "Danke an alle Unterstützer!",
         "ja": "支援者の皆様、ありがとう！",
+        "ru": "Спасибо всем, кто поддерживает!",
     },
     "donate_thanks": {
         "zh-CN": "感谢所有支持者与贡献者！",
         "en": "Thanks, supporters!",
         "fr": "Merci aux donateurs !",
         "es": "¡Gracias, donantes!",
+        "ru": "Спасибо всем, кто поддерживает!",
     },
     "donate_thanks_status": {
         "zh-CN": "感谢所有支持者！",
@@ -3825,6 +3863,7 @@ _STRINGS: dict = {
         "es": "Hola, soy Ryan. Si mi herramienta {app} te ha resultado útil, puedes invitarme a un café.",
         "de": "Hi, hier ist Ryan. Wenn dir mein Tool {app} geholfen hat, kannst du mir einen Kaffee spendieren.",
         "ja": "こんにちは、Ryan です。{app} が役に立ったら、コーヒーをご馳走してもらえると嬉しいです。",
+        "ru": "Привет, это Ryan. Если мой инструмент {app} оказался полезен, можете угостить меня кофе.",
     },
     "donate_coffee_btn": {
         "zh-CN": "请我们喝咖啡",
@@ -3833,6 +3872,7 @@ _STRINGS: dict = {
         "es": "Invítanos a un café",
         "de": "Spendier uns einen Kaffee",
         "ja": "コーヒーをおごる",
+        "ru": "Угостить нас кофе",
     },
     "donate_buy_coffee": {
         "zh-CN": "请我们喝咖啡",
@@ -3841,6 +3881,7 @@ _STRINGS: dict = {
         "es": "Invítanos a un café",
         "de": "Spendier uns einen Kaffee",
         "ja": "コーヒーをご馳走してください",
+        "ru": "Угостить нас кофе",
     },
     "donate_not_now": {
         "zh-CN": "以后再说",
@@ -3849,6 +3890,7 @@ _STRINGS: dict = {
         "es": "Ahora no",
         "de": "Nicht jetzt",
         "ja": "今はしない",
+        "ru": "Не сейчас",
     },
     "donate_dont_ask_link": {
         "zh-CN": "不再询问",

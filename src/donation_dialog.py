@@ -25,10 +25,12 @@ from PySide6.QtWidgets import (
 
 from .config import DONATION_LINKS, device_label_for_model
 from .donors import (
+    coffee_method,
     fetch_remote_donors_async,
     format_goal_amount,
     get_goal_stats,
     is_anonymous_donor,
+    method_label,
     relative_date,
 )
 from .i18n import tr, tr_brand
@@ -631,9 +633,9 @@ class DonationStatusBar(QStatusBar):
                 top_prefix = tr("donate_top_supporter_prefix") if is_top else ""
             when = format_donation_when(dt)
             methods_norm = {m.lower() for m in methods}
-            ko_fi_only = all("ko-fi" in m or "kofi" in m for m in methods_norm)
+            coffee_only = all(coffee_method(m) for m in methods)
 
-            if ko_fi_only:
+            if coffee_only:
                 coffees = max(1, int(round(amt)))
                 tmpl = tr("donate_bought_coffee") if coffees == 1 else tr("donate_bought_coffees")
                 raw_line = tmpl.format(top_prefix=top_prefix, anchor=anchor, count=coffees, when=when)
@@ -650,6 +652,8 @@ class DonationStatusBar(QStatusBar):
                         clean_method = "Bitcoin"
                     elif "patreon" in m:
                         clean_method = "Patreon"
+                    elif coffee_method(m):
+                        clean_method = method_label(m)
                     elif "boosty" in m:
                         clean_method = "Boosty"
                     elif "honeygain" in m:
@@ -1064,13 +1068,24 @@ class DonationDialog(QDialog):
             self._dont_ask = QCheckBox(tr("donate_dont_ask"))
             layout.addWidget(self._dont_ask)
 
-        coffee = QPushButton(tr("donate_buy_coffee"))
-        coffee.setCursor(Qt.ArrowCursor)
-        coffee.setStyleSheet("")
-        coffee.clicked.connect(lambda _=False: open_browser(DONATION_LINKS["kofi"]))
-        self._pay_buttons.append(coffee)
-        self._last_button = coffee
-        layout.addWidget(coffee, 0, Qt.AlignLeft)
+        pay_row = QHBoxLayout()
+        pay_row.setContentsMargins(0, 0, 0, 0)
+        pay_row.setSpacing(8)
+        links = (
+            [("donate_boosty", "boosty")]
+            if fx.routed()
+            else [("donate_kofi", "kofi"), ("donate_bmac", "bmac")]
+        )
+        for key, link in links:
+            btn = QPushButton(tr(key))
+            btn.setCursor(Qt.ArrowCursor)
+            btn.setStyleSheet("")
+            btn.clicked.connect(lambda _=False, u=DONATION_LINKS[link]: open_browser(u))
+            self._pay_buttons.append(btn)
+            self._last_button = btn
+            pay_row.addWidget(btn)
+        pay_row.addStretch(1)
+        layout.addLayout(pay_row)
 
         # 7. Bottom row with status message & Close button
         bottom_row = QHBoxLayout()
@@ -1112,7 +1127,8 @@ class DonationDialog(QDialog):
             name = d.get("name", tr("donate_supporter"))
             amt = float(d.get("amount", 0))
             amt_s = f"{int(amt)}" if amt.is_integer() else f"{amt:.2f}"
-            method = d.get("method", tr("donate_method_generic"))
+            raw_method = d.get("method", tr("donate_method_generic"))
+            method = method_label(raw_method) or raw_method
             url = d.get("url", "")
             when = relative_date(d.get("dt"))
             t = T()

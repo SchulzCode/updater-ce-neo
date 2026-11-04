@@ -21,6 +21,24 @@ _ANONYMOUS_DONOR_NAMES = {
 }
 
 
+def coffee_method(method) -> str:
+    low = " ".join(str(method or "").split()).lower()
+    if "bmac" in low or "buymeacoffee" in low or "buy me a coffee" in low:
+        return "bmac"
+    if "ko-fi" in low or "kofi" in low or "ko fi" in low:
+        return "kofi"
+    return ""
+
+
+def method_label(method) -> str:
+    kind = coffee_method(method)
+    if kind == "bmac":
+        return "Buy Me a Coffee"
+    if kind == "kofi":
+        return "Ko-Fi"
+    return ""
+
+
 def is_anonymous_donor(name) -> bool:
     low = " ".join(str(name or "").split()).lower()
     if low in _ANONYMOUS_DONOR_NAMES:

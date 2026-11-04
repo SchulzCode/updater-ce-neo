@@ -70,6 +70,8 @@
  "donate_appeal_human_touch": "Von einem unabhängigen Entwickler geschaffen, keinem Konzern. Eine kleine Spende hilft bei Hosting, Testgeräten und Familienunterhalt",
  "donate_appeal_keep_going": "Wenn Updater deinen Player heute gerettet hat, denke über eine Spende nach, sie bezahlt Server, Hardware und unser Essen",
  "donate_appeal_what_innioasis_dont": "Hilf uns zu tun, was Innioasis versäumt",
+ "donate_bmac": "Auf Buy Me a Coffee unterstützen",
+ "donate_boosty": "Auf Boosty spenden",
  "donate_bought_coffee": "{top_prefix}{anchor} hat uns einen Kaffee {when} spendiert.",
  "donate_bought_coffees": "{top_prefix}{anchor} hat uns {count} Kaffees {when} spendiert.",
  "donate_buy_coffee": "Spendier uns einen Kaffee",
