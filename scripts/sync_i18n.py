@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -21,6 +22,24 @@ from src.translate import fetch_google_translation
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("sync_i18n")
+
+#: ``{name}`` / ``{target:.0f}`` — a translated format string must keep every
+#: one of these, or the app raises on a placeholder it cannot fill.
+_PLACEHOLDER = re.compile(r"\{[^{}]*\}")
+
+
+def _same_shape(source: str, translated: str) -> bool:
+    """True when the translation keeps the source's placeholders and bold markup.
+
+    Google Translate rewrites ``{raised}`` as translated prose and, in some
+    scripts, the ``<b>`` tags as look-alike letters. Such a string would break
+    the format call or drop the emphasis, so it is rejected instead of shipped.
+    """
+    source, translated = str(source), str(translated)
+    if sorted(_PLACEHOLDER.findall(source)) != sorted(_PLACEHOLDER.findall(translated)):
+        return False
+    return source.count("<b>") == translated.count("<b>") and source.count("</b>") == translated.count("</b>")
+
 
 def sync_language(file_path: Path, all_keys: list[str]) -> int:
     code = file_path.stem
@@ -46,10 +65,19 @@ def sync_language(file_path: Path, all_keys: list[str]) -> int:
             return key, ""
         try:
             trans = fetch_google_translation(en_text, code)
-            return key, trans or en_text
         except Exception as err:
             logger.warning("Translation failed for %s (%s): %s", key, code, err)
             return key, en_text
+        if not trans:
+            return key, en_text
+        if not _same_shape(en_text, trans):
+            logger.warning(
+                "Translation for %s (%s) damaged its placeholders or markup; keeping English",
+                key,
+                code,
+            )
+            return key, en_text
+        return key, trans
 
     translated_count = 0
     with ThreadPoolExecutor(max_workers=8) as pool:
