@@ -184,6 +184,49 @@ def fetch_releases_listing(repo: str, timeout: float = LISTING_TIMEOUT):
     except Exception:
         pass
 
+    # Fallback to 1:1 backup feeds on innioasis.app (allows full online catalogue
+    # operation when GitHub's API is blocked or unreachable)
+    lower_repo = str(repo or "").strip().lower()
+    if "/" in lower_repo:
+        for feed_url in (
+            f"https://innioasis.app/feeds/{lower_repo}/releases.json",
+            f"https://innioasis.app/feeds/{lower_repo}/releases.atom",
+        ):
+            try:
+                feed_req = urllib.request.Request(
+                    feed_url,
+                    headers={"User-Agent": "Mozilla/5.0 (compatible; InnioasisUpdater/3.0)"},
+                )
+                ctx = _get_ssl_context()
+                with urllib.request.urlopen(feed_req, timeout=timeout, context=ctx) as resp:
+                    if resp.status == 200:
+                        if feed_url.endswith(".json"):
+                            data = json.loads(resp.read().decode("utf-8", "replace"))
+                            if isinstance(data, list):
+                                return data
+                        return []
+            except Exception:
+                continue
+
+        # Bundled/cached 1:1 backup store + standard internet reachability
+        try:
+            from . import online_data
+
+            backup_text = online_data.read_text("releases_backup.json")
+            if backup_text and (
+                check_endpoint("https://innioasis.app", timeout=min(2.0, timeout))
+                or check_endpoint("https://github.com", timeout=min(2.0, timeout))
+            ):
+                parsed = json.loads(backup_text)
+                repos_map = parsed.get("repos", {}) if isinstance(parsed, dict) else {}
+                for k, v in repos_map.items():
+                    if k.lower() == lower_repo and isinstance(v, dict):
+                        rels = v.get("releases")
+                        if isinstance(rels, list):
+                            return rels
+        except Exception:
+            pass
+
     return None
 
 

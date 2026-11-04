@@ -44,6 +44,14 @@
   Tinted system the app's icon renders green-tinted rather than as the bundled PNG.
 - `NSWorkspace.accessibilityDisplayShouldShowWindowTitlebarIcons()` is the "Show window title icons"
   setting, and there is no document-proxy-icon slot in this app (content extends under the traffic lights).
+- The app's code runs in the bundled interpreter (the launcher `execv`s `Contents/Resources/python/bin`), so
+  `scripts/build_universal_app.py` gives that process the app's own identity: `Info.plist` beside the
+  interpreter plus an interpreter symlink under the app's name. Without it macOS calls the process
+  `python3.11` (Dock, login-item "… is running in the background" banner) and `NSUserNotificationCenter` is
+  nil, which pushed notices onto `osascript` and made them appear under Script Editor. Keep notifications
+  native (`src/notifications.py` never posts via `osascript` at all — bundled or not — and
+  `housekeeping/core.py`'s scheduled check posts natively or not at all) and keep the macOS login item
+  pointed at the bundle launcher instead of `sys.executable`.
 - The Software dropdown must never key off item *text*: canonical English names are the lookup keys, so the
   preset localisation rides in `Qt.UserRole` item data (`select_page._populate_software_combo`), and
   `retranslate()` re-labels rows in place. `display_software_name()` localises the label only.

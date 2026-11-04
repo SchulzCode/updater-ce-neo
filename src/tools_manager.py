@@ -167,8 +167,22 @@ def find_component(component_id: str) -> Optional[Path]:
             return Path(dylib_path)
     elif component_id == "unrar_win":
         unrar_path = paths.find_unrar()
-        if unrar_path and Path(unrar_path).is_file():
+        if (
+            unrar_path
+            and Path(unrar_path).is_file()
+            and Path(unrar_path).name == tool.primary_executable
+        ):
             return Path(unrar_path).parent
+        candidates.extend([
+            paths.TOOLS_DIR / "x64",
+            paths.TOOLS_DIR / "arm64",
+            paths.TOOLS_DIR,
+            paths.BUNDLE_DIR / "tools",
+            paths.REPO_ROOT / "tools" / "windows" / "x64",
+            paths.REPO_ROOT / "tools" / "windows" / "arm64",
+            paths.REPO_ROOT / "tools" / "windows",
+            paths.REPO_ROOT / "tools",
+        ])
 
     for c in candidates:
         if not c:

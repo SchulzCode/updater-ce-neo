@@ -1723,6 +1723,8 @@ class InstallProgress(QProgressBar):
     def set_failed(self, failed: bool = True, text: str = "") -> None:
         """Switch the progress bar to the failed state: percent replaced by 'Install Failed'."""
         self._failed = bool(failed)
+        if self._failed:
+            self._getting_ready = False
         # Stored empty unless a caller passes wording of its own, so the
         # default is looked up on every paint and follows a language change.
         self._failed_text = text or ""
@@ -1731,6 +1733,16 @@ class InstallProgress(QProgressBar):
 
     def is_failed(self) -> bool:
         return getattr(self, "_failed", False)
+
+    def set_getting_ready(self, active: bool = True, text: str = "") -> None:
+        """Switch the progress bar to 'Getting ready...' mode: percent is hidden and replaced by text."""
+        self._getting_ready = bool(active)
+        self._getting_ready_text = text or ""
+        self._sync_animation()
+        self.update()
+
+    def is_getting_ready(self) -> bool:
+        return getattr(self, "_getting_ready", False)
 
     def _sync_animation(self) -> None:
         """Sweep only while a busy bar is on screen and motion is allowed."""
@@ -1752,6 +1764,8 @@ class InstallProgress(QProgressBar):
     def text(self) -> str:
         if self.is_failed():
             return getattr(self, "_failed_text", "") or tr("install_failed")
+        if self.is_getting_ready():
+            return getattr(self, "_getting_ready_text", "") or tr("flash_getting_ready")
         pv = getattr(self, "_precise_value", None)
         if pv is not None and not self.is_busy():
             if abs(pv - round(pv)) < 1e-4:
@@ -1773,7 +1787,7 @@ class InstallProgress(QProgressBar):
 
     # -- paint ---------------------------------------------------------
     def paintEvent(self, event):  # noqa: N802 (Qt naming)
-        busy = self.is_busy() and not self.is_failed()
+        busy = self.is_busy() and not self.is_failed() and not self.is_getting_ready()
         track, fill, label_color = progress_bar_colors(self)
         if self.is_failed():
             from .dark import T
@@ -1793,3 +1807,147 @@ class InstallProgress(QProgressBar):
             offset=self._sweep,
         )
         painter.end()
+
+
+# ---------------------------------------------------------------------------
+# Standard hover / click-to-pin hints (Type A/B (i) metaphor)
+# ---------------------------------------------------------------------------
+
+PINNED_HINT_VISIBLE_MS = 12000
+"""How long a clicked hint stays pinned on screen (matches Type A/B info mark)."""
+
+
+def show_pinned_hint(
+    widget: QWidget,
+    text: str = "",
+    *,
+    visible_ms: int = PINNED_HINT_VISIBLE_MS,
+) -> bool:
+    """Show and pin ``widget``'s hint tooltip immediately below the control.
+
+    Used when a control (such as the Type A/B ``(i)`` mark or a dimmed
+    Translate button when translation services are unreachable) is clicked so
+    the reader can read the explanation without holding the pointer still or
+    dismissing a modal dialog.
+    """
+    if widget is None:
+        return False
+    tip = (
+        (text or "").strip()
+        or str(getattr(widget, "_pinned_hint_text", "") or "").strip()
+        or (widget.toolTip().strip() if hasattr(widget, "toolTip") else "")
+    )
+    if not tip:
+        return False
+    widget._last_pinned_hint = tip
+    widget._hint_pinned = True
+    try:
+        from PySide6.QtWidgets import QToolTip
+
+        QToolTip.showText(
+            widget.mapToGlobal(QPoint(0, widget.height())),
+            tip,
+            widget,
+            widget.rect(),
+            int(visible_ms),
+        )
+    except Exception:
+        pass
+    return True
+
+
+class _PinnedHintFilter(QObject):
+    """Event filter that shows a hover tooltip and pins it on left-click."""
+
+    def __init__(
+        self,
+        widget: QWidget,
+        text: str = "",
+        *,
+        visible_ms: int = PINNED_HINT_VISIBLE_MS,
+    ):
+        super().__init__(widget)
+        self._widget = widget
+        self._text = (text or "").strip()
+        self._visible_ms = int(visible_ms)
+
+    def set_text(self, text: str) -> None:
+        self._text = (text or "").strip()
+
+    def _effective_text(self) -> str:
+        return (
+            self._text
+            or str(getattr(self._widget, "_pinned_hint_text", "") or "").strip()
+            or (self._widget.toolTip().strip() if hasattr(self._widget, "toolTip") else "")
+        )
+
+    def _pin_now(self) -> None:
+        tip = self._effective_text()
+        if tip:
+            show_pinned_hint(self._widget, tip, visible_ms=self._visible_ms)
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        if self._widget is None:
+            return False
+        tip = self._effective_text()
+        if not tip:
+            return False
+        etype = event.type()
+        if watched is self._widget:
+            if etype == QEvent.Type.MouseButtonRelease:
+                try:
+                    btn = event.button()
+                    pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
+                except Exception:
+                    btn = Qt.MouseButton.NoButton
+                    pos = QPoint(-1, -1)
+                if btn == Qt.MouseButton.LeftButton and self._widget.rect().contains(pos):
+                    QTimer.singleShot(0, self._pin_now)
+        elif watched is self._widget.parentWidget():
+            # Disabled widgets let mouse events fall through to their parent;
+            # catch the click on the parent when it lands inside our geometry.
+            if not self._widget.isEnabled() and etype == QEvent.Type.MouseButtonRelease:
+                try:
+                    btn = event.button()
+                    pos = event.position().toPoint() if hasattr(event, "position") else event.pos()
+                except Exception:
+                    btn = Qt.MouseButton.NoButton
+                    pos = QPoint(-1, -1)
+                if btn == Qt.MouseButton.LeftButton and self._widget.geometry().contains(pos):
+                    QTimer.singleShot(0, self._pin_now)
+        return False
+
+
+def install_pinned_hint(
+    widget: QWidget,
+    text: str = "",
+    *,
+    visible_ms: int = PINNED_HINT_VISIBLE_MS,
+) -> _PinnedHintFilter | None:
+    """Attach the standard hover + click-to-pin hint behaviour to ``widget``.
+
+    Pass ``text=""`` to clear the pinned hint and restore default behaviour.
+    """
+    if widget is None:
+        return None
+    clean = (text or "").strip()
+    widget._pinned_hint_text = clean
+    if hasattr(widget, "setToolTip"):
+        widget.setToolTip(clean)
+    filt: _PinnedHintFilter | None = getattr(widget, "_pinned_hint_filter", None)
+    if not clean:
+        widget._hint_pinned = False
+        if filt is not None:
+            filt.set_text("")
+        return filt
+    if filt is None:
+        filt = _PinnedHintFilter(widget, clean, visible_ms=visible_ms)
+        widget._pinned_hint_filter = filt
+        widget.installEventFilter(filt)
+        parent = widget.parentWidget()
+        if parent is not None:
+            parent.installEventFilter(filt)
+    else:
+        filt.set_text(clean)
+    return filt
+

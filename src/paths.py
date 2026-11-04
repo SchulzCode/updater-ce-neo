@@ -10,6 +10,8 @@ there are two important directories:
 """
 
 import os
+import platform
+import struct
 import sys
 from pathlib import Path
 
@@ -284,29 +286,203 @@ def find_sp_flash_tool():
     return None
 
 
+_MACHO_MAGICS = (
+    b"\xca\xfe\xba\xbe",  # Universal binary (fat) BE
+    b"\xbe\xba\xfe\xca",  # Universal binary (fat) LE
+    b"\xfe\xed\xfa\xce",  # Mach-O 32-bit BE
+    b"\xce\xfa\xed\xfe",  # Mach-O 32-bit LE
+    b"\xfe\xed\xfa\xcf",  # Mach-O 64-bit BE
+    b"\xcf\xfa\xed\xfe",  # Mach-O 64-bit LE
+)
+
+
+def _is_compatible_rar_binary(
+    path: Path,
+    *,
+    plat: str | None = None,
+    machine: str | None = None,
+) -> bool:
+    """Return True if *path* can execute on *plat* / *machine*.
+
+    Validates PE (Windows x64/ARM64), Mach-O (macOS), and ELF (Linux
+    x86_64/aarch64/armhf) headers so cross-platform or cross-architecture
+    binaries in ``tools/`` are never selected for the wrong host. Lightweight
+    script/stub files used in unit tests are permitted as long as they don't
+    use a ``.exe`` suffix on POSIX.
+    """
+    plat = (plat or sys.platform).lower()
+    machine = (machine or platform.machine()).lower()
+
+    if plat != "win32" and path.suffix.lower() == ".exe":
+        return False
+
+    try:
+        with open(path, "rb") as f:
+            hdr = f.read(512)
+    except OSError:
+        return False
+
+    if len(hdr) >= 2 and hdr[:2] == b"MZ":
+        if plat != "win32":
+            return False
+        if len(hdr) >= 0x40:
+            pe_off = struct.unpack_from("<I", hdr, 0x3C)[0]
+            if pe_off + 6 <= len(hdr) and hdr[pe_off : pe_off + 4] == b"PE\x00\x00":
+                pe_machine = struct.unpack_from("<H", hdr, pe_off + 4)[0]
+                # 0xAA64 = ARM64; Windows x64 hosts cannot execute ARM64 PE binaries.
+                if pe_machine == 0xAA64 and machine in ("x86_64", "amd64", "x86", "i386", "i686"):
+                    return False
+        return True
+
+    if len(hdr) >= 4 and hdr[:4] in _MACHO_MAGICS:
+        return plat == "darwin"
+
+    if len(hdr) >= 20 and hdr[:4] == b"\x7fELF":
+        if not plat.startswith("linux"):
+            return False
+        endian = "<" if hdr[5] == 1 else ">"
+        e_machine = struct.unpack_from(f"{endian}H", hdr, 18)[0]
+        if e_machine == 0x3E:  # EM_X86_64
+            return machine in ("x86_64", "amd64")
+        if e_machine == 0xB7:  # EM_AARCH64
+            return machine in ("aarch64", "arm64")
+        if e_machine == 0x28:  # EM_ARM (32-bit armhf)
+            return machine.startswith("arm") or machine in ("aarch64", "arm64")
+        if e_machine == 0x03:  # EM_386
+            return machine in ("i386", "i686", "x86", "x86_64", "amd64")
+        return False
+
+    return True
+
+
+def find_bundled_rar_for_target(platform_name: str, arch: str = "") -> Path | None:
+    """Return the repo-bundled portable RAR extractor for *(platform_name, arch)*.
+
+    Covers every target platform and architecture in ``BUILD_TARGETS.md``:
+    - macOS: ``arm64``, ``x86_64``, ``universal2`` -> ``tools/macos/unar``
+    - Windows: ``x64`` / ``x86_64`` / ``amd64`` -> ``tools/windows/x64/UnRAR.exe``
+               ``arm64`` / ``aarch64`` -> ``tools/windows/arm64/UnRAR.exe``
+    - Linux: ``x86_64`` / ``amd64`` -> ``tools/linux/x86_64/unrar``
+             ``aarch64`` / ``arm64`` -> ``tools/linux/aarch64/unrar``
+             ``armhf`` / ``armv7l`` -> ``tools/linux/armhf/unrar``
+    """
+    plat = (platform_name or "").strip().lower()
+    arch_norm = (arch or "").strip().lower()
+
+    if plat in ("darwin", "macos", "mac", "osx"):
+        cand = REPO_ROOT / "tools" / "macos" / "unar"
+        return cand if cand.is_file() else None
+
+    if plat in ("win32", "windows", "win"):
+        if arch_norm in ("arm64", "aarch64"):
+            cands = [
+                REPO_ROOT / "tools" / "windows" / "arm64" / "UnRAR.exe",
+            ]
+            check_arch = "arm64"
+        else:
+            cands = [
+                REPO_ROOT / "tools" / "windows" / "x64" / "UnRAR.exe",
+                REPO_ROOT / "tools" / "windows" / "UnRAR.exe",
+            ]
+            check_arch = "x86_64"
+        for c in cands:
+            if c.is_file() and _is_compatible_rar_binary(c, plat="win32", machine=check_arch):
+                return c
+        return None
+
+    if plat.startswith("linux"):
+        if arch_norm in ("aarch64", "arm64"):
+            cands = [
+                REPO_ROOT / "tools" / "linux" / "aarch64" / "unrar",
+                REPO_ROOT / "tools" / "linux" / "arm64" / "unrar",
+            ]
+            check_arch = "aarch64"
+        elif arch_norm in ("armhf", "armv7l", "armv7", "arm"):
+            cands = [
+                REPO_ROOT / "tools" / "linux" / "armhf" / "unrar",
+            ]
+            check_arch = "armv7l"
+        else:
+            cands = [
+                REPO_ROOT / "tools" / "linux" / "x86_64" / "unrar",
+                REPO_ROOT / "tools" / "linux" / "unrar",
+            ]
+            check_arch = "x86_64"
+        for c in cands:
+            if c.is_file() and _is_compatible_rar_binary(c, plat="linux", machine=check_arch):
+                return c
+        return None
+
+    return None
+
+
 def find_unrar() -> str:
-    """Locate an UnRAR / unar executable across platforms."""
-    candidates = [
-        TOOLS_DIR / "UnRAR.exe",
-        TOOLS_DIR / "unar.exe",
-        TOOLS_DIR / "unar",
-        TOOLS_DIR / "unrar",
-        BUNDLE_DIR / "tools" / "UnRAR.exe",
-        BUNDLE_DIR / "tools" / "unar.exe",
-        BUNDLE_DIR / "tools" / "unar",
-        BUNDLE_DIR / "tools" / "unrar",
-        REPO_ROOT / "tools" / "windows" / "UnRAR.exe",
-        REPO_ROOT / "tools" / "macos" / "unar",
-        REPO_ROOT / "tools" / "linux" / "unar",
-        REPO_ROOT / "tools" / "UnRAR.exe",
-        REPO_ROOT / "tools" / "unar",
-        Path.home() / "AppData" / "Local" / "Updater CE" / "tools" / "unrar_win" / "UnRAR.exe",
-        Path.home() / "AppData" / "Local" / "Innioasis Updater" / "tools" / "unrar_win" / "UnRAR.exe",
-        Path(r"C:\Program Files\WinRAR\UnRAR.exe"),
-        Path(r"C:\Program Files (x86)\WinRAR\UnRAR.exe"),
-    ]
+    """Locate a host-compatible UnRAR / unar executable across platforms and architectures."""
+    plat = sys.platform.lower()
+    machine = platform.machine().lower()
+
+    tool_roots: list[Path] = []
+    app_root = os.environ.get("INNIOASIS_APP_ROOT")
+    if app_root:
+        ar = Path(app_root)
+        tool_roots.extend([
+            ar / "Frameworks" / "tools",
+            ar / "Resources" / "tools",
+            ar / "Resources" / "app" / "tools",
+        ])
+    tool_roots.extend([TOOLS_DIR, BUNDLE_DIR / "tools"])
+
+    candidates: list[Path] = []
+    if plat == "win32":
+        win_archs = ["arm64", "x64"] if machine in ("arm64", "aarch64") else ["x64"]
+        for d in tool_roots:
+            for a in win_archs:
+                candidates.append(d / a / "UnRAR.exe")
+            candidates.extend([d / "UnRAR.exe", d / "unar.exe"])
+        for a in win_archs:
+            candidates.append(REPO_ROOT / "tools" / "windows" / a / "UnRAR.exe")
+        candidates.extend([
+            REPO_ROOT / "tools" / "windows" / "UnRAR.exe",
+            REPO_ROOT / "tools" / "UnRAR.exe",
+            Path.home() / "AppData" / "Local" / "Updater CE" / "tools" / "unrar_win" / "UnRAR.exe",
+            Path.home() / "AppData" / "Local" / "Innioasis Updater" / "tools" / "unrar_win" / "UnRAR.exe",
+            Path(r"C:\Program Files\WinRAR\UnRAR.exe"),
+            Path(r"C:\Program Files (x86)\WinRAR\UnRAR.exe"),
+        ])
+    elif plat == "darwin":
+        for d in tool_roots:
+            candidates.extend([d / "unar", d / "unrar"])
+        candidates.extend([
+            REPO_ROOT / "tools" / "macos" / "unar",
+            REPO_ROOT / "tools" / "macos" / "unrar",
+            REPO_ROOT / "tools" / "unar",
+            REPO_ROOT / "tools" / "unrar",
+        ])
+    else:
+        if machine in ("aarch64", "arm64"):
+            lin_archs = ["aarch64", "arm64", "armhf"]
+        elif machine.startswith("arm"):
+            lin_archs = ["armhf"]
+        else:
+            lin_archs = ["x86_64"]
+        for d in tool_roots:
+            for a in lin_archs:
+                candidates.extend([d / a / "unrar", d / a / "unar"])
+            candidates.extend([d / "unrar", d / "unar"])
+        for a in lin_archs:
+            candidates.extend([
+                REPO_ROOT / "tools" / "linux" / a / "unrar",
+                REPO_ROOT / "tools" / "linux" / a / "unar",
+            ])
+        candidates.extend([
+            REPO_ROOT / "tools" / "linux" / "unrar",
+            REPO_ROOT / "tools" / "linux" / "unar",
+            REPO_ROOT / "tools" / "unrar",
+            REPO_ROOT / "tools" / "unar",
+        ])
+
     for p in candidates:
-        if p and p.is_file():
+        if p and p.is_file() and _is_compatible_rar_binary(p, plat=plat, machine=machine):
             return str(p)
     on_path = _which("unar") or _which("unrar")
     if on_path:

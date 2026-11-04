@@ -168,13 +168,27 @@ class DownloadWorker(QThread):
     status = Signal(str)            # human-readable status line
     finished = Signal(bool, str)    # ok, error_or_path
 
-    def __init__(self, url, destination, token="", parent=None):
+    def __init__(self, url, destination, token="", parent=None, fallback_urls=None):
         super().__init__(parent)
         self.url = url
         self.destination = Path(destination)
         self.token = token
         self._cancelled = False
         self._response = None
+        # Mirror copies of the same release, tried in order when this source
+        # stops answering (a deleted repository, a blocked host).
+        self._fallbacks = [
+            str(candidate).strip() for candidate in (fallback_urls or [])
+            if str(candidate or "").strip() and str(candidate).strip() != self.url
+        ]
+
+    def _mirror_host(self) -> str:
+        try:
+            from urllib.parse import urlsplit
+
+            return urlsplit(self.url).hostname or self.url
+        except Exception:
+            return self.url
 
     def cancel(self):
         self._cancelled = True
@@ -231,7 +245,9 @@ class DownloadWorker(QThread):
                 self.progress.emit(0)
             session = requests_module().Session()
 
-            for attempt in range(1, MAX_RETRIES + 1):
+            attempts: list[int] = list(range(1, MAX_RETRIES + 1))
+            while attempts:
+                attempt = attempts.pop(0)
                 if self._cancelled:
                     self.finished.emit(False, "USER_CANCELLED")
                     return
@@ -405,6 +421,24 @@ class DownloadWorker(QThread):
                         if part_file.is_file():
                             downloaded = part_file.stat().st_size
                     else:
+                        # This source stopped answering permanently. A mirror
+                        # carries the same release, so continue from there
+                        # rather than ending the install.
+                        if self._fallbacks:
+                            self.url = self._fallbacks.pop(0)
+                            try:
+                                if part_file.is_file():
+                                    part_file.unlink()
+                            except OSError:
+                                pass
+                            downloaded = 0
+                            total_size = 0
+                            self.progress.emit(0)
+                            self.status.emit(
+                                tr("dl_mirror_fmt").format(host=self._mirror_host())
+                            )
+                            attempts = list(range(1, MAX_RETRIES + 1))
+                            continue
                         raise
 
             # Atomic rename from .part to final destination

@@ -382,7 +382,35 @@ if [ -n "$ADB_BIN" ] && [ -f "$ADB_BIN" ]; then
     echo "  -> Bundled ADB ($ARCH) at $DIST_DIR/$APP_NAME/tools/adb/adb and $DIST_DIR/$APP_NAME/adb"
 fi
 
-# Stage unar if present for RAR unpacking compatibility
+# Stage portable unrar / unar for RAR unpacking compatibility across Linux architectures
+UNRAR_BIN=""
+case "$ARCH" in
+    x86_64)
+        if [ -f "tools/linux/x86_64/unrar" ]; then
+            UNRAR_BIN="tools/linux/x86_64/unrar"
+        elif [ -f "tools/linux/unrar" ]; then
+            UNRAR_BIN="tools/linux/unrar"
+        fi
+        ;;
+    aarch64|arm64)
+        if [ -f "tools/linux/aarch64/unrar" ]; then
+            UNRAR_BIN="tools/linux/aarch64/unrar"
+        elif [ -f "tools/linux/arm64/unrar" ]; then
+            UNRAR_BIN="tools/linux/arm64/unrar"
+        fi
+        ;;
+    armhf|armv7l|arm*)
+        if [ -f "tools/linux/armhf/unrar" ]; then
+            UNRAR_BIN="tools/linux/armhf/unrar"
+        fi
+        ;;
+esac
+if [ -n "$UNRAR_BIN" ] && [ -f "$UNRAR_BIN" ]; then
+    mkdir -p "$DIST_DIR/$APP_NAME/tools"
+    cp "$UNRAR_BIN" "$DIST_DIR/$APP_NAME/tools/unrar"
+    chmod 0755 "$DIST_DIR/$APP_NAME/tools/unrar"
+    echo "  -> Bundled unrar ($ARCH) at $DIST_DIR/$APP_NAME/tools/unrar"
+fi
 if [ -f "tools/linux/unar" ]; then
     mkdir -p "$DIST_DIR/$APP_NAME/tools"
     cp "tools/linux/unar" "$DIST_DIR/$APP_NAME/tools/unar"
@@ -413,6 +441,11 @@ if [ -n "$ADB_BIN" ] && [ -f "$ADB_BIN" ]; then
     cp "$ADB_BIN" "$APPDIR/usr/bin/adb"
     chmod 0755 "$APPDIR/usr/bin/adb"
     echo "  -> Bundled ADB executable placed on PATH at $APPDIR/usr/bin/adb"
+fi
+if [ -n "$UNRAR_BIN" ] && [ -f "$UNRAR_BIN" ]; then
+    cp "$UNRAR_BIN" "$APPDIR/usr/bin/unrar"
+    chmod 0755 "$APPDIR/usr/bin/unrar"
+    echo "  -> Bundled unrar executable placed on PATH at $APPDIR/usr/bin/unrar"
 fi
 
 # Bundle libusb-1.0 into AppDir/usr/lib:

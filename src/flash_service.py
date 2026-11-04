@@ -865,6 +865,19 @@ def parse_flash_error(value, model: str = "") -> tuple[str, str]:
         code_token = _format_error_token(raw, "1013")
         return f"{tr('err_connection_failed_title')} ({code_token})", tr("err_com_port_reboot_suggestion")
 
+    # Checksum stall (timeout after 2 minutes on Checksum: line)
+    if raw == "MTK_CHECKSUM_STALLED" or ("CHECKSUM" in raw.upper() and "STALL" in raw.upper()):
+        if not is_sp_flash_tool_supported_for_host():
+            return tr("err_checksum_stall_title"), tr("err_checksum_stall_no_sp_desc")
+        return (
+            tr("err_checksum_stall_title"),
+            tr("err_checksum_stall_sp_failover").format(
+                failed=_method_label("mtk"),
+                next=_method_label("sp"),
+                model=model or "player",
+            ),
+        )
+
     # 6. Connection / Handshake failure
     if any(k in raw.upper() for k in ("CONNECTION_FAILED", "MTK_INIT_FAILED", "CLI_START_FAILED", "HANDSHAKE")):
         code_token = _format_error_token(raw, raw.split()[0] if raw else "CONNECTION_FAILED")
@@ -1047,6 +1060,9 @@ MTK_STALL_WARN_SECONDS = 90
 # different failure: the backend keeps printing, but the same BROM bring-up
 # stall line has been on screen for too long with no change.
 MTK_OUTPUT_STALL_WINDOW = 20.0
+# The checksum / DRAM configuration stage can take a minute or two to respond;
+# if stuck on a line beginning with Checksum: for 2 minutes, declare a failure.
+MTK_CHECKSUM_STALL_WINDOW = 120.0
 # USB enumeration can briefly disappear while the legacy DA is writing. Keep
 # the device-loss UI from cancelling an active MTK transfer; the worker's own
 # bounded USB checks will still report a real disconnect after this window.
@@ -1059,6 +1075,27 @@ MTK_BROM_STALL_PREFIXES = (
     "DRAM config",
     "Failed to read stage-2 config checksum",
 )
+
+
+def is_mtk_checksum_line(line: str) -> bool:
+    """True when a backend line indicates mtkclient's stage-2 checksum verification."""
+    body = tool_line_body(line).strip().lower()
+    return body.startswith("checksum:")
+
+
+def is_sp_flash_tool_supported_for_host() -> bool:
+    """True if the current OS and CPU architecture support SP Flash Tool."""
+    if paths.IS_MAC:
+        return False
+    if paths.IS_WINDOWS:
+        return not _windows_hardware_is_arm64()
+    if paths.IS_LINUX:
+        try:
+            from . import linux_sp_flash
+            return linux_sp_flash.arch_supported()
+        except Exception:
+            return False
+    return False
 
 # --- MTKClient session bring-up ---------------------------------------------
 # A player that enumerates in preloader mode accepts the stage-2 DA upload and
@@ -1865,12 +1902,64 @@ def _mark_extract_complete(extract_dir):
         pass
 
 
-def prune_extracted_cache(keep_package_path: Optional[str] = None) -> list:
-    """Keep only the set of firmware files for ``keep_package_path``.
+def _resolve_keep_cache_names(keep_package_path: Optional[Union[str, Path]], dd: Path) -> tuple[str, str, Optional[Path]]:
+    """Return ``(keep_dir_name, keep_archive_name, keep_stage_dir)`` for *keep_package_path* inside *dd*."""
+    if not keep_package_path:
+        return "", "", None
+    kp = Path(str(keep_package_path))
+    keep_dir_name = ""
+    keep_archive = ""
+    keep_stage_dir: Optional[Path] = None
 
-    Called only after a different firmware package has finished extracting, so
-    its files are on disk before older extracted folders are replaced. Selecting
-    a package, installs, failures, retries and device prep never call this.
+    try:
+        kp_res = kp.resolve()
+        dd_res = dd.resolve()
+    except OSError:
+        kp_res = kp
+        dd_res = dd
+
+    # Check if keep_package_path is inside an existing .*_extracted dir or staged_firmware/stage_* dir
+    for anc in (kp_res, *kp_res.parents):
+        if anc.parent == dd_res and anc.name.startswith(".") and anc.name.endswith("_extracted"):
+            keep_dir_name = anc.name
+            stem = anc.name[1 : -len("_extracted")]
+            for ext in (".zip", ".rar"):
+                if (dd / f"{stem}{ext}").exists():
+                    keep_archive = f"{stem}{ext}"
+                    break
+            if not keep_archive:
+                keep_archive = f"{stem}.zip"
+            break
+        if anc.parent.name == "staged_firmware" and anc.parent.parent == dd_res and anc.name.startswith("stage_"):
+            keep_stage_dir = anc
+            break
+
+    if not keep_dir_name:
+        if kp.suffix.lower() in (".zip", ".rar"):
+            keep_stem = kp.stem
+            keep_dir_name = f".{keep_stem}_extracted"
+            keep_archive = kp.name
+        elif kp.name.startswith(".") and kp.name.endswith("_extracted"):
+            keep_dir_name = kp.name
+            stem = kp.name[1 : -len("_extracted")]
+            for ext in (".zip", ".rar"):
+                if (dd / f"{stem}{ext}").exists():
+                    keep_archive = f"{stem}{ext}"
+                    break
+        else:
+            keep_stem = kp.stem
+            keep_dir_name = f".{keep_stem}_extracted"
+            keep_archive = kp.name
+
+    return keep_dir_name, keep_archive, keep_stage_dir
+
+
+def prune_extracted_cache(keep_package_path: Optional[str] = None) -> list:
+    """Keep only the set of firmware files for ``keep_package_path`` in ``downloads_dir()``.
+
+    Removes leftover ``.zip`` / ``.rar`` / ``.part`` archives, old ``.*_extracted``
+    working directories, stray scatter files in ``downloads_dir()``, and stale
+    ``staged_firmware/stage_*`` directories from previous installs.
 
     Returns a list of paths that were removed.
     """
@@ -1880,18 +1969,37 @@ def prune_extracted_cache(keep_package_path: Optional[str] = None) -> list:
         dd = downloads_dir()
         if not dd.is_dir():
             return removed
-        keep_stem = Path(keep_package_path).stem if keep_package_path else ""
-        keep_dir_name = f".{keep_stem}_extracted" if keep_stem else ""
-        keep_archive = Path(keep_package_path).name if keep_package_path else ""
+        keep_dir_name, keep_archive, keep_stage_dir = _resolve_keep_cache_names(keep_package_path, dd)
+        keep_part = f"{keep_archive}.part" if keep_archive else ""
+        kp_resolved = Path(str(keep_package_path)).resolve() if keep_package_path else None
 
         for item in list(dd.iterdir()):
-            if item.is_file() and item.suffix.lower() in (".zip", ".rar") and item.name != keep_archive:
-                logger.info("Removing leftover firmware archive: %s", item.name)
-                try:
-                    item.unlink()
-                    removed.append(str(item))
-                except Exception as e:
-                    logger.warning("Could not remove archive %s: %s", item, e)
+            if item.is_file():
+                low = item.name.lower()
+                is_archive = item.suffix.lower() in (".zip", ".rar")
+                is_part = item.suffix.lower() == ".part" or low.endswith(".part")
+                is_stray_scatter = "scatter" in low and low.endswith(".txt")
+                if is_archive and item.name != keep_archive:
+                    logger.info("Removing leftover firmware archive: %s", item.name)
+                    try:
+                        item.unlink()
+                        removed.append(str(item))
+                    except Exception as e:
+                        logger.warning("Could not remove archive %s: %s", item, e)
+                elif is_part and item.name != keep_part:
+                    logger.info("Removing leftover partial download: %s", item.name)
+                    try:
+                        item.unlink()
+                        removed.append(str(item))
+                    except Exception as e:
+                        logger.warning("Could not remove partial file %s: %s", item, e)
+                elif is_stray_scatter and (kp_resolved is None or item.resolve() != kp_resolved):
+                    logger.info("Removing old scatter file in downloads dir: %s", item.name)
+                    try:
+                        item.unlink()
+                        removed.append(str(item))
+                    except Exception as e:
+                        logger.warning("Could not remove stray scatter %s: %s", item, e)
             elif item.is_dir() and item.name.startswith(".") and item.name.endswith("_extracted"):
                 if item.name != keep_dir_name:
                     logger.info("Pruning old cached firmware extraction: %s", item.name)
@@ -1900,8 +2008,79 @@ def prune_extracted_cache(keep_package_path: Optional[str] = None) -> list:
                         removed.append(str(item))
                     except Exception as e:
                         logger.warning("Could not remove old extract dir %s: %s", item, e)
+            elif item.is_dir() and item.name == "staged_firmware":
+                for stage_item in list(item.iterdir()):
+                    if keep_stage_dir is not None and stage_item.resolve() == keep_stage_dir:
+                        continue
+                    try:
+                        if stage_item.is_dir():
+                            shutil.rmtree(stage_item, ignore_errors=True)
+                        else:
+                            stage_item.unlink()
+                        removed.append(str(stage_item))
+                    except Exception as e:
+                        logger.warning("Could not remove old staged firmware %s: %s", stage_item, e)
     except Exception as e:
         logger.warning("Error pruning extracted cache: %s", e)
+    return removed
+
+
+def cleanup_previous_install_scatters(
+    keep_package_path: Optional[Union[str, Path]] = None,
+    *,
+    for_new_install: bool = True,
+) -> list[str]:
+    """Enforce working-directory scatter hygiene across install lifecycle transitions.
+
+    - When ``for_new_install=True`` (a new firmware install has been confirmed/started):
+      All old scatter files, old ``.*_extracted`` working directories, old
+      ``staged_firmware/stage_*`` directories, and old archives not belonging to
+      ``keep_package_path`` are removed so no scatter file from a previous install
+      remains in any working directory.
+    - When ``for_new_install=False`` (an install has just completed):
+      On systems with SP Flash Tool available (``is_sp_flash_tool_supported_for_host()``),
+      the completed install's cached extraction and scatter file are kept between
+      completion and the start of the next firmware install so ``SP_Flash_Tool/history.ini``
+      remains populated if the user launches the SP Flash Tool GUI.
+      On systems without SP Flash Tool available (where ``history.ini`` is not used),
+      staged and extracted working scatter files in ``downloads_dir()`` are removed
+      immediately upon completion.
+    """
+    removed = prune_extracted_cache(
+        keep_package_path=str(keep_package_path) if keep_package_path else None
+    )
+    if for_new_install:
+        return removed
+
+    if is_sp_flash_tool_supported_for_host():
+        return removed
+
+    try:
+        from .downloads import downloads_dir
+
+        dd = downloads_dir()
+        if not dd.is_dir():
+            return removed
+        staged_root = dd / "staged_firmware"
+        if staged_root.is_dir():
+            shutil.rmtree(staged_root, ignore_errors=True)
+            removed.append(str(staged_root))
+        for item in list(dd.iterdir()):
+            if item.is_dir() and item.name.startswith(".") and item.name.endswith("_extracted"):
+                for sc in find_scatter_files(item):
+                    try:
+                        sc.unlink()
+                        removed.append(str(sc))
+                    except OSError:
+                        pass
+                marker = item / EXTRACT_COMPLETE_MARKER
+                if marker.is_file():
+                    try:
+                        marker.unlink()
+                    except OSError:
+                        pass
+    except Exception as e:
+        logger.debug("Post-install scatter cleanup skipped: %s", e)
     return removed
 
 
@@ -1982,19 +2161,9 @@ class ExtractWorker(QThread):
         if not force and _is_extract_complete(extract_dir):
             self.progress.emit(100)
             discard_firmware_history(extract_dir)
+            prune_extracted_cache(keep_package_path=package_path)
             return extract_dir
-        # Cached files are never deleted here: a forced re-extract overwrites them in place.
-        extract_dir.mkdir(parents=True, exist_ok=True)
-        # Check host storage before extraction; proactively free old extractions and archives if tight
-        try:
-            import shutil
-            if shutil.disk_usage(extract_dir).free < 200 * 1024 * 1024:
-                prune_extracted_cache(keep_package_path=package_path)
-                from .downloads import clear_firmware_cache
-                clear_firmware_cache(exclude={package_path, extract_dir})
-        except Exception:
-            pass
-        # The archive is deleted once it has been extracted, so an incomplete
+        # The archive may be gone once it has been extracted, so an incomplete
         # cache with no archive left cannot be rebuilt here. Report it as the
         # cache failure it is — the caller then downloads the release again —
         # rather than failing inside the unzipper with a bare errno.
@@ -2009,6 +2178,19 @@ class ExtractWorker(QThread):
                 self.progress.emit(100)
                 return Path(usable)
             raise RuntimeError("CACHE_FILE_MISSING")
+        # Wipe any previous or incomplete extract_dir before extracting so old
+        # scatter files from an earlier run can never remain inside extract_dir.
+        if extract_dir.exists() and extract_dir.name.endswith("_extracted"):
+            shutil.rmtree(extract_dir, ignore_errors=True)
+        extract_dir.mkdir(parents=True, exist_ok=True)
+        prune_extracted_cache(keep_package_path=package_path)
+        # Check host storage before extraction; proactively free old extractions and archives if tight
+        try:
+            if shutil.disk_usage(extract_dir).free < 200 * 1024 * 1024:
+                from .downloads import clear_firmware_cache
+                clear_firmware_cache(exclude={package_path, extract_dir})
+        except Exception:
+            pass
         suffix = Path(package_path).suffix.lower()
         if suffix == ".zip":
             self._extract_zip(package_path, extract_dir)
@@ -2175,14 +2357,35 @@ class ScatterDiscoveryError(RuntimeError):
 
 
 def find_scatter_files(directory):
-    """Find all scatter files in directory and nested subfolders, ignoring system/cache folders."""
+    """Find all scatter files in directory and nested subfolders, ignoring system/cache/app-bundle folders."""
     d = Path(directory)
     if not d.exists():
         return []
-    ignored = {"__MACOSX", ".git", ".idea", ".venv", ".venv-build", ".cache", "__pycache__"}
+    ignored = {
+        "__MACOSX",
+        ".git",
+        ".idea",
+        ".venv",
+        ".venv-build",
+        ".cache",
+        "__pycache__",
+        "_internal",
+        "vendor",
+        "mtkclient",
+        "site-packages",
+        "tools",
+    }
     scatters = []
     for root, dirs, files in os.walk(str(d)):
-        dirs[:] = [name for name in dirs if name not in ignored and not name.startswith(".")]
+        root_name = Path(root).name.lower()
+        dirs[:] = [
+            name
+            for name in dirs
+            if name not in ignored
+            and not name.startswith(".")
+            and not name.lower().endswith(".app")
+            and not (root_name == "assets" and name.lower() == "compat")
+        ]
         for f in files:
             fl = f.lower()
             if "scatter" in fl and fl.endswith(".txt"):
@@ -2720,7 +2923,18 @@ def stage_firmware_for_flashing(
     if target_dir is None:
         import hashlib
         h = hashlib.sha256(str(src_folder).encode("utf-8")).hexdigest()[:12]
-        dest_folder = downloads_dir() / "staged_firmware" / f"stage_{h}_{scatter_p.stem}"
+        staged_root = downloads_dir() / "staged_firmware"
+        dest_folder = staged_root / f"stage_{h}_{scatter_p.stem}"
+        if staged_root.is_dir():
+            for existing_stage in list(staged_root.iterdir()):
+                if existing_stage.resolve() != dest_folder.resolve():
+                    try:
+                        if existing_stage.is_dir():
+                            shutil.rmtree(existing_stage, ignore_errors=True)
+                        else:
+                            existing_stage.unlink()
+                    except Exception:
+                        pass
     else:
         dest_folder = Path(target_dir).resolve()
 
@@ -2728,11 +2942,15 @@ def stage_firmware_for_flashing(
         return scatter_p
 
     dest_folder.mkdir(parents=True, exist_ok=True)
+    # Remove any old scatter files inside dest_folder before staging the active scatter
+    for old_sc in list(dest_folder.glob("*scatter*.txt")):
+        if old_sc.name != scatter_p.name:
+            try:
+                old_sc.unlink()
+            except OSError:
+                pass
     dest_scatter = dest_folder / scatter_p.name
-
-    # Always stage the scatter file if not already present or if modified
-    if not dest_scatter.exists() or dest_scatter.stat().st_size != scatter_p.stat().st_size:
-        shutil.copy2(scatter_p, dest_scatter)
+    shutil.copy2(scatter_p, dest_scatter)
 
     # Collect declared images to stage
     for _name, img_path in _list_expected_images(scatter_p):
@@ -3592,57 +3810,68 @@ class _MtkOutputStallDetector(threading.Thread):
     too long. The existing ``_StallWatcher`` only tracks idle time between
     backend chatter, which is not enough for a backend that keeps printing the
     same BROM/DRAM bring-up line. This detector remembers the last stalled
-    line and raises it after :data:`MTK_OUTPUT_STALL_WINDOW`.
+    line and raises it after :data:`MTK_OUTPUT_STALL_WINDOW` (or 120s for Checksum).
     """
 
-    def __init__(self, on_stalled_line, window=MTK_OUTPUT_STALL_WINDOW, interval=0.5):
+    def __init__(self, on_stalled_line, window=MTK_OUTPUT_STALL_WINDOW, checksum_window=None, interval=0.5):
         super().__init__(daemon=True, name="MtkOutputStallDetector")
         self._on_stalled_line = on_stalled_line
         self._window = float(window)
+        if checksum_window is None:
+            self._checksum_window = float(window) if window != MTK_OUTPUT_STALL_WINDOW else MTK_CHECKSUM_STALL_WINDOW
+        else:
+            self._checksum_window = float(checksum_window)
         self._interval = float(interval)
         self._stopped = threading.Event()
         self._last_line = ""
         self._last_time = 0.0
         self._reported = False
+        self._is_checksum = False
 
     def note(self, line):
-        """Called with each backend line. Only a BROM/DRAM bring-up line arms the
-        stall; any other output means the backend has moved on and disarms it."""
+        """Called with each backend line. Only a BROM/DRAM bring-up line or checksum
+        line arms the stall; any other output means the backend has moved on and disarms it."""
         text = str(line or "").strip()
-        if text.startswith(MTK_BROM_STALL_PREFIXES):
+        if is_mtk_checksum_line(text):
             self._last_line = text
             self._last_time = time.monotonic()
+            self._is_checksum = True
+        elif text.startswith(MTK_BROM_STALL_PREFIXES):
+            self._last_line = text
+            self._last_time = time.monotonic()
+            self._is_checksum = False
         else:
             self._last_line = ""
+            self._is_checksum = False
         self._reported = False
 
     def progress(self):
         """Write progress is activity too: a long partition write prints no text."""
         self._last_line = ""
+        self._is_checksum = False
         self._reported = False
 
     def maybe_stalled(self):
         """True when the stalled line is old enough to report."""
         if not self._last_line:
             return False
-        return (time.monotonic() - self._last_time) >= self._window
+        window = self._checksum_window if getattr(self, "_is_checksum", False) else self._window
+        return (time.monotonic() - self._last_time) >= window
 
     def stop(self):
         self._stopped.set()
 
     def run(self):
         while not self._stopped.wait(self._interval):
-            if (
-                self._last_line
-                and not self._reported
-                and (time.monotonic() - self._last_time) >= self._window
-            ):
-                # Report once per stall; new output or progress re-arms it.
-                self._reported = True
-                try:
-                    self._on_stalled_line(self._last_line, time.monotonic() - self._last_time)
-                except Exception:
-                    logger.debug("MTK output stall callback failed", exc_info=True)
+            if self._last_line and not self._reported:
+                window = self._checksum_window if getattr(self, "_is_checksum", False) else self._window
+                if (time.monotonic() - self._last_time) >= window:
+                    # Report once per stall; new output or progress re-arms it.
+                    self._reported = True
+                    try:
+                        self._on_stalled_line(self._last_line, time.monotonic() - self._last_time)
+                    except Exception:
+                        logger.debug("MTK output stall callback failed", exc_info=True)
 
 
 class _AttemptWatchdog(threading.Thread):
@@ -3738,6 +3967,7 @@ class FlashWorker(QThread):
     eta_changed = Signal(int)
     finished = Signal(bool, str)  # ok, error_code
     usb_disconnected = Signal()
+    getting_ready = Signal(bool)
 
     # How many times an expired device search is restarted before the install
     # is reported as failed. Each run searches for the tool's own configured
@@ -4077,6 +4307,11 @@ class FlashWorker(QThread):
             self._is_disconnected = True
             self.cancel()
             self.usb_disconnected.emit()
+            return
+        if is_mtk_checksum_line(text):
+            self._checksum_stage_active = True
+            if hasattr(self, "getting_ready"):
+                self.getting_ready.emit(True)
             return
         if (
             low.startswith("port - device detected")
@@ -5407,6 +5642,10 @@ class FlashWorker(QThread):
                 elif line.startswith("[LOG] "):
                     payload = line[len("[LOG] "):]
                     self._handle_mtk_subprocess_log(payload)
+                elif line.startswith("[GETTING_READY] "):
+                    active = line[len("[GETTING_READY] "):].strip() == "1"
+                    self._checksum_stage_active = active
+                    self.getting_ready.emit(active)
                 elif line.startswith("[RESULT] "):
                     parts = line[len("[RESULT] "):].split(" ", 1)
                     final_ok = bool(int(parts[0]))
@@ -5501,6 +5740,10 @@ class FlashWorker(QThread):
 
     def _note_mtk_subprocess_write_progress(self):
         """Record child-process write activity for the parent USB watchdogs."""
+        if getattr(self, "_checksum_stage_active", False):
+            self._checksum_stage_active = False
+            if hasattr(self, "getting_ready"):
+                self.getting_ready.emit(False)
         self._note_install_progress()
         self._touch_attempt()
         self._hold_device_loss(MTK_WRITE_PROGRESS_USB_GRACE_SECONDS)
@@ -5590,7 +5833,18 @@ class FlashWorker(QThread):
 
     def _finalize_mtk_stall(self, reason_code, title_key=None, desc_key=None, desc_fmt=None):
         context = self._mtk_stall_context()
-        if context["mtk_only"]:
+        if reason_code == "MTK_CHECKSUM_STALLED":
+            if not is_sp_flash_tool_supported_for_host():
+                title = tr("err_checksum_stall_title")
+                desc = tr("err_checksum_stall_no_sp_desc")
+            else:
+                title = tr("err_checksum_stall_title")
+                desc = tr("err_checksum_stall_sp_failover").format(
+                    failed=_method_label("mtk"),
+                    next=_method_label("sp"),
+                    model=getattr(self, "model", "") or "player",
+                )
+        elif context["mtk_only"]:
             title = tr("err_only_mtkclient_title")
             desc = tr("err_only_mtkclient_desc")
         elif context["can_fallback"]:
@@ -5631,7 +5885,8 @@ class FlashWorker(QThread):
 
     def _on_mtk_output_stalled(self, line="", elapsed=0.0):
         self._log(f"MTKClient stalled on line: {line} ({int(elapsed)}s)")
-        self._finalize_mtk_stall("MTK_OUTPUT_STALLED")
+        reason = "MTK_CHECKSUM_STALLED" if is_mtk_checksum_line(line) else "MTK_OUTPUT_STALLED"
+        self._finalize_mtk_stall(reason)
 
     def _on_mtk_output_stalled_subprocess(self, line="", elapsed=0.0):
         # Called from the detector thread while the --flash-cli subprocess is
@@ -5644,7 +5899,8 @@ class FlashWorker(QThread):
                 self._process.terminate()
         except Exception:
             pass
-        self._finalize_mtk_stall("MTK_OUTPUT_STALLED")
+        reason = "MTK_CHECKSUM_STALLED" if is_mtk_checksum_line(line) else "MTK_OUTPUT_STALLED"
+        self._finalize_mtk_stall(reason)
 
     def _close_mtk_session(self, mtk) -> None:
         """Close the MTK session port cleanly matching the reference 1.1.7 build."""
@@ -8126,6 +8382,11 @@ class FlashService(QObject):
         # then start the new one. The cancelled worker's late terminal signals
         # are detached so they cannot reach the UI or clobber the new run.
         retired = self.cancel_flash()
+        self.cancel_extract()
+        cleanup_previous_install_scatters(
+            keep_package_path=package_path or pre_extracted_dir,
+            for_new_install=True,
+        )
         # The previous window is over, so anything it left behind (including a
         # tool orphaned by a crash) goes now, and this run opens a fresh one:
         # the port has to be free before a new device search begins.

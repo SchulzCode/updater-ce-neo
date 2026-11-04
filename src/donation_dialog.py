@@ -43,6 +43,12 @@ class _DonationRefreshBridge(QObject):
     updated = Signal(object)
     rates_ready = Signal()
 
+
+# One long-lived emitter for the exchange-rate worker: Qt drops the slot of a
+# closed dialog or window for us, while the emitter itself outlives them.
+_RATES_HUB = _DonationRefreshBridge()
+
+
 def decorative_updates_needed(widget) -> bool:
     if not widget.isVisible():
         return False
@@ -287,9 +293,8 @@ class DonationStatusBar(QStatusBar):
         self._remote_refresh_timer.timeout.connect(self._refresh_remote_donors)
         self._remote_refresh_timer.start()
         self._refresh_remote_donors(force=True)
-        self._rates_bridge = _DonationRefreshBridge(self)
-        self._rates_bridge.rates_ready.connect(self._redraw_goal)
-        fx.refresh(self._rates_bridge.rates_ready.emit)
+        _RATES_HUB.rates_ready.connect(self._apply_rates)
+        fx.refresh(_RATES_HUB.rates_ready.emit)
 
     def _seal_ticker(self, label) -> None:
         from .ui.surfaces import seal_updating_text
@@ -596,6 +601,7 @@ class DonationStatusBar(QStatusBar):
 
         lines = []
         t = T()
+        sym, code = fx.pair()
 
         def make_anchor(name: str, url: str) -> str:
             short = name if len(name) <= 24 else name[:23].rstrip() + "…"
@@ -621,7 +627,7 @@ class DonationStatusBar(QStatusBar):
                 tmpl = tr("donate_bought_coffee") if coffees == 1 else tr("donate_bought_coffees")
                 raw_line = tmpl.format(top_prefix=top_prefix, anchor=anchor, count=coffees, when=when)
             else:
-                amt_str = str(int(amt)) if amt.is_integer() else f"{amt:.2f}"
+                amt_str = fx.amount(amt, code)
                 clean_method = ""
                 if len(methods_norm) == 1:
                     m = next(iter(methods_norm))
@@ -643,7 +649,7 @@ class DonationStatusBar(QStatusBar):
                         clean_method = list(methods)[0].strip()
 
                 if clean_method and clean_method.lower() != "donation":
-                    tmpl = tr("donate_donated_by_method")
+                    tmpl = tr("donate_donated_by_method").replace("$", sym)
                     raw_line = tmpl.format(
                         top_prefix=top_prefix,
                         anchor=anchor,
@@ -652,7 +658,7 @@ class DonationStatusBar(QStatusBar):
                         when=when,
                     )
                 else:
-                    tmpl = tr("donate_donated_amount")
+                    tmpl = tr("donate_donated_amount").replace("$", sym)
                     raw_line = tmpl.format(
                         top_prefix=top_prefix,
                         anchor=anchor,
@@ -725,6 +731,13 @@ class DonationStatusBar(QStatusBar):
         text, value = _goal_line(stats, short=True)
         self._goal_label.setText(text)
         self._goal_bar.setValue(value)
+
+    def _apply_rates(self):
+        # The live table landed after the bar was built: re-render the lines
+        # that carry a figure and leave the slot on screen alone, so the
+        # ticker never swaps mid-cycle.
+        self._donor_lines = self._build_donor_lines()
+        self._redraw_goal()
 
     def _show_next_donor_line(self):
         if not self._donor_lines:
@@ -912,6 +925,8 @@ class DonationDialog(QDialog):
         self._refresh_bridge = _DonationRefreshBridge(self)
         self._refresh_bridge.updated.connect(self._apply_fresh_donations)
         fetch_remote_donors_async(self._refresh_bridge.updated.emit)
+        _RATES_HUB.rates_ready.connect(self._apply_rates)
+        fx.refresh(_RATES_HUB.rates_ready.emit)
 
     def sizeHint(self) -> QSize:
         return QSize(710, 460)
@@ -1088,19 +1103,22 @@ class DonationDialog(QDialog):
 
     def _donor_lines(self):
         raw_items = []
+        sym, code = fx.pair()
         for d in self.donations:
             if d.get("amount", 0) <= 0:
                 continue
             name = d.get("name", tr("donate_supporter"))
             amt = float(d.get("amount", 0))
-            amt_s = f"{int(amt)}" if amt.is_integer() else f"{amt:.2f}"
+            amt_s = fx.amount(amt, code)
             raw_method = d.get("method", tr("donate_method_generic"))
             method = method_label(raw_method) or raw_method
             url = d.get("url", "")
             when = relative_date(d.get("dt"))
             t = T()
             anchor = f'<a href="{url}" style="color:{t.fg}; font-weight:bold;">{name}</a>' if url else name
-            line = tr("donate_ticker_fmt").format(anchor=anchor, amount=amt_s, method=method, when=when)
+            line = tr("donate_ticker_fmt").replace("$", sym).format(
+                anchor=anchor, amount=amt_s, method=method, when=when
+            )
             raw_items.append((line, amt, d.get("dt"), amt >= 20.0))
         lines = _order_bar_slots(self, raw_items)
         pool = getattr(self, "_donor_pool", None) or lines
@@ -1229,6 +1247,11 @@ class DonationDialog(QDialog):
             self.donations = fresh
             self._refresh_goal()
             self._ticker_lines = self._donor_lines()
+
+    def _apply_rates(self):
+        # Live rates arrived: the ticker and the goal both carry figures.
+        self._ticker_lines = self._donor_lines()
+        self._refresh_goal()
 
     def _toggle_crypto(self):
         return

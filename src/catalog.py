@@ -570,19 +570,14 @@ def _release_matches_model(model, release, package=None, selected_type=None):
 
 
 def _with_portable_packages(package, rows, platform=None):
-    """Point each row at the portable package built for this machine, if any.
+    """Attach optional portable-mirror metadata while keeping developer download URLs.
 
-    ``portable_zips`` in slidia_manifest.xml names Portable Flashing Zip
-    Packager mirrors: repositories that republish each release under the same
-    tag with a ready-to-run zip per platform. Resolving a row's own tag and
-    source asset against the mirror's index keeps the release list, notes and
-    version labels exactly as the source published them, while the download is
-    the package built for this machine.
-
-    ``asset_name`` deliberately stays the source asset name: it identifies the
-    release, model/type detection reads it, and the saved file keeps a name the
-    app understands. Rows with no match (no mirror, tag not mirrored yet, no
-    build for this platform, index unreachable) keep the original URL.
+    Updater CE always downloads firmware packages directly from the community
+    firmware developers themselves (``row["download_url"]`` is never replaced
+    with a portable mirror archive URL). When ``portable_zips`` is configured in
+    ``slidia_manifest.xml``, the matching standalone mirror metadata is recorded
+    on ``portable_url`` / ``portable_repo`` / ``portable_platform`` /
+    ``portable_asset`` without altering ``download_url`` or ``asset_size``.
     """
     mirrors = portable.parse_mirror_repos(getattr(package, "portable_zips", ""))
     if not mirrors or not rows:
@@ -600,8 +595,8 @@ def _with_portable_packages(package, rows, platform=None):
         )
         if match:
             row = dict(row)
-            row["download_url"] = match["url"]
-            row["asset_size"] = int(match.get("size") or 0) or row.get("asset_size") or 0
+            row["portable_url"] = match["url"]
+            row["portable_size"] = int(match.get("size") or 0)
             row["portable_repo"] = match["repo"]
             row["portable_platform"] = match["platform"]
             row["portable_asset"] = match["name"]
@@ -1615,55 +1610,182 @@ class ReleasesClient:
                 })
         return assets
 
-    def _fetch_releases_atom(self, repo):
-        """Fetch releases via public atom feed when GitHub API is rate-limited."""
-        url = f"https://github.com/{repo}/releases.atom"
-        try:
-            resp = self.session.get(url, timeout=REQUEST_TIMEOUT)
-            if resp.status_code != 200:
-                return []
-            import xml.etree.ElementTree as ET
-            root = ET.fromstring(resp.text)
-            ns = {"atom": "http://www.w3.org/2005/Atom"}
-            raw_releases = []
-            for entry in root.findall("atom:entry", ns):
-                title_el = entry.find("atom:title", ns)
-                title = title_el.text if title_el is not None else ""
-                content_el = entry.find("atom:content", ns)
-                body = content_el.text if content_el is not None else ""
-                updated_el = entry.find("atom:updated", ns)
-                pub_date = updated_el.text if updated_el is not None else ""
-                tag = ""
-                for link in entry.findall("atom:link", ns):
-                    href = link.attrib.get("href", "")
-                    if "/releases/tag/" in href:
-                        tag = href.split("/releases/tag/")[-1]
-                        break
-                if not tag:
-                    id_el = entry.find("atom:id", ns)
-                    if id_el is not None and "Release/" in id_el.text:
-                        tag = id_el.text.split("Release/")[-1]
-                if not tag:
-                    continue
-
-                assets = self._fetch_expanded_assets(repo, tag)
-                raw_releases.append({
-                    "tag_name": tag,
-                    "name": title,
-                    "body": body,
-                    "published_at": pub_date,
-                    "html_url": f"https://github.com/{repo}/releases/tag/{tag}",
-                    "prerelease": "nightly" in tag.lower() or "preview" in tag.lower(),
-                    "assets": assets,
-                })
-            return raw_releases
-        except Exception as e:
-            logger.debug("Atom release fallback failed for %s: %s", repo, e)
+    def _fetch_backup_releases(self, repo):
+        """Load 1:1 releases for ``repo`` from the innioasis.app backup feeds or bundled snapshot."""
+        lower_repo = str(repo or "").strip().lower()
+        if "/" not in lower_repo:
             return []
+
+        # 1. Try per-repo 1:1 JSON backup feed from innioasis.app / website repo
+        try:
+            from .config import site_source_urls
+
+            sess = getattr(self, "_session", None)
+            if sess is not None or hasattr(self, "session"):
+                for feed_url in site_source_urls(f"feeds/{lower_repo}/releases.json"):
+                    try:
+                        resp = self.session.get(feed_url, timeout=min(4.0, REQUEST_TIMEOUT))
+                        if resp.status_code == 200:
+                            data = resp.json()
+                            if isinstance(data, list) and data:
+                                return data
+                    except Exception:
+                        continue
+        except Exception as e:
+            logger.debug("Online 1:1 backup feed fetch failed for %s: %s", repo, e)
+
+        # 2. Try bundled/cached master 1:1 JSON backup store (releases_backup.json)
+        try:
+            from . import online_data
+
+            backup_text = online_data.read_text("releases_backup.json")
+            if backup_text:
+                parsed = json.loads(backup_text)
+                repos_map = parsed.get("repos", {}) if isinstance(parsed, dict) else {}
+                for k, v in repos_map.items():
+                    if k.lower() == lower_repo and isinstance(v, dict):
+                        rels = v.get("releases")
+                        if isinstance(rels, list) and rels:
+                            return rels
+        except Exception as e:
+            logger.debug("Local 1:1 JSON backup store read failed for %s: %s", repo, e)
+
+        # 3. Try bundled/cached combined XML backup store (releases.xml)
+        try:
+            import xml.etree.ElementTree as ET
+            from . import online_data
+
+            xml_text = online_data.read_text("releases.xml")
+            if xml_text:
+                root = ET.fromstring(xml_text)
+                for repo_el in root.findall("repository"):
+                    if (repo_el.attrib.get("name") or "").lower() != lower_repo:
+                        continue
+                    out = []
+                    for rel_el in repo_el.findall("release"):
+                        body_el = rel_el.find("body")
+                        assets_el = rel_el.find("assets")
+                        assets = []
+                        if assets_el is not None:
+                            for a_el in assets_el.findall("asset"):
+                                assets.append({
+                                    "id": int(a_el.attrib.get("id") or 0),
+                                    "name": a_el.attrib.get("name", ""),
+                                    "size": int(a_el.attrib.get("size") or 0),
+                                    "download_count": int(a_el.attrib.get("download_count") or 0),
+                                    "content_type": a_el.attrib.get("content_type", ""),
+                                    "browser_download_url": a_el.attrib.get("browser_download_url", ""),
+                                })
+                        out.append({
+                            "id": int(rel_el.attrib.get("id") or 0),
+                            "tag_name": rel_el.attrib.get("tag_name", ""),
+                            "name": rel_el.attrib.get("name", ""),
+                            "body": body_el.text if body_el is not None and body_el.text else "",
+                            "published_at": rel_el.attrib.get("published_at", ""),
+                            "prerelease": (rel_el.attrib.get("prerelease") or "").lower() == "true",
+                            "html_url": rel_el.attrib.get("html_url", ""),
+                            "icon_url": rel_el.attrib.get("icon_url", ""),
+                            "icon_dark_url": rel_el.attrib.get("icon_dark_url", ""),
+                            "assets": assets,
+                        })
+                    if out:
+                        return out
+        except Exception as e:
+            logger.debug("Local 1:1 XML backup store read failed for %s: %s", repo, e)
+
+        return []
+
+    def _parse_atom_feed_xml(self, xml_text, repo):
+        """Parse an Atom 1.0 release feed (supporting both innioasis:enclosure and GitHub Atom)."""
+        import xml.etree.ElementTree as ET
+
+        root = ET.fromstring(xml_text)
+        ns = {
+            "atom": "http://www.w3.org/2005/Atom",
+            "innioasis": "https://innioasis.app/ns/feeds/1.0",
+        }
+        raw_releases = []
+        for entry in root.findall("atom:entry", ns):
+            title_el = entry.find("atom:title", ns)
+            title = title_el.text if title_el is not None and title_el.text else ""
+            content_el = entry.find("atom:content", ns)
+            body = content_el.text if content_el is not None and content_el.text else ""
+            updated_el = entry.find("atom:updated", ns)
+            pub_date = updated_el.text if updated_el is not None and updated_el.text else ""
+
+            tag_el = entry.find("innioasis:tag_name", ns)
+            tag = (tag_el.text or "").strip() if tag_el is not None else ""
+            html_url = ""
+            enclosure_assets = []
+            for link in entry.findall("atom:link", ns):
+                rel_attr = link.attrib.get("rel", "")
+                href = link.attrib.get("href", "")
+                if rel_attr == "enclosure" and href:
+                    enclosure_assets.append({
+                        "id": int(link.attrib.get("{https://innioasis.app/ns/feeds/1.0}asset_id") or 0),
+                        "name": link.attrib.get("title") or href.rsplit("/", 1)[-1],
+                        "browser_download_url": href,
+                        "size": int(link.attrib.get("length") or 0),
+                        "download_count": int(link.attrib.get("{https://innioasis.app/ns/feeds/1.0}download_count") or 0),
+                        "content_type": link.attrib.get("type", "application/octet-stream"),
+                    })
+                elif "/releases/tag/" in href:
+                    html_url = href
+                    if not tag:
+                        tag = href.split("/releases/tag/")[-1]
+            if not tag:
+                id_el = entry.find("atom:id", ns)
+                if id_el is not None and id_el.text and "Release/" in id_el.text:
+                    tag = id_el.text.split("Release/")[-1]
+            if not tag:
+                continue
+
+            pre_el = entry.find("innioasis:prerelease", ns)
+            if pre_el is not None and pre_el.text is not None:
+                prerelease = pre_el.text.strip().lower() == "true"
+            else:
+                prerelease = "nightly" in tag.lower() or "preview" in tag.lower()
+
+            icon_el = entry.find("innioasis:icon_url", ns)
+            icon_dark_el = entry.find("innioasis:icon_dark_url", ns)
+            assets = enclosure_assets if enclosure_assets else self._fetch_expanded_assets(repo, tag)
+            raw_releases.append({
+                "tag_name": tag,
+                "name": title,
+                "body": body,
+                "published_at": pub_date,
+                "html_url": html_url or f"https://github.com/{repo}/releases/tag/{tag}",
+                "prerelease": prerelease,
+                "icon_url": (icon_el.text or "").strip() if icon_el is not None else "",
+                "icon_dark_url": (icon_dark_el.text or "").strip() if icon_dark_el is not None else "",
+                "assets": assets,
+            })
+        return raw_releases
+
+    def _fetch_releases_atom(self, repo):
+        """Fetch releases via public Atom feed (innioasis.app 1:1 Atom feed first, then GitHub Atom)."""
+        lower_repo = str(repo or "").strip().lower()
+        urls = [
+            f"https://innioasis.app/feeds/{lower_repo}/releases.atom",
+            f"https://github.com/{repo}/releases.atom",
+        ]
+        for url in urls:
+            try:
+                resp = self.session.get(url, timeout=REQUEST_TIMEOUT)
+                if resp.status_code != 200:
+                    continue
+                parsed = self._parse_atom_feed_xml(resp.text, repo)
+                if parsed:
+                    return parsed
+            except Exception as e:
+                logger.debug("Atom release fallback failed for %s (%s): %s", repo, url, e)
+        return []
 
     # -- fetching -----------------------------------------------------------
     def get_latest_release(self, repo, force_refresh=False):
         repo = resolve_firmware_repo(repo)
+        self.last_used_backup = False
+        self.last_fetch_failed = False
         if not force_refresh:
             cached = self.get_cached_releases(repo)
             if cached:
@@ -1685,20 +1807,25 @@ class ReleasesClient:
         # Fallback to cache
         cached = self.get_cached_releases(repo, ignore_ttl=True)
         if cached:
+            self.last_used_backup = True
             return cached[0]
 
-        # Fallback to public atom feed
-        atom_raw = self._fetch_releases_atom(repo)
-        if atom_raw:
-            releases = self._build_releases(atom_raw, repo)
-            if releases:
-                releases = sorted(releases, key=release_sort_key, reverse=True)
-                self.cache_releases(repo, releases)
-                return releases[0]
+        # Fallback to 1:1 backup store (JSON / XML) or public Atom feed
+        for fallback_raw in (self._fetch_backup_releases(repo), self._fetch_releases_atom(repo)):
+            if fallback_raw:
+                releases = self._build_releases(fallback_raw, repo)
+                if releases:
+                    self.last_used_backup = True
+                    releases = sorted(releases, key=release_sort_key, reverse=True)
+                    self.cache_releases(repo, releases)
+                    return releases[0]
+        self.last_fetch_failed = True
         return None
 
     def get_all_releases(self, repo, force_refresh=False):
         repo = resolve_firmware_repo(repo)
+        self.last_used_backup = False
+        self.last_fetch_failed = False
         if not force_refresh:
             cached = self.get_cached_releases(repo)
             if cached:
@@ -1723,19 +1850,25 @@ class ReleasesClient:
         # Fallback to cached releases if available
         cached = self.get_cached_releases(repo, ignore_ttl=True)
         if cached:
+            self.last_used_backup = True
             logger.info("Using %d cached releases for %s after API fallback", len(cached), repo)
             return sorted(cached, key=release_sort_key, reverse=True)
 
-        # Fallback to public atom feed (never rate-limited)
-        atom_raw = self._fetch_releases_atom(repo)
-        if atom_raw:
-            logger.info("Fetched %d releases via Atom feed for %s", len(atom_raw), repo)
-            releases = self._build_releases(atom_raw, repo)
-            if releases:
-                releases = sorted(releases, key=release_sort_key, reverse=True)
-                self.cache_releases(repo, releases)
-                return releases
+        # Fallback to 1:1 backup store (JSON / XML) or public Atom feed (never rate-limited)
+        for source_label, fallback_raw in (
+            ("1:1 backup store", self._fetch_backup_releases(repo)),
+            ("Atom feed", self._fetch_releases_atom(repo)),
+        ):
+            if fallback_raw:
+                logger.info("Fetched %d releases via %s for %s", len(fallback_raw), source_label, repo)
+                releases = self._build_releases(fallback_raw, repo)
+                if releases:
+                    self.last_used_backup = True
+                    releases = sorted(releases, key=release_sort_key, reverse=True)
+                    self.cache_releases(repo, releases)
+                    return releases
 
+        self.last_fetch_failed = True
         return []
 
     # -- app-update checking --------------------------------------------------
@@ -1790,20 +1923,22 @@ class ReleasesClient:
                 })
             return releases
 
-        # Fallback to public Atom feed
-        atom_raw = self._fetch_releases_atom(repo)
-        if atom_raw:
-            for item in atom_raw:
-                if is_base_release_tag(item.get("tag_name", "")):
-                    continue
-                releases.append({
-                    "tag_name": item.get("tag_name", ""),
-                    "name": item.get("name", ""),
-                    "body": item.get("body", ""),
-                    "published_at": item.get("published_at", ""),
-                    "html_url": item.get("html_url", ""),
-                    "assets": item.get("assets", []),
-                })
+        # Fallback to 1:1 backup store or public Atom feed
+        for fallback_raw in (self._fetch_backup_releases(repo), self._fetch_releases_atom(repo)):
+            if fallback_raw:
+                for item in fallback_raw:
+                    if is_base_release_tag(item.get("tag_name", "")):
+                        continue
+                    releases.append({
+                        "tag_name": item.get("tag_name", ""),
+                        "name": item.get("name", ""),
+                        "body": item.get("body", ""),
+                        "published_at": item.get("published_at", ""),
+                        "html_url": item.get("html_url", ""),
+                        "assets": item.get("assets", []),
+                    })
+                if releases:
+                    return releases
         return releases
 
     def get_latest_release_info(self, repo, force: bool = False):
@@ -1840,7 +1975,7 @@ class ReleasesClient:
         preferred = select_preferred_rom_asset(rom_variants)
         if not preferred:
             return None
-        return {
+        out = {
             "tag_name": tag_name,
             "name": release.get("name", ""),
             "body": release.get("body", ""),
@@ -1853,6 +1988,11 @@ class ReleasesClient:
             "prerelease": bool(release.get("prerelease")),
             "source_repo": repo,
         }
+        if release.get("icon_url"):
+            out["icon_url"] = release["icon_url"]
+        if release.get("icon_dark_url"):
+            out["icon_dark_url"] = release["icon_dark_url"]
+        return out
 
     def _build_releases(self, releases_data, repo):
         releases = []
@@ -1876,7 +2016,7 @@ class ReleasesClient:
             preferred = select_preferred_rom_asset(rom_variants)
             if not preferred:
                 continue
-            releases.append({
+            row = {
                 "tag_name": tag_name,
                 "name": release.get("name", ""),
                 "body": release.get("body", ""),
@@ -1889,7 +2029,12 @@ class ReleasesClient:
                 "prerelease": is_prerelease,
                 "source_repo": repo,
                 "html_url": release.get("html_url", ""),
-            })
+            }
+            if release.get("icon_url"):
+                row["icon_url"] = release["icon_url"]
+            if release.get("icon_dark_url"):
+                row["icon_dark_url"] = release["icon_dark_url"]
+            releases.append(row)
         return releases
 
     def releases_for_package(

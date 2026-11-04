@@ -2656,12 +2656,37 @@ class FlashPage(QWidget):
             val = 0.0
         val = max(0.0, min(100.0, val))
         bar.setRange(0, 100)
-        bar.setFormat("%p%")
+        if not getattr(bar, "is_getting_ready", lambda: False)():
+            bar.setFormat("%p%")
         bar.setValue(val)
         bar.setTextVisible(True)
 
+    def set_getting_ready(self, active: bool = True, text: str = "") -> None:
+        """Toggle 'Getting ready...' state: hide percentage and display text on and near progress bar."""
+        self._getting_ready = bool(active)
+        msg = text or tr("flash_getting_ready")
+        if hasattr(self, "_progress_bar") and hasattr(self._progress_bar, "set_getting_ready"):
+            self._progress_bar.set_getting_ready(active, text=msg)
+        if hasattr(self, "_wait_progress_bar") and hasattr(self._wait_progress_bar, "set_getting_ready"):
+            self._wait_progress_bar.set_getting_ready(active, text=msg)
+        if active:
+            if hasattr(self, "_step_label"):
+                self._step_label.setText(msg)
+            flow = getattr(self, "_status_flow", None)
+            if flow is not None:
+                flow.refresh()
+            self._notify_geometry_change()
+        elif hasattr(self, "_step_key") and getattr(self, "_step_key", None):
+            if hasattr(self, "_step_label"):
+                self._step_label.setText(tr(self._step_key))
+            flow = getattr(self, "_status_flow", None)
+            if flow is not None:
+                flow.refresh()
+            self._notify_geometry_change()
+
     def show_install_failure(self, message: str, explanation: str = "", percent: int = 0) -> None:
         """Keep the failure on the install progress card, with Retry and Cancel beneath."""
+        self.set_getting_ready(False)
         self.update_partition_progress("")
         self.dismiss_prompt_stop()
         self._failed = True
@@ -2821,6 +2846,7 @@ class FlashPage(QWidget):
                 self.themes.forget_watch(worker)
 
     def clear_install_failure(self) -> None:
+        self.set_getting_ready(False)
         self.dismiss_prompt_stop()
         self._failed = False
         self._complete = False
@@ -4635,6 +4661,8 @@ class FlashPage(QWidget):
         except (TypeError, ValueError):
             val = 0.0
         val = max(0.0, min(100.0, val))
+        if getattr(self, "_getting_ready", False) and val > 12.5:
+            self.set_getting_ready(False)
         if (
             getattr(self, "_wait_copy", "") == "please_wait"
             and val <= 0
@@ -4653,7 +4681,13 @@ class FlashPage(QWidget):
         if getattr(self, "_stop_open", False):
             self._apply_stop_hold()
             return
-        self._step_label.setText(tr(step_key))
+        if getattr(self, "_getting_ready", False):
+            if step_key not in ("DETECT", "step_detect", "flash_getting_ready", "GETTING_READY"):
+                self.set_getting_ready(False)
+        if getattr(self, "_getting_ready", False):
+            self._step_label.setText(tr("flash_getting_ready"))
+        else:
+            self._step_label.setText(tr(step_key))
         flow = getattr(self, "_status_flow", None)
         if flow is not None:
             flow.refresh()

@@ -286,10 +286,29 @@ try:
         print(f"[spec] copied SP_Flash_Tool payload from {SP_FLASH_SRC} -> {_sp_target}")
 
     _tools_dir = _app_dir / "tools"
-    _unrar_src = PROJECT_ROOT / "tools" / "windows" / "UnRAR.exe"
-    if _unrar_src.exists():
-        _tools_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(_unrar_src, _tools_dir / "UnRAR.exe")
-        print(f"[spec] copied UnRAR payload from {_unrar_src} -> {_tools_dir / 'UnRAR.exe'}")
+    if sys.platform.startswith("win"):
+        _win_arch_dir = "x64" if HOST_IS_X86 else "arm64"
+        _unrar_src = PROJECT_ROOT / "tools" / "windows" / _win_arch_dir / "UnRAR.exe"
+        if not _unrar_src.exists():
+            _unrar_src = PROJECT_ROOT / "tools" / "windows" / "UnRAR.exe"
+        if _unrar_src.exists():
+            _tools_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(_unrar_src, _tools_dir / "UnRAR.exe")
+            print(f"[spec] copied UnRAR payload from {_unrar_src} -> {_tools_dir / 'UnRAR.exe'}")
+    elif sys.platform.startswith("linux"):
+        if HOST_MACHINE in ("aarch64", "arm64"):
+            _lin_arch_dir = "aarch64"
+        elif HOST_MACHINE.startswith("arm"):
+            _lin_arch_dir = "armhf"
+        else:
+            _lin_arch_dir = "x86_64"
+        _unrar_src = PROJECT_ROOT / "tools" / "linux" / _lin_arch_dir / "unrar"
+        if not _unrar_src.exists():
+            _unrar_src = PROJECT_ROOT / "tools" / "linux" / "unrar"
+        if _unrar_src.exists():
+            _tools_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(_unrar_src, _tools_dir / "unrar")
+            os.chmod(_tools_dir / "unrar", 0o755)
+            print(f"[spec] copied unrar payload from {_unrar_src} -> {_tools_dir / 'unrar'}")
 except Exception as exc:  # noqa: BLE001
     print(f"[spec] WARNING: could not place SP_Flash_Tool payload: {exc}")

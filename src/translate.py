@@ -1,7 +1,9 @@
-"""Release notes translation using Google Translate.
+"""Release notes and notice translation with multi-provider free no-auth fallbacks.
 
 Provides Google Translate URLs for GitHub release notes in the user's chosen language,
-in-app release notes translation via Google Translate, and caching.
+in-app translation via a chain of free no-auth translation services (Google clients5,
+Google GTX, MyMemory, Lingva, SimplyTranslate) with per-provider cooldowns and graceful
+failure, and in-memory caching.
 """
 
 from __future__ import annotations
@@ -9,9 +11,10 @@ from __future__ import annotations
 import json
 import logging
 import ssl
+import time
 import urllib.parse
 import urllib.request
-from typing import Optional, Tuple
+from typing import Callable, Optional, Tuple
 
 from PySide6.QtCore import QThread, Signal
 
@@ -19,8 +22,73 @@ from .i18n import is_english_language
 
 logger = logging.getLogger(__name__)
 
+
+class TranslationUnavailableError(RuntimeError):
+    """Raised when every configured translation service is unreachable or rate-limited."""
+
+
 # Cache for in-memory translated text: (text_hash_or_key, target_lang) -> translated_text
 _TRANSLATION_CACHE: dict[Tuple[str, str], str] = {}
+
+# Cooldown tracking so failed providers are skipped without spamming networks
+_PROVIDER_COOLDOWN_SECONDS = 120.0
+_GLOBAL_COOLDOWN_SECONDS = 60.0
+_PROVIDER_FAILED_AT: dict[str, float] = {}
+_ALL_PROVIDERS_FAILED_AT: float = 0.0
+_LAST_ACTIVE_PROVIDER: str = ""
+
+_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    ),
+    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+}
+
+
+def reset_translation_cooldowns() -> None:
+    """Clear provider and global failure cooldowns (e.g. when connectivity changes or in tests)."""
+    global _ALL_PROVIDERS_FAILED_AT, _LAST_ACTIVE_PROVIDER
+    _PROVIDER_FAILED_AT.clear()
+    _ALL_PROVIDERS_FAILED_AT = 0.0
+    _LAST_ACTIVE_PROVIDER = ""
+
+
+def mark_translation_unavailable(now: Optional[float] = None) -> None:
+    """Explicitly mark translation services as temporarily unavailable."""
+    global _ALL_PROVIDERS_FAILED_AT
+    _ALL_PROVIDERS_FAILED_AT = time.monotonic() if now is None else float(now)
+
+
+def is_translation_available(now: Optional[float] = None) -> bool:
+    """Return False when translation is disabled or all providers recently failed."""
+    try:
+        from .remote_flags import is_remote_flag_active
+
+        if is_remote_flag_active("null-translate"):
+            return False
+    except Exception:
+        pass
+    if _ALL_PROVIDERS_FAILED_AT <= 0.0:
+        return True
+    ts = time.monotonic() if now is None else float(now)
+    return (ts - _ALL_PROVIDERS_FAILED_AT) >= _GLOBAL_COOLDOWN_SECONDS
+
+
+def last_active_provider() -> str:
+    """Return the name of the provider that served the most recent translation."""
+    return _LAST_ACTIVE_PROVIDER
+
+
+def _provider_on_cooldown(name: str, now: Optional[float] = None) -> bool:
+    failed_at = _PROVIDER_FAILED_AT.get(name, 0.0)
+    if failed_at <= 0.0:
+        return False
+    ts = time.monotonic() if now is None else float(now)
+    if (ts - failed_at) < _PROVIDER_COOLDOWN_SECONDS:
+        return True
+    _PROVIDER_FAILED_AT.pop(name, None)
+    return False
 
 
 def _get_ssl_context(verify: bool = True) -> ssl.SSLContext:
@@ -39,7 +107,7 @@ def _get_ssl_context(verify: bool = True) -> ssl.SSLContext:
         return ssl._create_unverified_context()
 
 
-def _urlopen(req: urllib.request.Request, timeout: float = 6.0):
+def _urlopen(req: urllib.request.Request, timeout: float = 4.5):
     """Execute an HTTP request with automatic SSL certificate error recovery."""
     try:
         ctx = _get_ssl_context(verify=True)
@@ -60,6 +128,7 @@ def get_google_translate_release_url(
     """Build the Google Translate URL for a given GitHub release."""
     try:
         from .remote_flags import is_remote_flag_active
+
         if is_remote_flag_active("null-translate"):
             return ""
     except Exception:
@@ -92,17 +161,181 @@ def get_google_translate_release_url(
     return f"https://github-com.translate.goog{path}?{params}"
 
 
-def fetch_google_translation(text: str, target_lang: str, timeout: float = 6.0) -> str:
-    """Fetch translated text using Google Translate endpoints.
+# --- Individual free no-auth translation providers --------------------------
 
-    Uses POST to avoid URI length overflow (HTTP 414), uses certifi SSL context
-    with unverified fallback, and parses both clients5 and translate.googleapis.com.
-    Returns original text if offline or on network failure.
+
+def _translate_via_google_clients5(text: str, target_lang: str, timeout: float) -> Optional[str]:
+    url = (
+        "https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=auto&tl="
+        + urllib.parse.quote(target_lang)
+    )
+    post_data = urllib.parse.urlencode({"q": text}).encode("utf-8")
+    req = urllib.request.Request(url, data=post_data, headers=_HEADERS)
+    with _urlopen(req, timeout=timeout) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+        if isinstance(data, list) and data:
+            if isinstance(data[0], list) and data[0]:
+                return str(data[0][0])
+            if isinstance(data[0], str):
+                return str(data[0])
+    return None
+
+
+def _translate_via_google_gtx(text: str, target_lang: str, timeout: float) -> Optional[str]:
+    url = (
+        "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl="
+        + urllib.parse.quote(target_lang)
+        + "&dt=t"
+    )
+    post_data = urllib.parse.urlencode({"q": text}).encode("utf-8")
+    req = urllib.request.Request(url, data=post_data, headers=_HEADERS)
+    with _urlopen(req, timeout=timeout) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+        if isinstance(data, list) and data and isinstance(data[0], list):
+            parts = [
+                str(p[0])
+                for p in data[0]
+                if isinstance(p, list) and p and isinstance(p[0], str)
+            ]
+            if parts:
+                return "".join(parts)
+    return None
+
+
+def _split_chunks(text: str, max_chars: int = 450) -> list[str]:
+    if len(text) <= max_chars:
+        return [text]
+    chunks: list[str] = []
+    current: list[str] = []
+    current_len = 0
+    for line in text.splitlines(keepends=True):
+        if len(line) > max_chars:
+            if current:
+                chunks.append("".join(current))
+                current = []
+                current_len = 0
+            for idx in range(0, len(line), max_chars):
+                chunks.append(line[idx : idx + max_chars])
+            continue
+        if current_len + len(line) > max_chars and current:
+            chunks.append("".join(current))
+            current = [line]
+            current_len = len(line)
+        else:
+            current.append(line)
+            current_len += len(line)
+    if current:
+        chunks.append("".join(current))
+    return chunks
+
+
+def _translate_via_mymemory(text: str, target_lang: str, timeout: float) -> Optional[str]:
+    """MyMemory free anonymous translation API (https://api.mymemory.translated.net)."""
+    lang = target_lang.strip()
+    chunks = _split_chunks(text, max_chars=450)
+    if len(chunks) > 8:
+        # Avoid making many sequential HTTP calls on huge changelogs
+        return None
+    translated_parts: list[str] = []
+    for chunk in chunks:
+        if not chunk.strip():
+            translated_parts.append(chunk)
+            continue
+        params = urllib.parse.urlencode({"q": chunk, "langpair": f"en|{lang}"})
+        url = f"https://api.mymemory.translated.net/get?{params}"
+        req = urllib.request.Request(
+            url, headers={"User-Agent": _HEADERS["User-Agent"], "Accept": "application/json"}
+        )
+        with _urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        if not isinstance(data, dict):
+            return None
+        status = int(data.get("responseStatus") or 0)
+        if status and status != 200:
+            return None
+        resp_data = data.get("responseData")
+        if not isinstance(resp_data, dict):
+            return None
+        piece = str(resp_data.get("translatedText") or "").strip()
+        if not piece or "MYMEMORY WARNING" in piece.upper() or "QUERY LENGTH LIMIT" in piece.upper():
+            return None
+        translated_parts.append(piece)
+    return "\n".join(translated_parts) if len(chunks) > 1 else (translated_parts[0] if translated_parts else None)
+
+
+def _make_lingva_provider(base_url: str) -> Callable[[str, str, float], Optional[str]]:
+    def _provider(text: str, target_lang: str, timeout: float) -> Optional[str]:
+        if len(text) > 1800:
+            return None
+        lang = target_lang.strip().replace("-", "_")
+        encoded_q = urllib.parse.quote(text, safe="")
+        url = f"{base_url.rstrip('/')}/api/v1/en/{urllib.parse.quote(lang, safe='')}/{encoded_q}"
+        req = urllib.request.Request(
+            url, headers={"User-Agent": _HEADERS["User-Agent"], "Accept": "application/json"}
+        )
+        with _urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        if isinstance(data, dict) and data.get("translation"):
+            return str(data["translation"])
+        return None
+
+    return _provider
+
+
+def _translate_via_simplytranslate(text: str, target_lang: str, timeout: float) -> Optional[str]:
+    if len(text) > 1800:
+        return None
+    params = urllib.parse.urlencode(
+        {"engine": "google", "from": "en", "to": target_lang.strip(), "text": text}
+    )
+    url = f"https://simplytranslate.org/api/translate/?{params}"
+    req = urllib.request.Request(
+        url, headers={"User-Agent": _HEADERS["User-Agent"], "Accept": "application/json"}
+    )
+    with _urlopen(req, timeout=timeout) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+    if isinstance(data, dict):
+        result = data.get("translated-text") or data.get("translated_text")
+        if result:
+            return str(result)
+    return None
+
+
+TRANSLATION_PROVIDERS: tuple[tuple[str, Callable[[str, str, float], Optional[str]]], ...] = (
+    ("google_clients5", _translate_via_google_clients5),
+    ("google_gtx", _translate_via_google_gtx),
+    ("mymemory", _translate_via_mymemory),
+    ("lingva_ml", _make_lingva_provider("https://lingva.ml")),
+    ("lingva_plausibility", _make_lingva_provider("https://translate.plausibility.cloud")),
+    ("simplytranslate", _translate_via_simplytranslate),
+)
+
+
+def fetch_google_translation(
+    text: str,
+    target_lang: str,
+    timeout: float = 4.5,
+    *,
+    raise_on_error: bool = False,
+) -> str:
+    """Fetch translated text using Google Translate and free no-auth fallback services.
+
+    Tries providers in order, skipping any provider on cooldown so network issues never
+    cause repeated hangs or traffic spikes. When ``raise_on_error=True``, raises
+    :class:`TranslationUnavailableError` if all providers fail; otherwise returns the
+    original ``text``.
     """
+    global _ALL_PROVIDERS_FAILED_AT, _LAST_ACTIVE_PROVIDER
+
     try:
         from .remote_flags import is_remote_flag_active
+
         if is_remote_flag_active("null-translate"):
+            if raise_on_error:
+                raise TranslationUnavailableError("Translation disabled by remote flag")
             return text
+    except TranslationUnavailableError:
+        raise
     except Exception:
         pass
 
@@ -113,60 +346,31 @@ def fetch_google_translation(text: str, target_lang: str, timeout: float = 6.0) 
     if cache_key in _TRANSLATION_CACHE:
         return _TRANSLATION_CACHE[cache_key]
 
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-        ),
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-    }
+    now = time.monotonic()
+    if _ALL_PROVIDERS_FAILED_AT > 0.0 and (now - _ALL_PROVIDERS_FAILED_AT) < _GLOBAL_COOLDOWN_SECONDS:
+        if raise_on_error:
+            raise TranslationUnavailableError("Translation services are temporarily on cooldown")
+        return text
 
-    # 1. Primary: clients5.google.com/translate_a/t (dict-chrome-ex)
-    try:
-        url = (
-            "https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl=auto&tl="
-            + urllib.parse.quote(target_lang)
-        )
-        post_data = urllib.parse.urlencode({"q": text}).encode("utf-8")
-        req = urllib.request.Request(url, data=post_data, headers=headers)
-        with _urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            if isinstance(data, list) and data:
-                if isinstance(data[0], list) and data[0]:
-                    result = str(data[0][0])
-                    _TRANSLATION_CACHE[cache_key] = result
-                    return result
-                if isinstance(data[0], str):
-                    result = str(data[0])
-                    _TRANSLATION_CACHE[cache_key] = result
-                    return result
-    except Exception as e:
-        logger.debug("Primary Google translation failed (%s): %s", url, e)
+    for provider_name, provider_fn in TRANSLATION_PROVIDERS:
+        if _provider_on_cooldown(provider_name, now=now):
+            continue
+        try:
+            result = provider_fn(text, target_lang, timeout)
+            if isinstance(result, str) and result.strip():
+                _TRANSLATION_CACHE[cache_key] = result
+                _PROVIDER_FAILED_AT.pop(provider_name, None)
+                _ALL_PROVIDERS_FAILED_AT = 0.0
+                _LAST_ACTIVE_PROVIDER = provider_name
+                return result
+            _PROVIDER_FAILED_AT[provider_name] = time.monotonic()
+        except Exception as e:
+            _PROVIDER_FAILED_AT[provider_name] = time.monotonic()
+            logger.debug("Translation provider %s failed: %s", provider_name, e)
 
-    # 2. Secondary fallback: translate.googleapis.com/translate_a/single (gtx)
-    try:
-        url = (
-            "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl="
-            + urllib.parse.quote(target_lang)
-            + "&dt=t"
-        )
-        post_data = urllib.parse.urlencode({"q": text}).encode("utf-8")
-        req = urllib.request.Request(url, data=post_data, headers=headers)
-        with _urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            if isinstance(data, list) and data and isinstance(data[0], list):
-                parts = [
-                    str(p[0])
-                    for p in data[0]
-                    if isinstance(p, list) and p and isinstance(p[0], str)
-                ]
-                if parts:
-                    result = "".join(parts)
-                    _TRANSLATION_CACHE[cache_key] = result
-                    return result
-    except Exception as e:
-        logger.debug("Secondary Google translation failed (%s): %s", url, e)
-
+    _ALL_PROVIDERS_FAILED_AT = time.monotonic()
+    if raise_on_error:
+        raise TranslationUnavailableError("All translation services are currently unavailable")
     return text
 
 
@@ -177,26 +381,37 @@ def strip_changes_header(text: str) -> str:
     if not text:
         return ""
     import re
+
     match = re.search(r"(?im)^\s*(?:[#*_\->\s]*)\bchanges\b.*(?:\n|$)", text)
     if match:
-        remainder = text[match.end():].lstrip("\r\n").strip()
+        remainder = text[match.end() :].lstrip("\r\n").strip()
         return remainder if remainder else text.strip()
     return text.strip()
 
 
-def translate_release_notes(rel: dict, target_lang: str) -> Tuple[str, str]:
+def translate_release_notes(
+    rel: dict, target_lang: str, *, raise_on_error: bool = False
+) -> Tuple[str, str]:
     """Translate release name and body to the target language."""
     name = (rel or {}).get("name", "")
     body = (rel or {}).get("body", "")
     body = strip_changes_header(body)
 
-    translated_name = fetch_google_translation(name, target_lang) if name else ""
-    translated_body = fetch_google_translation(body, target_lang) if body else ""
+    translated_name = (
+        fetch_google_translation(name, target_lang, raise_on_error=raise_on_error)
+        if name
+        else ""
+    )
+    translated_body = (
+        fetch_google_translation(body, target_lang, raise_on_error=raise_on_error)
+        if body
+        else ""
+    )
     return translated_name, translated_body
 
 
 class ReleaseTranslateWorker(QThread):
-    """Asynchronous worker that fetches Google translation for a release."""
+    """Asynchronous worker that fetches translation for a release."""
 
     translation_ready = Signal(dict, str, str, str)  # (rel, target_lang, name, body)
     translation_failed = Signal(dict, str, str)  # (rel, target_lang, error)
@@ -210,7 +425,9 @@ class ReleaseTranslateWorker(QThread):
         try:
             if self.isInterruptionRequested():
                 return
-            name, body = translate_release_notes(self.rel, self.target_lang)
+            name, body = translate_release_notes(
+                self.rel, self.target_lang, raise_on_error=True
+            )
             if not self.isInterruptionRequested():
                 self.translation_ready.emit(self.rel, self.target_lang, name, body)
         except Exception as e:

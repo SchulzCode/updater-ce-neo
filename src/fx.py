@@ -13,6 +13,7 @@ log = logging.getLogger(__name__)
 _ENV = "UPDATER_CURRENCY"
 _ENV_REGION = "UPDATER_REGION"
 _TTL = 43200.0
+_RETRY = 600.0
 _FEEDS = (
     "https://open.er-api.com/v6/latest/USD",
     "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json",
@@ -20,7 +21,7 @@ _FEEDS = (
 )
 
 _lock = threading.Lock()
-_state = {"rates": {}, "at": 0.0, "warm": False, "busy": False}
+_state = {"rates": {}, "at": 0.0, "warm": False, "busy": False, "failed": 0.0}
 
 
 def _table(text, cast=str):
@@ -168,15 +169,26 @@ def rate(code="USD"):
 
 
 def _unit(code):
-    r = rate(code)
-    if code in _ZERO or r >= 0.5:
-        return 1.0
-    return 0.01
+    # Whole units only where the currency has no minor unit; everything else
+    # keeps cents, so "$5.79" never collapses to "$6".
+    return 1.0 if code in _ZERO else 0.01
 
 
 def local(usd, code="USD"):
     q = _unit(code)
     return round(float(usd or 0) * rate(code) / q) * q
+
+
+def amount(usd, code="USD"):
+    """The converted figure alone, grouped and rounded to the currency's unit."""
+    code = (code or "USD").upper()
+    value = local(usd, code)
+    if code in _ZERO:
+        return f"{value:,.0f}"
+    big = abs(value) >= 1000
+    if float(value).is_integer():
+        return f"{value:,.0f}" if big else str(int(value))
+    return f"{value:,.2f}" if big else f"{value:.2f}"
 
 
 def goal(usd, code="USD"):
@@ -266,16 +278,24 @@ def _pull():
 def _run(callback):
     try:
         _warm()
-        if time.time() - float(_state["at"] or 0.0) >= _TTL:
-            _pull()
+        now = time.time()
+        stale = now - float(_state["at"] or 0.0) >= _TTL
+        cooling = now - float(_state["failed"] or 0.0) < _RETRY
+        if stale and not cooling:
+            if _pull():
+                _state["failed"] = 0.0
+            else:
+                # Offline or every feed is down: keep the baked table, stay
+                # quiet, and don't retry on every dialog or bar that opens.
+                _state["failed"] = time.time()
     finally:
         with _lock:
             _state["busy"] = False
     if callback:
         try:
             callback()
-        except RuntimeError:
-            pass
+        except Exception:
+            log.debug("fx callback failed", exc_info=True)
 
 
 def refresh(callback=None):

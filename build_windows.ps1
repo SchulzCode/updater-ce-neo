@@ -307,13 +307,17 @@ try {
             Write-Host "  -> Created friendly entry point: '2. Install Firmware.exe' -> $appSlug.exe" -ForegroundColor Green
 
             # Stage UnRAR.exe into tools/ folder beside the executable for .rar unpacking compatibility
-            $unrarSource = Join-Path $ProjectRoot "tools\windows\UnRAR.exe"
+            $unrarArchDir = if ($isArm64) { "arm64" } else { "x64" }
+            $unrarSource = Join-Path $ProjectRoot "tools\windows\$unrarArchDir\UnRAR.exe"
+            if (-not (Test-Path $unrarSource)) {
+                $unrarSource = Join-Path $ProjectRoot "tools\windows\UnRAR.exe"
+            }
             $unrarTargetDir = Join-Path $stagedAppDir "tools"
             $unrarTarget = Join-Path $unrarTargetDir "UnRAR.exe"
             if (Test-Path $unrarSource) {
                 if (-not (Test-Path $unrarTargetDir)) { New-Item -ItemType Directory -Force -Path $unrarTargetDir | Out-Null }
                 Copy-Item -Path $unrarSource -Destination $unrarTarget -Force
-                Write-Host "  -> Bundled 'tools\UnRAR.exe' for cross-platform .rar extraction" -ForegroundColor Green
+                Write-Host "  -> Bundled 'tools\UnRAR.exe' ($unrarArchDir) for cross-platform .rar extraction" -ForegroundColor Green
             }
 
             Write-StepBanner 3 $totalSteps "Staging Portable Folder" "Syncing compiled distribution files into $DistDir\$appSlug..."

@@ -230,6 +230,52 @@ def test_background_tray_show_message(monkeypatch):
     assert messages[0][1] == "Test Message"
 
 
+def test_macos_gets_the_native_menu_bar_item(monkeypatch):
+    """Qt's tray loses the template flag, so macOS must build an NSStatusItem."""
+    from PySide6.QtGui import QIcon
+
+    created = []
+    monkeypatch.setattr(tray, "_appkit_available", lambda: True)
+    monkeypatch.setattr(tray, "NativeStatusItem", lambda *a, **k: created.append(a) or "native")
+    assert tray.create_background_tray(object(), lambda: None, lambda: None, QIcon()) == "native"
+    assert len(created) == 1
+
+
+def test_other_hosts_keep_qt_tray(monkeypatch):
+    from PySide6.QtGui import QIcon
+
+    monkeypatch.setattr(tray, "_appkit_available", lambda: False)
+    bg_tray = tray.create_background_tray(_app(), lambda: None, lambda: None, QIcon())
+    assert isinstance(bg_tray, tray.BackgroundTray)
+
+
+def test_a_host_without_a_menu_bar_quits_instead_of_hiding(monkeypatch):
+    QSettings("innioasis", "updater").setValue(tray.RUN_IN_BACKGROUND_KEY, True)
+    quit_calls = []
+    app, win = _window()
+
+    class _UnavailableTray:
+        def show(self):
+            pass
+
+        def is_visible(self):
+            return False
+
+        def is_available(self):
+            return False
+
+    monkeypatch.setattr(win, "_ensure_background_tray", lambda: _UnavailableTray())
+    monkeypatch.setattr(win, "_schedule_app_quit", lambda: quit_calls.append(True))
+    try:
+        win._hide_to_tray(QCloseEvent())
+        assert quit_calls == [True]
+    finally:
+        _clear_opt_in()
+        win._force_quit = True
+        win.close()
+        app.processEvents()
+
+
 def test_settings_run_in_background_toggled_updates_quit_on_last_window_closed(monkeypatch):
     """Toggling run_in_background immediately syncs QApplication.quitOnLastWindowClosed."""
     from src.ui.settings_page import SettingsPage

@@ -433,6 +433,8 @@ def main():
         worker.action_changed.connect(lambda x: print(f"[ACTION] {x}", flush=True))
         worker.partition_progress_changed.connect(lambda x: print(f"[PARTITION_PROGRESS] {x}", flush=True))
         worker.eta_changed.connect(lambda x: print(f"[ETA] {x}", flush=True))
+        if hasattr(worker, "getting_ready"):
+            worker.getting_ready.connect(lambda x: print(f"[GETTING_READY] {int(x)}", flush=True))
 
         from . import process_guard
 

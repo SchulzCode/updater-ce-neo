@@ -74,6 +74,10 @@ ADB_BINARY = PROJECT_ROOT / "tools" / "adb" / "macos-arm64" / "adb"
 if ADB_BINARY.is_file():
     datas.append((str(ADB_BINARY), "tools/adb"))
 
+UNAR_BINARY = PROJECT_ROOT / "tools" / "macos" / "unar"
+if UNAR_BINARY.is_file():
+    datas.append((str(UNAR_BINARY), "tools"))
+
 try:
     datas.extend(collect_data_files("libusb_package"))
 except Exception:

@@ -266,6 +266,38 @@ def scatter_sort_key(path: Union[str, Path]) -> tuple:
     return (2, stem)
 
 
+_IGNORED_SCATTER_DIRS = frozenset({
+    "__macosx",
+    ".git",
+    ".idea",
+    ".venv",
+    ".venv-build",
+    ".cache",
+    "__pycache__",
+    "_internal",
+    "vendor",
+    "mtkclient",
+    "site-packages",
+    "tools",
+})
+
+
+def is_ignored_scatter_path(path: Union[str, Path], root: Optional[Union[str, Path]] = None) -> bool:
+    """True when ``path`` sits inside an app bundle or runtime asset folder rather than a firmware package."""
+    p = Path(path)
+    try:
+        rel_parts = p.relative_to(Path(root)).parts[:-1] if root is not None else p.parts[:-1]
+    except ValueError:
+        rel_parts = p.parts[:-1]
+    lowered = [part.lower() for part in rel_parts]
+    for idx, part in enumerate(lowered):
+        if part in _IGNORED_SCATTER_DIRS or part.endswith(".app"):
+            return True
+        if part == "compat" and idx > 0 and lowered[idx - 1] == "assets":
+            return True
+    return False
+
+
 def ranked_scatters(paths) -> list:
     """The best-ranked scatter file(s) among ``paths``.
 
@@ -279,6 +311,24 @@ def ranked_scatters(paths) -> list:
     items = [Path(p) for p in paths]
     if not items:
         return []
+
+    non_ignored = [p for p in items if not is_ignored_scatter_path(p)]
+    if non_ignored:
+        items = non_ignored
+
+    if len(items) > 1:
+        try:
+            from .flash_service import _list_expected_images, _missing_images
+
+            complete = [
+                p
+                for p in items
+                if p.is_file() and _list_expected_images(p) and not _missing_images(p)
+            ]
+            if complete and len(complete) < len(items):
+                items = complete
+        except Exception:
+            pass
 
     # Check whether candidate scatters target different hardware models or chipsets
     try:
@@ -409,24 +459,81 @@ def scatter_has_userdata(scatter_path: Union[str, Path]) -> bool:
     return False
 
 
-def _package_image(folder: Path) -> Optional[Path]:
-    try:
-        by_name = {p.name.lower(): p for p in folder.iterdir() if p.is_file()}
+def _package_image(folder: Path, scope=()) -> Optional[Path]:
+    """The release's ``updater.png``/``updater.jpg`` in ``folder`` or ``scope``.
+
+    A package that was repacked or browsed as a folder keeps its image
+    wherever the publisher left it, so ``scope`` carries the browsed
+    package's other candidate folders (its own folder first).
+    """
+    for candidate_dir in (folder, *scope):
+        try:
+            by_name = {p.name.lower(): p for p in Path(candidate_dir).iterdir() if p.is_file()}
+        except OSError:
+            continue
         for name in PACKAGE_ICON_NAMES:
             if name in by_name:
                 return by_name[name]
-    except OSError:
-        pass
     return None
 
 
-def _release_ini(folder: Path, app_dir: Optional[Path] = None) -> Optional[Path]:
+def _browse_scope(folder: Path, browse_root: Optional[Path]) -> list[Path]:
+    """Folders around a scatter folder, bounded by the browsed package root.
+
+    ``fw_package.ini`` and the ``updater`` image may sit beside the scatter, in
+    a neighbouring folder of the same package, or one or more levels above it
+    (a repacked portable archive keeps them at the top). Everything stays
+    inside ``browse_root`` so a browse never reads unrelated files on the
+    computer.
+    """
+    folder_p = Path(folder)
+    if browse_root is None:
+        return []
+    try:
+        root = Path(browse_root).resolve()
+        current = folder_p.resolve()
+    except OSError:
+        return []
+    if root != current and root not in current.parents:
+        return []
+    nodes: list[Path] = []
+    node = current.parent
+    while node != node.parent:
+        if node != current and (node == root or root in node.parents):
+            nodes.append(node)
+        if node == root:
+            break
+        node = node.parent
+    expanded: list[Path] = []
+    for node in nodes:
+        if node not in expanded:
+            expanded.append(node)
+        try:
+            for child in sorted(node.iterdir()):
+                if not child.is_dir() or child == current:
+                    continue
+                if child.name.startswith((".", "__")) or child.suffix.lower() == ".app":
+                    continue
+                if child not in expanded:
+                    expanded.append(child)
+        except OSError:
+            continue
+    return expanded
+
+
+def _release_ini(
+    folder: Path,
+    app_dir: Optional[Path] = None,
+    browse_root: Optional[Path] = None,
+) -> Optional[Path]:
     """Return the ``fw_package.ini`` describing the release in ``folder``.
 
     On Windows and Linux the file beside the application executable or AppImage is preferred,
     so a portable app zipped with its firmware can describe the release from its own folder.
-    Otherwise the file in the package folder (the SP Flash Tool or Firmware directory) is used.
-    macOS keeps only the package-folder lookup when running bundled.
+    Then the package folder (the SP Flash Tool or Firmware directory), then the folders around
+    it inside the browsed package: a sibling folder, or a parent folder that holds it (a
+    repacked portable archive keeps ``fw_package.ini`` at its top level). macOS keeps only
+    the package-folder lookups when running bundled.
     """
     candidates: list[Path] = []
     if app_dir is not None:
@@ -436,7 +543,9 @@ def _release_ini(folder: Path, app_dir: Optional[Path] = None) -> Optional[Path]
     appimage_dir = get_appimage_dir()
     if appimage_dir is not None:
         candidates.append(appimage_dir / FW_PACKAGE_INI)
-    candidates.append(folder / FW_PACKAGE_INI)
+    candidates.append(Path(folder) / FW_PACKAGE_INI)
+    for scope_dir in _browse_scope(folder, browse_root):
+        candidates.append(scope_dir / FW_PACKAGE_INI)
     for candidate in candidates:
         if candidate.is_file():
             return candidate
@@ -526,6 +635,7 @@ def read_package(
     require_ini: bool = True,
     app_dir: Optional[Union[str, Path]] = None,
     source_names: tuple[str, ...] = (),
+    browse_root: Optional[Union[str, Path]] = None,
 ) -> Optional[FwPackage]:
     """Return the package in ``folder`` when it has exactly one scatter and all listed images exist.
 
@@ -538,7 +648,12 @@ def read_package(
     if not folder_p.is_dir():
         return None
 
-    ini = _release_ini(folder_p, Path(app_dir) if app_dir is not None else None)
+    scope = _browse_scope(folder_p, Path(browse_root) if browse_root is not None else None)
+    ini = _release_ini(
+        folder_p,
+        Path(app_dir) if app_dir is not None else None,
+        browse_root=Path(browse_root) if browse_root is not None else None,
+    )
     has_ini = ini is not None
     if has_ini:
         meta = read_fw_package_ini(ini)
@@ -587,7 +702,7 @@ def read_package(
     has_rockbox_240p = rockbox_240p_package_name(
         eff_name, folder_p.name, scatter.name, *source_names
     )
-    image = _package_image(folder_p)
+    image = _package_image(folder_p, scope)
     if image is None and ini is not None and ini.parent != folder_p:
         # fw_package.ini beside the app: its updater image may sit there too.
         image = _package_image(ini.parent)
@@ -630,22 +745,31 @@ def locate_package(
         return None
 
     # Check root directly
-    pkg = read_package(root_p, require_ini=require_ini, app_dir=app_dir, source_names=source_names)
+    pkg = read_package(
+        root_p, require_ini=require_ini, app_dir=app_dir,
+        source_names=source_names, browse_root=root_p,
+    )
     if pkg is not None:
         return pkg
 
     # Search subfolders with fw_package.ini
     for ini in sorted(root_p.rglob(FW_PACKAGE_INI)):
-        pkg = read_package(ini.parent, require_ini=require_ini, app_dir=app_dir, source_names=source_names)
+        if is_ignored_scatter_path(ini, root_p):
+            continue
+        pkg = read_package(
+            ini.parent, require_ini=require_ini, app_dir=app_dir,
+            source_names=source_names, browse_root=root_p,
+        )
         if pkg is not None:
             return pkg
 
     if not require_ini:
         # Search subfolders with a single scatter
         for scatter in sorted(root_p.rglob("*.txt")):
-            if "scatter" in scatter.name.lower():
+            if "scatter" in scatter.name.lower() and not is_ignored_scatter_path(scatter, root_p):
                 pkg = read_package(
-                    scatter.parent, require_ini=False, app_dir=app_dir, source_names=source_names
+                    scatter.parent, require_ini=False, app_dir=app_dir,
+                    source_names=source_names, browse_root=root_p,
                 )
                 if pkg is not None:
                     return pkg
@@ -880,15 +1004,19 @@ def prune_to_firmware_package(extract_dir: Union[str, Path]) -> list[str]:
     # A scatter may name a file in a different case than the package stores it
     # (the player's storage is case-insensitive; a Linux host is not). Deleting
     # that file here is what later surfaced as CACHE_FILE_MISSING mid-flash.
+    # Only match keep_names inside the firmware package folder itself so
+    # duplicate reference scatters elsewhere (e.g. inside a bundled .app's
+    # assets/compat/) are pruned rather than spared.
     keep_names = {path.name.lower() for _name, path in _list_expected_images(scatter)}
     keep_names.add(scatter.name.lower())
+    folder_resolved = folder.resolve()
 
     removed: list[str] = []
     for f in root.rglob("*"):
         if (
             f.is_file()
             and f.resolve() not in keep
-            and f.name.lower() not in keep_names
+            and not (f.parent.resolve() == folder_resolved and f.name.lower() in keep_names)
         ):
             try:
                 f.unlink()

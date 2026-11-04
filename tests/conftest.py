@@ -9,3 +9,7 @@ this variable themselves.
 import os
 
 os.environ.setdefault("INNIOASIS_NO_SLEEP_INHIBIT", "1")
+# Donation copy is rendered in the reader's currency. Pin the dollar so tests
+# that assert "$10" describe the copy rather than the machine's locale; the
+# currency tests set their own code with monkeypatch.setenv.
+os.environ.setdefault("UPDATER_CURRENCY", "USD")

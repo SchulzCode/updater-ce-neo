@@ -128,68 +128,90 @@ def parse_manifest_xml(xml_text: str):
         except ET.ParseError as repaired_error:
             logger.error("slidia_manifest.xml parse failed: %s", repaired_error)
             return entries
-    for node in root.iter("package"):
-        try:
-            name = (node.get("name") or "").strip()
-            repo = (node.get("repo") or "").strip()
-            device = (node.get("device") or "").strip().upper()
-            handler = (node.get("handler") or "").strip()
-            ptype = (node.get("type") or "").strip()
-            # The manifest historically used both names; prefer ``icon`` when
-            # both are present, while retaining ``image`` as a fallback.
-            icon = (node.get("icon") or "").strip()
-            image = (node.get("image") or "").strip()
-            # Dark mode may set either name, preferring the explicit icon key.
-            icon_dark = (node.get("icon_dark") or node.get("image_dark") or "").strip()
-            min_version = (node.get("min_version") or node.get("min_app_version") or "").strip()
-            pkg_name = (node.get("package_name") or node.get("package") or "").strip()
-            post_install = (node.get("post_install") or "").strip()
-            post_install_2 = (
-                node.get("post_install2") or node.get("post_install_2") or ""
-            ).strip()
-            portable_zips = ", ".join(
-                parse_mirror_repos(
-                    node.get("portable_zips") or node.get("portable_zip") or ""
-                )
+    for node in root.iter():
+        local_name = node.tag.split("}", 1)[-1].split(":", 1)[-1] if node.tag else ""
+        if local_name != "package":
+            continue
+        entries.extend(_packages_from_mapping(node.attrib, description=(node.text or "").strip()))
+    return entries
+
+
+def _packages_from_mapping(mapping: dict, description: str = "") -> list[FirmwarePackage]:
+    """Convert a single manifest ``<package/>`` attribute dict or JSON feed
+    package object into one or more ``FirmwarePackage`` entries."""
+    out: list[FirmwarePackage] = []
+    try:
+        name = str(mapping.get("name") or "").strip()
+        repo = str(mapping.get("repo") or "").strip()
+        raw_device = str(mapping.get("device") or mapping.get("model") or "").strip()
+        handler = str(mapping.get("handler") or "").strip()
+        ptype = str(mapping.get("type") or "").strip()
+        icon = str(mapping.get("icon") or "").strip()
+        image = str(mapping.get("image") or "").strip()
+        icon_dark = str(mapping.get("icon_dark") or mapping.get("image_dark") or "").strip()
+        min_version = str(mapping.get("min_version") or mapping.get("min_app_version") or "").strip()
+        raw_pkg_name = str(mapping.get("package_name") or mapping.get("package") or "").strip()
+        post_install = str(mapping.get("post_install") or "").strip()
+        post_install_2 = str(
+            mapping.get("post_install2") or mapping.get("post_install_2") or ""
+        ).strip()
+        portable_zips = ", ".join(
+            parse_mirror_repos(
+                str(mapping.get("portable_zips") or mapping.get("portable_zip") or "")
             )
-            derivative = (node.get("derivative") or "").strip()
-            info_repo = (node.get("info_repo") or "").strip()
-            apk_repo = (node.get("apk_repo") or "").strip()
-            do_not_keep_data = (node.get("do_not_keep_data") or "").strip().lower() in ("true", "1", "yes")
-        except Exception:
-            continue
-        # Any model the manifest names is listed: the catalogue is data, and
-        # firmware for models outside the original Y1/Y2/A5 trio (Timmkoo and
-        # Innioasis G-series, Q-series, D1, ...) becomes selectable the moment
-        # a hosted release is added to slidia_manifest.xml. Nothing here needs
-        # a code change per model.
-        if not name or not repo or not device:
-            continue
-        if repo.lower() == SKIPPED_UPDATE_REPO.lower():
-            continue  # CE's in-app "please update" placeholder
-        if ptype and ptype.lower() not in ("img", "firmware"):
-            continue
-        if handler and "firmware" not in handler.lower():
-            continue
-        if min_version:
-            from .config import APP_VERSION
-            from .updates import parse_version
-            cur_v = parse_version(APP_VERSION)
-            req_v = parse_version(min_version)
-            if cur_v and req_v and cur_v < req_v:
-                continue
+        )
+        raw_deriv = mapping.get("derivative")
+        if isinstance(raw_deriv, bool):
+            derivative = ""
+        else:
+            derivative = str(raw_deriv or "").strip()
+            if derivative.lower() in ("false", "0", "none"):
+                derivative = ""
+        info_repo = str(mapping.get("info_repo") or "").strip()
+        apk_repo = str(mapping.get("apk_repo") or "").strip()
+        raw_dnkd = mapping.get("do_not_keep_data")
+        if isinstance(raw_dnkd, bool):
+            do_not_keep_data = raw_dnkd
+        else:
+            do_not_keep_data = str(raw_dnkd or "").strip().lower() in ("true", "1", "yes")
+        desc = str(mapping.get("description") or description or "").strip()
+        type_a_asset = str(mapping.get("type_a_asset") or "").strip()
+        type_b_asset = str(mapping.get("type_b_asset") or "").strip()
+        asset_pattern = str(mapping.get("asset_pattern") or "").strip()
+        raw_slug = str(mapping.get("slug") or "").strip()
+    except Exception:
+        return out
+
+    if not name or not repo or not raw_device:
+        return out
+    if repo.lower() == SKIPPED_UPDATE_REPO.lower():
+        return out
+    if ptype and ptype.lower() not in ("img", "firmware", "rom"):
+        return out
+    if handler and "firmware" not in handler.lower():
+        return out
+    if min_version:
+        from .config import APP_VERSION
+        from .updates import parse_version
+        cur_v = parse_version(APP_VERSION)
+        req_v = parse_version(min_version)
+        if cur_v and req_v and cur_v < req_v:
+            return out
+
+    devices = [d.strip().upper() for d in raw_device.split(",") if d.strip()]
+    for device in devices:
+        pkg_name = raw_pkg_name
         if not pkg_name:
-            # rom.zip is the Y1 stock image; every other model follows the
-            # rom_<model>.zip convention (rom_y2.zip, rom_a5.zip, rom_g5.zip).
             pkg_name = "rom.zip" if device == "Y1" else f"rom_{device.lower()}.zip"
-        entries.append(
+        slug = raw_slug if (raw_slug and len(devices) == 1) else _slug_for(name, device)
+        out.append(
             FirmwarePackage(
-                slug=_slug_for(name, device),
+                slug=slug,
                 name=name,
                 model=device,
                 repo=resolve_firmware_repo(repo),
                 package_name=pkg_name,
-                description="",
+                description=desc,
                 icon=icon,
                 icon_dark=icon_dark,
                 image=image,
@@ -199,9 +221,21 @@ def parse_manifest_xml(xml_text: str):
                 info_repo=resolve_firmware_repo(info_repo) if info_repo else "",
                 apk_repo=apk_repo,
                 do_not_keep_data=do_not_keep_data,
+                type_a_asset=type_a_asset,
+                type_b_asset=type_b_asset,
+                asset_pattern=asset_pattern,
                 portable_zips=portable_zips,
             )
         )
+    return out
+
+
+def parse_manifest_packages(packages_data: list) -> list[FirmwarePackage]:
+    """Parse package dicts from ``firmware-releases.json`` / ``firmware-feed.xml``."""
+    entries: list[FirmwarePackage] = []
+    for item in packages_data or []:
+        if isinstance(item, dict):
+            entries.extend(_packages_from_mapping(item))
     return entries
 
 
@@ -236,9 +270,10 @@ def _fetch_xml(url: str) -> str:
 
 
 def fetch_manifest():
-    """Fetch + parse the live manifest (primary URL, then fallback).
+    """Fetch + parse the live manifest (primary URL, then fallback, then
+    ``innioasis.app`` static feeds).
 
-    Returns a list of ``FirmwarePackage`` or ``None`` when both sources fail.
+    Returns a list of ``FirmwarePackage`` or ``None`` when all sources fail.
     """
     for url in CATALOG_MANIFEST_URLS:
         try:
@@ -249,6 +284,18 @@ def fetch_manifest():
                 return entries
         except Exception as e:
             logger.debug("Manifest fetch failed for %s: %s", url, e)
+
+    try:
+        from . import feed_fallback
+
+        feed_pkgs = feed_fallback.get_packages_from_feed(force_refresh=True)
+        entries = parse_manifest_packages(feed_pkgs)
+        if entries:
+            logger.info("Live catalog: %d packages from innioasis.app fallback feed", len(entries))
+            return entries
+    except Exception as e:
+        logger.debug("Fallback feed manifest lookup failed: %s", e)
+
     return None
 
 

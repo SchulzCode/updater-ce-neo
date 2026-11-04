@@ -286,10 +286,11 @@ def test_catalogue_rows_link_the_portable_package_and_keep_their_identity(monkey
 
     assert len(rows) == 1
     row = rows[0]
-    # The download is the portable package, but the row still describes the
-    # source release: model/type detection and the saved file name read
-    # asset_name, which stays the release's own zip.
-    assert row["download_url"].endswith("/rom-linux.zip")
+    # Updater CE always downloads firmware directly from the community
+    # firmware developer's release URL, while recording portable mirror
+    # metadata separately on the row.
+    assert row["download_url"] == "https://example.invalid/rom.zip"
+    assert row["portable_url"].endswith("/rom-linux.zip")
     assert row["asset_name"] == "rom.zip"
     assert row["portable_repo"] == MIRROR
     assert row["portable_platform"] == "linux"

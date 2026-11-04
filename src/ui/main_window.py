@@ -889,6 +889,7 @@ class MainWindow(QMainWindow):
         # True once this install has already fallen back to the other backend:
         # one automatic switch per run, so a bad cable cannot ping-pong.
         self._fallback_attempted = False
+        self._sp_flash_tool_tried = False
         self._sp_1013_seen = False
         self._reboot_suggestion_shown = False
         self._power_off_prompt = False
@@ -2238,6 +2239,8 @@ class MainWindow(QMainWindow):
         self.service.device_lost.connect(self._on_device_lost)
         if hasattr(self.service, "usb_disconnected"):
             self.service.usb_disconnected.connect(self._on_device_lost)
+        if hasattr(self.service, "getting_ready"):
+            self.service.getting_ready.connect(self._on_getting_ready)
         self.service.monitor_error.connect(self._on_monitor_error)
 
     def _on_download_started(self, name, model):
@@ -5138,6 +5141,8 @@ class MainWindow(QMainWindow):
         self._saw_all_command_exec = False
         self._completion_notified = False
         self._used_sp_backend = (backend_method(self._flash_method) == METHOD_SP)
+        if self._used_sp_backend:
+            self._sp_flash_tool_tried = True
         if hasattr(self, "_failure_grace_timer") and self._failure_grace_timer.isActive():
             self._failure_grace_timer.stop()
         self.service.start_flash(
@@ -5298,10 +5303,21 @@ class MainWindow(QMainWindow):
         # Rockbox and 0-100% for standard releases, so percent is passed through
         # directly without double-scaling.
         self._last_progress = percent
+        if percent is not None and percent > 12.5:
+            if hasattr(self, "_flash_page") and getattr(self._flash_page, "_getting_ready", False):
+                self._flash_page.set_getting_ready(False)
         self._flash_page.update_progress(percent)
         self._retry_page.update_progress(percent)
 
+    def _on_getting_ready(self, active: bool) -> None:
+        if hasattr(self, "_flash_page") and self._flash_page is not None:
+            self._flash_page.set_getting_ready(active)
+
     def _on_log_message(self, msg):
+        from ..flash_service import is_mtk_checksum_line
+        if is_mtk_checksum_line(msg):
+            if hasattr(self, "_flash_page") and self._flash_page is not None:
+                self._flash_page.set_getting_ready(True)
         # Backend/tool channel: a tool that prints a line and also reports it
         # through its callback would otherwise store the same event twice.
         self._append_log(msg, dedupe=True)
@@ -6199,6 +6215,36 @@ class MainWindow(QMainWindow):
                 f"returning to the power-off step with {_method_label(self._flash_method)}."
             )
             self._return_to_power_off_stage(self._flash_method)
+            return
+        if not cache_failure and error_code == "MTK_CHECKSUM_STALLED":
+            if hasattr(self, "_flash_page") and self._flash_page is not None:
+                self._flash_page.set_getting_ready(False)
+            from ..flash_service import is_sp_flash_tool_supported_for_host, backend_method, METHOD_SP, METHOD_MTK
+            sp_already_tried = (
+                getattr(self, "_fallback_attempted", False)
+                or getattr(self, "_sp_flash_tool_tried", False)
+                or getattr(self, "_used_sp_backend", False)
+                or (backend_method(self._flash_method) == METHOD_SP)
+            )
+            if not sp_already_tried and is_sp_flash_tool_supported_for_host():
+                self._fallback_attempted = True
+                self._sp_flash_tool_tried = True
+                self._append_log("Checksum stall persisted for 2 minutes; switching to SP Flash Tool to recover the player.")
+                self._return_to_power_off_stage(
+                    METHOD_SP,
+                    recovery=True,
+                    prompt_key="err_checksum_stall_sp_failover",
+                    prompt_kwargs={
+                        "failed": _method_label(METHOD_MTK),
+                        "next": _method_label(METHOD_SP),
+                    },
+                )
+                return
+            try:
+                self.sm.transition_to(FlashState.S5_FAILED)
+            except ValueError:
+                self.sm.force_state(FlashState.S5_FAILED)
+            self._show_install_failure("MTK_CHECKSUM_STALLED")
             return
         # A backend that never got going is not the end of the install on a
         # host that has the other engine: hand the user back to the power-off
@@ -8751,15 +8797,20 @@ class MainWindow(QMainWindow):
 
     def _hide_to_tray(self, event) -> None:
         """Close the window but keep the process and its tray icon alive."""
+        from ..tray import hold_off_automatic_termination
+
         self.hide()
         event.ignore()
         tray = self._ensure_background_tray()
         tray.show()
-        if not tray.is_visible():
+        if not tray.is_available():
             # No menu bar/tray on this host: an invisible process with no
             # window and no icon is unreachable, so leave cleanly instead.
             self._schedule_app_quit()
             return
+        # AppKit reaps an idle, windowless app within seconds and takes the
+        # menu bar item with it; the hold stays until the window comes back.
+        hold_off_automatic_termination(True)
         self._start_background_update_timer()
         self._set_window_polling(False)
 
@@ -8780,7 +8831,10 @@ class MainWindow(QMainWindow):
 
     def _hide_to_tray_at_launch(self) -> None:
         """Start-at-login: the tray is up and the window is never shown."""
+        from ..tray import hold_off_automatic_termination
+
         self._ensure_background_tray().show()
+        hold_off_automatic_termination(True)
         self._start_background_update_timer()
 
     def _start_background_update_timer(self) -> None:
@@ -8802,10 +8856,10 @@ class MainWindow(QMainWindow):
         tray = getattr(self, "_background_tray", None)
         if tray is None:
             from PySide6.QtGui import QIcon
-            from ..tray import BackgroundTray
+            from ..tray import create_background_tray
 
             fallback = QIcon(str(paths.RESOURCES_DIR / "icon.png"))
-            tray = BackgroundTray(
+            tray = create_background_tray(
                 QApplication.instance(),
                 self._show_from_tray,
                 self._quit_from_tray,
@@ -8817,7 +8871,9 @@ class MainWindow(QMainWindow):
 
     def _show_from_tray(self) -> None:
         from ..notifications import bring_window_to_front
+        from ..tray import hold_off_automatic_termination
 
+        hold_off_automatic_termination(False)
         bring_window_to_front(self)
         self._set_window_polling(True)
 
