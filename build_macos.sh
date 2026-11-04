@@ -155,7 +155,7 @@ else
         clean_brand_artifacts "$brand"
     done
     for brand in "${BRANDS[@]}"; do
-        INNOASIS_BRAND_LOCK=1 BUILD_BRAND="$brand" "$0" "${ORIGINAL_ARGS[@]}" || exit $?
+        INNOASIS_BRAND_LOCK=1 BUILD_BRAND="$brand" "$0" ${ORIGINAL_ARGS[@]+"${ORIGINAL_ARGS[@]}"} || exit $?
     done
     echo ""
     echo "=== Built for macOS ==="
@@ -219,7 +219,7 @@ if [ -z "${PYTHON:-}" ]; then
         echo "       (or download it from https://www.python.org/downloads/macos/)"
         exit 1
     fi
-    if ! BOOTSTRAP_OUTPUT="$("$BOOTSTRAP_PYTHON" "$BOOTSTRAP_SCRIPT" "${BOOTSTRAP_ARGS[@]}")"; then
+    if ! BOOTSTRAP_OUTPUT="$("$BOOTSTRAP_PYTHON" "$BOOTSTRAP_SCRIPT" ${BOOTSTRAP_ARGS[@]+"${BOOTSTRAP_ARGS[@]}"})"; then
         echo ""
         echo "ERROR: could not prepare the Python build environment (see above)."
         echo "       Fix that, then run ./build_macos.sh again."
@@ -232,7 +232,7 @@ if [ -z "${PYTHON:-}" ]; then
     fi
 else
     # An explicitly supplied interpreter is verified, never modified.
-    if ! "$PYTHON" "$BOOTSTRAP_SCRIPT" "${BOOTSTRAP_ARGS[@]}" >/dev/null; then
+    if ! "$PYTHON" "$BOOTSTRAP_SCRIPT" ${BOOTSTRAP_ARGS[@]+"${BOOTSTRAP_ARGS[@]}"} >/dev/null; then
         exit 1
     fi
 fi

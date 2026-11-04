@@ -138,7 +138,7 @@ if [ -z "${INNOASIS_BRAND_LOCK:-}" ]; then
     fi
 
     for brand in "${brands[@]}"; do
-        INNOASIS_BRAND_LOCK=1 BUILD_BRAND="$brand" "$0" "${FORWARD_ARGS[@]}" || exit $?
+        INNOASIS_BRAND_LOCK=1 BUILD_BRAND="$brand" "$0" ${FORWARD_ARGS[@]+"${FORWARD_ARGS[@]}"} || exit $?
     done
     echo ""
     echo "=== dist/ ==="
