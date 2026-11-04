@@ -319,9 +319,10 @@ def days_in_month(now=None) -> int:
 
 
 def goal_scope(now=None) -> str:
-    """``"monthly"`` on the month's edge days, ``"weekly"`` on the days between.
+    """``"monthly"`` on the month's edge days, ``"daily"`` on Tuesdays and
+    Wednesdays between them, and ``"weekly"`` on the remaining days.
 
-    The two are mutually exclusive: a reader is shown one funding figure, for
+    The scopes are mutually exclusive: a reader is shown one funding figure, for
     the period that is short right now.
     """
     now = now or datetime.now()
@@ -329,21 +330,27 @@ def goal_scope(now=None) -> str:
         return "monthly"
     if now.day > days_in_month(now) - GOAL_MONTHLY_CLOSING_DAYS:
         return "monthly"
+    if now.weekday() in (1, 2):  # Tuesday = 1, Wednesday = 2
+        return "daily"
     return "weekly"
 
 
 def goal_period_start(now=None) -> datetime:
     """First day of the period the goal names.
 
-    The monthly phase starts on day 1. The weekly phase opens on day 6, so
-    its periods are seven-day blocks from there (6-12, 13-19, ...). Each block
-    counts from zero: donations from the opening days were already shown
-    against the monthly figure, and counting them again would hide the week
+    The monthly phase starts on day 1. The daily phase (Tuesdays and
+    Wednesdays mid-month) names that specific day. The weekly phase opens on
+    day 6, so its periods are seven-day blocks from there (6-12, 13-19, ...).
+    Each block counts from zero: donations from earlier days were already
+    shown against their periods, and counting them again would hide the time
     that is actually short.
     """
     now = now or datetime.now()
-    if goal_scope(now) == "monthly":
+    scope = goal_scope(now)
+    if scope == "monthly":
         return datetime(now.year, now.month, 1)
+    if scope == "daily":
+        return datetime(now.year, now.month, now.day)
     block = (now.day - GOAL_MONTHLY_OPENING_DAYS - 1) // 7
     start_day = GOAL_MONTHLY_OPENING_DAYS + 1 + block * 7
     return datetime(now.year, now.month, start_day)
@@ -352,6 +359,11 @@ def goal_period_start(now=None) -> datetime:
 def weekly_goal_usd(now=None) -> float:
     """One quarter of the monthly running costs ($200 / 4 = $50)."""
     return WEEKLY_GOAL_USD
+
+
+def daily_goal_usd(now=None) -> float:
+    """Daily costs target ($10) for slower days (Tuesdays and Wednesdays)."""
+    return DAILY_GOAL_USD
 
 
 def format_goal_amount(amount) -> str:
@@ -372,7 +384,12 @@ def get_goal_stats(donations, now=None):
     """
     now = now or datetime.now()
     scope = goal_scope(now)
-    target = float(MONTHLY_GOAL_USD if scope == "monthly" else weekly_goal_usd(now))
+    if scope == "monthly":
+        target = float(MONTHLY_GOAL_USD)
+    elif scope == "daily":
+        target = float(daily_goal_usd(now))
+    else:
+        target = float(weekly_goal_usd(now))
     start = goal_period_start(now)
     start_day = start.date()
     raised = 0.0

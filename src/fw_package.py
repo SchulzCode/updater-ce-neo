@@ -241,12 +241,33 @@ def ranked_scatters(paths) -> list:
 
     Every lower-ranked scatter is ignored while a better one is present, which
     is how a package's own ``*_Android_scatter.txt`` displaces its
-    preserve-data copy and any stray ``*scatter*.txt``. More than one entry
-    survives only when files match equally well, which means two packages.
+    preserve-data copy and any stray ``*scatter*.txt`` for the same model/chipset.
+    When candidate scatters belong to two different hardware models or chipsets,
+    no auto-selection takes place and all candidates are returned so the ambiguity
+    is surfaced to the user.
     """
     items = [Path(p) for p in paths]
     if not items:
         return []
+
+    # Check whether candidate scatters target different hardware models or chipsets
+    try:
+        from . import catalog
+        models = set()
+        chipsets = set()
+        for p in items:
+            if p.is_file():
+                plat, proj = catalog.parse_scatter_header(p)
+                m = catalog.infer_model_from_scatter(plat, proj)
+                if m:
+                    models.add(m)
+                if plat:
+                    chipsets.add(plat.upper())
+        if len(models) > 1 or len(chipsets) > 1:
+            return items
+    except Exception:
+        pass
+
     # Compared on the rank alone: the name breaks a tie for ordering, never
     # for choosing, so two stock scatters from two chips stay ambiguous.
     best = min(scatter_sort_key(p)[0] for p in items)

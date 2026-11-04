@@ -156,6 +156,18 @@ def test_pick_scatter_accepts_a_lone_scatter_whatever_its_name(tmp_path):
     assert fw_package.pick_scatter(root).name == "oddly named scatter file.txt"
 
 
+def test_pick_scatter_rejects_scatters_for_two_different_models(tmp_path):
+    root = tmp_path / "pkg"
+    root.mkdir()
+    scatter_y1 = "platform: MT6572\nproject: eastaeon72_wet_jb3\n"
+    scatter_y2 = "platform: MT6582\nproject: eastaeon82_wet_kk\n"
+    (root / "MT6572_Android_scatter.txt").write_text(scatter_y1, encoding="utf-8")
+    (root / "rom_scatter.txt").write_text(scatter_y2, encoding="utf-8")
+    # Even though MT6572_Android_scatter.txt has higher rank name, they are for different models,
+    # so neither is auto-selected and pick_scatter returns None.
+    assert fw_package.pick_scatter(root) is None
+
+
 def test_preserve_scatter_is_a_variant_not_the_package_scatter(tmp_path):
     fw = _firmware(tmp_path / "fw")
     (fw / "MT6572_Android_scatter_preserve.txt").write_text(SCATTER, encoding="utf-8")
