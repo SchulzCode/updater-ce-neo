@@ -8523,6 +8523,9 @@ class MainWindow(QMainWindow):
     def _on_donations_updated(self, donations):
         if donations:
             self._donations = donations
+            page = getattr(self, "_support_page", None)
+            if page is not None:
+                page.set_donations(donations)
 
     def _on_support_clicked(self):
         """Open Support Us in the window. A finished install keeps Install Software selected.
@@ -8552,7 +8555,7 @@ class MainWindow(QMainWindow):
         dlg = QDialog(self)
         dlg.setWindowTitle(tr("nav_donate"))
         dlg.setModal(True)
-        page = SupportPage(dlg)
+        page = SupportPage(dlg, donations=getattr(self, "_donations", None))
         layout = QVBoxLayout(dlg)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.addWidget(page)

@@ -191,7 +191,6 @@ REPO_MIN_RELEASE_VERSION = {
     "rockbox-y1/rockbox": "0.5",
 }
 
-# --- Donations (public endpoints/addresses from innioasis.app / CE) ---------
 DONORS_CSV_URL = "https://innioasis.app/donors.csv"
 MONTHLY_GOAL_USD = 200.0
 

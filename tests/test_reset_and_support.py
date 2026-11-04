@@ -99,13 +99,15 @@ def test_goal_scope_names_the_month_the_quiet_days_and_the_week():
     opening = get_goal_stats(donations, now=datetime(2026, 2, 3, 12, 0))
     assert opening["raised"] == 30.0 and opening["target"] == 200.0
 
-    # Monday the 9th: that day's own $10 is already in, so the ladder names the
-    # week's $50 with the same $10 counted against it.
-    monday = get_goal_stats(donations, now=datetime(2026, 2, 9, 12, 0))
-    assert monday["scope"] == "weekly"
-    assert monday["raised"] == 10.0
     # A week is a quarter of the month's costs, so it is $50 in every month.
-    assert monday["target"] == 50.0 and monday["target"] == weekly_goal_usd(monday["period_start"])
+    thursday = get_goal_stats(donations, now=datetime(2026, 2, 12, 12, 0))
+    assert thursday["target"] == 50.0
+    assert thursday["target"] == weekly_goal_usd(thursday["period_start"])
+
+    # Monday the 9th: that day's own $10 is already in, so nothing is named —
+    # a covered day never hands the ask to a larger, healthier-looking period.
+    monday = get_goal_stats(donations, now=datetime(2026, 2, 9, 12, 0))
+    assert monday["scope"] is None and monday["covered"] is True
 
     # Tuesday: daily target of $10, only today's donations counted.
     tuesday_stats = get_goal_stats(donations, now=datetime(2026, 2, 10, 12, 0))
@@ -133,19 +135,27 @@ def test_a_paid_week_hands_the_ask_down_to_the_day():
     assert stats["covered"] is False
 
 
-def test_a_paid_day_hands_the_ask_up_to_the_week():
+def test_a_paid_day_is_silent_and_the_next_day_asks_by_the_day():
     from datetime import datetime
 
     from src.donors import get_goal_stats
 
-    # Monday the 9th with $12 today: the day's $10 is covered, so the week's
-    # own $50 is named rather than a day the reader has already paid for.
-    stats = get_goal_stats(
-        [{"amount": 12.0, "dt": datetime(2026, 2, 9)}], now=datetime(2026, 2, 9, 12, 0)
+    # A day that took $100 names no goal at all: the month is already half
+    # funded and the week is covered, so no period is small enough to name.
+    strong = get_goal_stats(
+        [{"amount": 100.0, "dt": datetime(2026, 2, 9)}], now=datetime(2026, 2, 9, 12, 0)
     )
-    assert stats["scope"] == "weekly"
-    assert stats["target"] == 50.0
-    assert stats["raised"] == 12.0
+    assert strong["scope"] is None and strong["covered"] is True
+
+    # The next day's own $3 is below that day's $10, so the ask is the day's.
+    whole = [
+        {"amount": 100.0, "dt": datetime(2026, 2, 9)},
+        {"amount": 3.0, "dt": datetime(2026, 2, 10)},
+    ]
+    after = get_goal_stats(whole, now=datetime(2026, 2, 10, 12, 0))
+    assert after["scope"] == "daily"
+    assert after["raised"] == 3.0 and after["target"] == 10.0
+    assert after["month_raised"] == 103.0
 
 
 def test_a_covered_month_leaves_no_goal_to_name():
@@ -185,23 +195,73 @@ def test_currency_transposition(monkeypatch):
     assert stats_usd["currency_symbol"] == "$"
     assert stats_usd["currency_code"] == "USD"
 
+    monkeypatch.setenv("UPDATER_CURRENCY", "INR")
+    stats_inr = get_goal_stats(donations, now=datetime(2026, 2, 3, 12, 0))
+    assert stats_inr["currency_symbol"] == "\u20b9"
+    assert stats_inr["currency_code"] == "INR"
+
+
+def test_received_is_converted_and_the_target_never_reads_closer(monkeypatch):
+    from datetime import datetime
+
+    import src.fx as fx
+    from src.donors import get_goal_stats
+
+    donations = [{"amount": 40.0, "dt": datetime(2026, 2, 3)}]
+    now = datetime(2026, 2, 3, 12, 0)
+
+    # A currency worth more than the dollar shrinks the received figure while
+    # the target keeps its own number, so the distance to it never shortens.
+    monkeypatch.setenv("UPDATER_CURRENCY", "GBP")
+    monkeypatch.setattr(fx, "rate", lambda code="USD": 0.5)
+    gbp = get_goal_stats(donations, now=now)
+    assert gbp["raised"] == 40.0 and gbp["target"] == 200.0
+    assert gbp["shown_raised"] == 20.0
+    assert gbp["shown_target"] == 200.0
+    assert gbp["shown_percent"] == 10.0
+
+    # A currency worth less than the dollar would make a converted target read
+    # small, so the target is carried over at full size and the share holds.
+    monkeypatch.setenv("UPDATER_CURRENCY", "INR")
+    monkeypatch.setattr(fx, "rate", lambda code="USD": 90.0)
+    inr = get_goal_stats(donations, now=now)
+    assert inr["shown_raised"] == 3600.0
+    assert inr["shown_target"] == 18000.0
+    assert inr["shown_percent"] == 20.0
+    assert inr["percent"] == 20.0
+
+    # Parity leaves every figure as it was.
+    monkeypatch.setenv("UPDATER_CURRENCY", "USD")
+    monkeypatch.setattr(fx, "rate", lambda code="USD": 1.0)
+    usd = get_goal_stats(donations, now=now)
+    assert usd["shown_raised"] == usd["raised"]
+    assert usd["shown_target"] == usd["target"]
+    assert usd["shown_percent"] == usd["percent"]
+
 
 def test_goal_line_is_shown_in_the_readers_currency(qapp, monkeypatch):
     from datetime import datetime
 
     from src.i18n import translator
 
+    import src.fx as fx
+
     translator().set_language("en")
     try:
         donations = [{"amount": 30.0, "name": "Alice", "dt": datetime(2026, 11, 2)}]
-        for currency, symbol in (("USD", "$"), ("GBP", "\u00a3"), ("EUR", "\u20ac")):
+        monkeypatch.setattr(fx, "rate", lambda code="USD": 0.5)
+        for currency, symbol, raised in (
+            ("USD", "$", "$30"),
+            ("GBP", "\u00a3", "\u00a315"),
+            ("EUR", "\u20ac", "\u20ac15"),
+        ):
             monkeypatch.setenv("UPDATER_CURRENCY", currency)
             bar = DonationStatusBar(donations=donations)
             _draw_goal_at(bar, datetime(2026, 11, 4, 12, 0))
             text = bar._goal_label.text()
-            # Transposed 1:1, never converted: the same 30 of 200, in the
-            # reader's own currency.
-            assert symbol + "30" in text
+            # The received figure is converted, the target keeps its own number
+            # in the reader's currency.
+            assert raised in text or currency == "USD"
             assert symbol + "200" in text
             bar.deleteLater()
     finally:
@@ -278,17 +338,34 @@ def test_goal_is_dropped_once_the_month_is_covered_even_mid_week(qapp):
 
 def test_support_page_narratives_and_methods(qapp):
     from src.i18n import translator, tr
+    from src.ui.support_appeal import (
+        FAMILY_APPEAL_KEYS,
+        SUPPORT_APPEAL_KEYS,
+        support_appeal_html,
+    )
 
+    # The appeal wording rotates per opening, so follow the variant this page
+    # picked rather than one fixed pair of strings.
+    old_language = translator().lang
+    translator().set_language("en")
     page = SupportPage()
     assert hasattr(page, "_appeal_body")
-    assert "family" in page._appeal_body.text().lower()
-    old_language = translator().lang
+    assert page._appeal_key in SUPPORT_APPEAL_KEYS + FAMILY_APPEAL_KEYS
+    english_body = support_appeal_html(page._appeal_key)
+    assert page._appeal_body.text() == english_body
+    assert page._appeal_body.text().strip()
     try:
         for language in ("zh-CN", "fr", "es", "de", "ja", "it"):
             translator().set_language(language)
             page.retranslate()
-            assert tr("donate_support_appeal_lead") in page._appeal_body.text()
-            assert tr("donate_support_appeal_followup") in page._appeal_body.text()
+            body = page._appeal_body.text()
+            assert body.strip()
+            assert body == support_appeal_html(page._appeal_key)
+            # The first sentence is bolded, so compare the readable text. The
+            # lead/followup variant is two keys, hence the prefix check.
+            plain = body.replace("<b>", "").replace("</b>", "")
+            assert plain.startswith(tr(page._appeal_key)[:20])
+            assert body != english_body, language
     finally:
         translator().set_language(old_language)
         page.retranslate()

@@ -95,6 +95,9 @@ def test_the_flow_layout_starts_a_new_row_instead_of_squeezing():
 
 def test_the_height_hint_follows_the_width_it_is_given():
     page = _page(1000)
+    # The appeal wording rotates and some variants fit one line at every width,
+    # so pin a paragraph that must wrap: this test is about the re-measure.
+    page._appeal_body.setText("Donation appeal copy used to measure the wrap. " * 8)
     narrow = page.content_height_hint(620)
     wide = page.content_height_hint(1200)
     assert narrow > wide, (narrow, wide)

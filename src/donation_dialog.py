@@ -1,14 +1,10 @@
-"""Donations modal, port of Updater CE's ``show_donation_dialog``."""
-
-# PEP 810 (Python 3.15+): see src/ui/main_window.py for the convention. The
-# donor list is fetched on a worker thread after the window is up, and this is
-# the other module that imports it.
 __lazy_modules__ = ["src.donors"]
 
 import logging
 import random
 import sys
 
+from . import fx
 from .browser import open_browser
 
 from PySide6.QtCore import QEasingCurve, QObject, QPropertyAnimation, QSize, Qt, QTimer, Signal
@@ -44,6 +40,7 @@ logger = logging.getLogger(__name__)
 
 class _DonationRefreshBridge(QObject):
     updated = Signal(object)
+    rates_ready = Signal()
 
 
 def decorative_updates_needed(widget) -> bool:
@@ -57,18 +54,6 @@ def decorative_updates_needed(widget) -> bool:
 
 
 class _LineLabel(QLabel):
-    """Clickable status-bar line (goal / donor ticker).
-
-    Emits the anchor href under the cursor, or ``""`` when plain text was
-    clicked, so the bar can open a donor's transaction URL for a linked name
-    and the donation dialog for every other word. The press is claimed so the
-    release is delivered here (QLabel ignores presses that are not on a link).
-
-    ``QLabel.anchorAt`` is not exposed by PySide6, so the link/plain split
-    leans on QLabel itself: ``linkActivated`` fires for anchors, and a
-    non-link release is left unaccepted by QLabel's own handler.
-    """
-
     clicked = Signal(str)
 
     def __init__(self, parent=None):
@@ -87,13 +72,6 @@ class _LineLabel(QLabel):
 
 
 class _Ticker(QWidget):
-    """Clips a status-bar line and scrolls it when the bar is too narrow.
-
-    Credits / Thanks and Support Us keep their own width. This middle slot is
-    the piece that gives up space: the full line stays put when it fits, and
-    marquees when it does not, so the corner links are never pushed off.
-    """
-
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMinimumWidth(0)
@@ -162,14 +140,6 @@ class _Ticker(QWidget):
 
 
 class _LinkButton(QPushButton):
-    """A button that reads as a text link rather than a control.
-
-    The donation bar is a line of text, so its corner actions (Credits /
-    Thanks, Support Us) carry no chrome: the label, a hover colour, a hand
-    cursor, and keyboard focus. The bar styles them, since they follow the
-    active theme.
-    """
-
     def __init__(self, text="", parent=None):
         super().__init__(text, parent)
         self.setFlat(True)
@@ -178,7 +148,6 @@ class _LinkButton(QPushButton):
 
 
 def get_appeal_messages() -> list[str]:
-    """Heartfelt community appeals rotating in place of or alongside the goal bar."""
     from .config import is_mediatek_installer
     from .i18n import tr
 
@@ -212,17 +181,6 @@ def _resolve_bar_state(inst):
 
 
 def _goal_is_suppressed(inst, stats) -> bool:
-    """True when the goal line must not be drawn for ``stats``.
-
-    A completed goal is never mentioned, only an outstanding one. When every
-    period on the ladder is paid for — the month covered, or the day and the
-    week settled with nothing left to fall back to — ``scope`` is ``None`` and
-    the bar carries no goal figure, no "raised of" and no "needed" sentence at
-    all: the donor lines and the ordinary encouragement are the whole display.
-    The monthly line additionally stays away at $0, where it would read as a
-    $200 shortfall in the first hour of the month; the daily and weekly lines
-    keep their $0, which is the point of asking by the day and the week.
-    """
     _os_k, _ew, g_ok, _p_ok, _ = _resolve_bar_state(inst)
     if not g_ok or stats.get("covered") or not stats.get("scope"):
         return True
@@ -237,30 +195,21 @@ def _goal_is_suppressed(inst, stats) -> bool:
 
 
 def _goal_line(stats, short: bool):
-    """The goal sentence and bar value for ``stats``'s scope.
-
-    Exactly one period is rendered — the first rung on the ladder that is
-    still short — so the day's, the week's and the month's costs never appear
-    side by side. Nothing is rendered when no rung is left (``scope`` is
-    ``None``). The figures are transposed 1:1 into the reader's currency
-    (\u00a3/\u20ac/$), never converted.
-    """
-    sym = stats.get("currency_symbol", "$")
     if not stats.get("scope"):
         return "", 0
+    sym = stats.get("currency_symbol", "$")
     if stats["scope"] == "daily":
         key = "donate_goal_day_status_fmt" if short else "donate_goal_day_fmt"
     elif stats["scope"] == "weekly":
         key = "donate_goal_week_status_fmt" if short else "donate_goal_week_fmt"
     else:
         key = "donate_goal_status_fmt" if short else "donate_goal_fmt"
-    raw = tr(key)
-    text = raw.replace("$", sym).format(
-        raised=format_goal_amount(stats["raised"]),
-        target=float(stats["target"]),
+    text = tr(key).replace("$", sym).format(
+        raised=format_goal_amount(stats.get("shown_raised", stats["raised"])),
+        target=format_goal_amount(stats.get("shown_target", stats["target"])),
         sym=sym,
     )
-    return text, int(round(float(stats["percent"]) * 10))
+    return text, int(round(float(stats.get("shown_percent", stats["percent"])) * 10))
 
 
 def _order_bar_slots(inst, items):
@@ -314,13 +263,6 @@ def _order_bar_slots(inst, items):
 
 
 class DonationStatusBar(QStatusBar):
-    """Compact, always-visible version of the Support dialog's goal display.
-
-    The center copy is deliberately abbreviated to fit between Credits / Thanks
-    and the right edge at the minimum window width; long donor names are clipped
-    to a short display name and the ticker remains a fallback for other locales.
-    All of it belongs to the donation UI, so it follows the "show donations" setting.
-    """
 
     def __init__(self, parent=None, donations=None, on_support=None,
                  on_donations_updated=None, on_credits=None):
@@ -355,30 +297,23 @@ class DonationStatusBar(QStatusBar):
         self._remote_refresh_timer.setInterval(self._remote_refresh_interval_ms)
         self._remote_refresh_timer.timeout.connect(self._refresh_remote_donors)
         self._remote_refresh_timer.start()
-        # Startup fetch is unconditional: the bar is built before the window is
-        # shown, so the visibility gate below would skip it.
         self._refresh_remote_donors(force=True)
+        self._rates_bridge = _DonationRefreshBridge(self)
+        self._rates_bridge.rates_ready.connect(self._redraw_goal)
+        fx.refresh(self._rates_bridge.rates_ready.emit)
 
     def _seal_ticker(self, label) -> None:
-        """Erase the previous line without locking the bar to the full string.
-
-        A minimum width as wide as the sentence pushes Support Us off the
-        window. The ticker host clips and marquees instead.
-        """
         from .ui.surfaces import seal_updating_text
         label.setMinimumWidth(0)
         seal_updating_text(label)
         label.setMinimumWidth(0)
 
     def credits_link(self):
-        """The bar's Credits / Thanks link; the window owns its visibility."""
         return self._credits_link
 
     def _style_link(self, btn, t, align="left"):
         """Text-link styling for the bar's corner actions."""
         side = "left" if align == "left" else "right"
-        # No background rule. ``background: transparent`` is stored as a slab
-        # and is the solid strip behind Credits / Thanks.
         btn.setStyleSheet(
             f"QPushButton {{ color: {t.fg}; border: none;"
             f" padding: 2px 4px; font-size: 12px; font-weight: 700; text-align: {side}; }}"
@@ -469,7 +404,6 @@ class DonationStatusBar(QStatusBar):
             super().paintEvent(event)
 
     def _clear_bar_plates(self) -> None:
-        """Keep goal, status, and link hosts on the same surface as the bar."""
         from PySide6.QtGui import QColor, QPalette
         from .ui.surfaces import (
             glass_surfaces_enabled,
@@ -492,10 +426,6 @@ class DonationStatusBar(QStatusBar):
             if host is None:
                 continue
             if not glass:
-                # Without a backdrop there is nothing to show through: the host
-                # must paint the window surface itself. A transparent host left
-                # the previous, longer donor line behind the new one, because
-                # nothing underneath was asked to repaint it.
                 host.setStyleSheet("")
                 paint_window_surface(host)
                 continue
@@ -522,8 +452,6 @@ class DonationStatusBar(QStatusBar):
         self._apply_bar_material(t)
         self.setMinimumHeight(30)
 
-        # Donation container: Credits / Thanks, the centred goal display, and
-        # the Support Us link in the right corner.
         self._donation_container = QWidget(self)
         row = QHBoxLayout(self._donation_container)
         row.setContentsMargins(12, 0, 12, 0)
@@ -531,8 +459,6 @@ class DonationStatusBar(QStatusBar):
 
         self._credits_link = _LinkButton(tr("nav_credits"))
         self._credits_link.setToolTip(tr("nav_credits"))
-        # Brands without an online credits page hide the link but keep its
-        # space, so the goal display stays on the bar's centre line.
         _keep_space = self._credits_link.sizePolicy()
         _keep_space.setRetainSizeWhenHidden(True)
         self._credits_link.setSizePolicy(_keep_space)
@@ -541,9 +467,6 @@ class DonationStatusBar(QStatusBar):
             self._credits_link.clicked.connect(on_credits)
         row.addWidget(self._credits_link, 0, Qt.AlignVCenter)
 
-        # The goal line and the donor ticker take turns in one centred slot:
-        # exactly one of them is visible at a time, and the stretch either side
-        # keeps whichever it is in the middle of the bar.
         self._goal_group = QWidget(self._donation_container)
         goal_row = QHBoxLayout(self._goal_group)
         goal_row.setContentsMargins(0, 0, 0, 0)
@@ -583,12 +506,10 @@ class DonationStatusBar(QStatusBar):
         self._style_link(self._support_btn, t, "right")
         if on_support:
             self._support_btn.clicked.connect(on_support)
-        # Sidebar Support Us is the entry point. This corner link is not shown.
         self._support_btn.setVisible(False)
         self._balance_links()
         self.addWidget(self._donation_container, 1)
 
-        # Status container: clean status update message without donation collision
         self._status_container = QWidget(self)
         status_row = QHBoxLayout(self._status_container)
         status_row.setContentsMargins(12, 0, 12, 0)
@@ -603,9 +524,6 @@ class DonationStatusBar(QStatusBar):
         self.addWidget(self._status_container, 1)
         self._clear_bar_plates()
 
-        # The goal and donor lines are clickable: any plain word opens the
-        # donation dialog, while a donor name that carries a transaction URL
-        # opens that URL instead.
         for label in (self._goal_label, self._donor_label):
             label.setCursor(Qt.PointingHandCursor)
             label.clicked.connect(self._handle_label_click)
@@ -614,7 +532,6 @@ class DonationStatusBar(QStatusBar):
         return btn.fontMetrics().horizontalAdvance(btn.text()) + 16
 
     def _balance_links(self):
-        """Keep both corner links balanced so the middle line stays centred."""
         if not hasattr(self, "_credits_link"):
             return
         credits_w = self._link_text_width(self._credits_link)
@@ -632,15 +549,12 @@ class DonationStatusBar(QStatusBar):
                 ticker.sync()
 
     def _relayout_links(self):
-        """Re-measure the corner links (new wording, new font) and re-balance."""
         for link in (self._credits_link, self._support_btn):
             link.setMinimumWidth(0)
             link.setMaximumWidth(16777215)  # QWIDGETSIZE_MAX
         self._balance_links()
 
     def _handle_label_click(self, href):
-        """Route a click on the goal/donor lines: a transaction URL wins,
-        anything else opens the donation dialog."""
         if href:
             open_browser(href)
             return
@@ -648,7 +562,6 @@ class DonationStatusBar(QStatusBar):
             self._on_support()
 
     def refresh_theme(self):
-        """Update status bar styling and labels to match active OS theme."""
         t = T()
         self._apply_bar_material(t)
         self.setMinimumHeight(30)
@@ -672,14 +585,6 @@ class DonationStatusBar(QStatusBar):
             self._donor_label.setText(self._donor_lines[0])
 
     def _build_donor_lines(self):
-        """Build recognized donor recognition lines adhering to community display rules.
-
-        - Ko-Fi donations: 'bought x coffees' (or 1 coffee).
-        - Other methods (Revolut, PayPal, Patreon, Bitcoin, etc.): '$x by [Method]' (or '$x').
-        - Top supporters: Recognise higher than average or multiple donations with 'Top supporter ' prefix.
-        - Ko-Fi only top supporters show total in coffees; multiple methods show total in dollars.
-        - Natural relative date phrasing (e.g. 'last year', 'in August', 'last month', 'in July', etc.).
-        """
         from .donors import format_donation_when
 
         valid = []
@@ -696,11 +601,8 @@ class DonationStatusBar(QStatusBar):
             return [tr("donate_thanks_status")]
 
         def is_generic_name(n: str) -> bool:
-            # Anonymous rows are named people only by label, never by identity:
-            # each one keeps its own line and amount below.
             return is_anonymous_donor(n)
 
-        # Group by normalized donor name to compute totals and multiple donations (except generic names)
         groups = {}
         for d in valid:
             raw_name = (d.get("name") or "").strip()
@@ -775,7 +677,6 @@ class DonationStatusBar(QStatusBar):
 
             return raw_line.replace("  ", " ").replace(" .", ".").strip()
 
-        # Add top supporter multi-donation aggregations first
         from datetime import datetime
         processed_multi = set()
         raw_items = []
@@ -784,7 +685,6 @@ class DonationStatusBar(QStatusBar):
                 total_amt = sum(float(x.get("amount", 0)) for x in d_list)
                 is_top = (total_amt >= 20.0) or (len(d_list) >= 2 and total_amt >= 10.0)
                 methods = {str(x.get("method") or "Donation").strip() for x in d_list}
-                # Latest date and best URL
                 latest_d = max(d_list, key=lambda x: x.get("dt") or datetime.min)
                 url = next((x.get("url") for x in d_list if x.get("url")), "")
                 display_name = d_list[0].get("name") or norm_name.title()
@@ -792,7 +692,6 @@ class DonationStatusBar(QStatusBar):
                 raw_items.append((line, total_amt, latest_d.get("dt"), is_top))
                 processed_multi.add(norm_name)
 
-        # Add single donations (and individual top supporters)
         for d in valid:
             raw_name = (d.get("name") or "").strip()
             norm_name = f"__generic_{id(d)}__" if is_generic_name(raw_name) else raw_name.lower()
@@ -809,7 +708,6 @@ class DonationStatusBar(QStatusBar):
         return lines or [tr("donate_thanks_status")]
 
     def _goal_stats(self):
-        """Goal numbers for this day of the month (monthly, or the week's own)."""
         return get_goal_stats(self.donations, now=getattr(self, "_goal_now", None))
 
     def _refresh_goal(self):
@@ -832,6 +730,16 @@ class DonationStatusBar(QStatusBar):
             self._donor_label.setVisible(False)
             self._goal_label.setText(text)
             self._goal_bar.setValue(value)
+
+    def _redraw_goal(self):
+        if not getattr(self, "_showing_goal", False):
+            return
+        stats = self._goal_stats()
+        if _goal_is_suppressed(self, stats):
+            return
+        text, value = _goal_line(stats, short=True)
+        self._goal_label.setText(text)
+        self._goal_bar.setValue(value)
 
     def _show_next_donor_line(self):
         if not self._donor_lines:
@@ -858,7 +766,6 @@ class DonationStatusBar(QStatusBar):
             self._show_next_donor_line()
             return
 
-        # Occasional 12% appeal
         if random.random() < (0.08 if (ew or os_k == 1) else 0.12):
             self._showing_goal = False
             self._goal_label.setVisible(False)
@@ -899,7 +806,6 @@ class DonationStatusBar(QStatusBar):
             self._donor_label.repaint()
 
     def _rotate(self):
-        """Strictly alternate: Message line (Goal/Appeal) -> Donation line -> Message line -> Donation line."""
         if not getattr(self, "_donations_enabled", True) or self._status_container.isVisible():
             return
         if not decorative_updates_needed(self):
@@ -935,11 +841,9 @@ class DonationStatusBar(QStatusBar):
         self.messageChanged.emit(text)
 
         if self._donations_enabled:
-            # Briefly hide donations to show status updates, shortly replaced with donations again
             revert_ms = int(timeout) if timeout and timeout > 0 else 4000
             self._status_revert_timer.start(revert_ms)
         else:
-            # Donations disabled: persist status message if timeout == 0, or timer if timeout > 0
             if timeout and timeout > 0:
                 self._status_revert_timer.start(int(timeout))
 
@@ -1041,7 +945,6 @@ class DonationDialog(QDialog):
         title_color = t.fg
         intro_color = t.fg_dim
 
-        # 1. Goal bar / donor ticker card
         # Kept initialized as a hidden child widget for API / test compatibility,
         # but omitted from the visible dialog layout per user specification.
         self._alt_container = QWidget(self)
@@ -1083,10 +986,6 @@ class DonationDialog(QDialog):
         alt_box.addWidget(self._donor_view)
         self._donor_view.setVisible(False)
 
-        # The appeal's own headline and subtitle already name the install
-        # ("X is installed on your Y."), so a separate success banner here
-        # would say the same thing twice. The no-donations completion screen
-        # carries that explanation instead (FlashPage.show_completion_note).
         if self.context == "install_success":
             if getattr(self, "is_360p_rockbox", False):
                 self._theme_box = QWidget()
@@ -1165,7 +1064,6 @@ class DonationDialog(QDialog):
             self._dont_ask = QCheckBox(tr("donate_dont_ask"))
             layout.addWidget(self._dont_ask)
 
-        # Coffee is the only donation action.
         coffee = QPushButton(tr("donate_buy_coffee"))
         coffee.setCursor(Qt.ArrowCursor)
         coffee.setStyleSheet("")
@@ -1233,8 +1131,6 @@ class DonationDialog(QDialog):
         self._goal_reached = bool(stats["reached"])
         self._goal_suppressed = _goal_is_suppressed(self, stats)
         if self._goal_suppressed:
-            # A completed goal is never mentioned: the card shows donor lines
-            # and the ordinary encouragement instead of a finished target.
             self._showing_goal = False
             self._goal_target = 0
             self._goal_view.setVisible(False)
@@ -1248,7 +1144,6 @@ class DonationDialog(QDialog):
     def _next_ticker_message(self) -> str:
         import random
         _os_k, _ew, g_ok, _p_ok, _ = _resolve_bar_state(self)
-        # 1. "If everyone using this today donated, it would cover our costs for a year" (~12% chance)
         if random.random() < 0.12:
             return tr("donate_appeal_costs_for_year")
 
@@ -1354,7 +1249,6 @@ class DonationDialog(QDialog):
             self._ticker_lines = self._donor_lines()
 
     def _toggle_crypto(self):
-        """Crypto donations are not offered."""
         return
 
     def _open_theme_pack_flow(self):

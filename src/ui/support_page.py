@@ -16,7 +16,12 @@ from ..browser import open_browser
 from ..config import DONATION_CRYPTO, DONATION_LINKS
 from ..i18n import tr
 from .dark import page_margins, theme_foreground
-from .support_appeal import bundled_portrait_path, circle_pixmap
+from .support_appeal import (
+    bundled_portrait_path,
+    circle_pixmap,
+    pick_support_appeal_key,
+    support_appeal_html,
+)
 from .surfaces import show_glass_backdrop
 from .widgets import Card, FlowLayout
 
@@ -86,8 +91,13 @@ class SupportPage(QWidget):
     #: the window has to refit so no copy is left clipped.
     content_size_changed = Signal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, donations=None):
         super().__init__(parent)
+        self._donations = self._cached_donations() if donations is None else list(donations)
+        # One wording per opening: the page picks a fresh appeal each time it
+        # is shown, and keeps the same one while it stays on screen.
+        self._appeal_key = pick_support_appeal_key(self._donations)
+        self._appeal_shown_once = False
         self._last_card_height = 0
         self._applied_card_height = 0
         self._content_check_queued = False
@@ -146,10 +156,7 @@ class SupportPage(QWidget):
         self._appeal_body.setStyleSheet(
             "font-size: 12px; line-height: 1.4; color: palette(window-text); background: transparent; border: none;"
         )
-        self._appeal_body.setText(
-            f"<b>{tr('donate_support_appeal_lead')}</b> "
-            f"{tr('donate_support_appeal_followup')}"
-        )
+        self._appeal_body.setText(support_appeal_html(self._appeal_key))
         card_layout.addWidget(self._appeal_body)
 
         # Primary payment methods: each button keeps its own label width and
@@ -245,6 +252,39 @@ class SupportPage(QWidget):
         self._card.set_layout(card_layout)
         layout.addWidget(self._card)
         layout.addStretch(1)
+
+    @staticmethod
+    def _cached_donations() -> list:
+        """Locally cached donor rows, read without touching the network.
+
+        The goal ladder and "did anyone donate today" both decide how often the
+        family wording comes round, so a page built on its own still has the
+        data the window would have handed it.
+        """
+        from .. import paths
+        from ..donors import cached_donors_path, load_donors_file, parse_donors_csv_text
+
+        try:
+            return parse_donors_csv_text(
+                load_donors_file([cached_donors_path(), paths.RESOURCES_DIR / "donors.csv"]) or ""
+            )
+        except Exception:
+            return []
+
+    def set_donations(self, donations) -> None:
+        """Take a fresher donor list; the next opening uses it for weighting."""
+        self._donations = list(donations or ())
+
+    def _render_appeal(self) -> None:
+        self._appeal_body.setText(support_appeal_html(self._appeal_key))
+
+    def showEvent(self, event):  # noqa: N802 (Qt naming)
+        super().showEvent(event)
+        if self._appeal_shown_once:
+            self._appeal_key = pick_support_appeal_key(self._donations)
+            self._render_appeal()
+            self._queue_content_check()
+        self._appeal_shown_once = True
 
     def content_height_hint(self, width: int | None = None) -> int:
         """Height the card needs at ``width``, wrapped copy and rows included.
@@ -357,10 +397,7 @@ class SupportPage(QWidget):
     def retranslate(self) -> None:
         self._author_lbl.setText(tr("donate_support_author"))
         self._role_lbl.setText(tr("donate_support_role"))
-        self._appeal_body.setText(
-            f"<b>{tr('donate_support_appeal_lead')}</b> "
-            f"{tr('donate_support_appeal_followup')}"
-        )
+        self._render_appeal()
         # New wording is a new line count; the card has to be re-measured.
         self._queue_content_check()
         self._honeygain_link.setText(tr("donate_honeygain"))
