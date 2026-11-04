@@ -214,21 +214,22 @@ def _resolve_bar_state(inst):
 def _goal_is_suppressed(inst, stats) -> bool:
     """True when the goal line must not be drawn for ``stats``.
 
-    A completed goal is never mentioned, only an outstanding one, so both
-    scopes drop the line the moment they are met and fall back to donor lines
-    and the usual encouragement. A covered month also silences the weekly ask:
-    the week's target is a share of the same costs, so once the month is paid
-    for there is nothing outstanding to name. The monthly line additionally
-    stays away at $0, where it would read as a $200 shortfall in the first hour
-    of the month; the weekly line keeps its $0, which is the point of asking by
-    the week.
+    A completed goal is never mentioned, only an outstanding one. When every
+    period on the ladder is paid for — the month covered, or the day and the
+    week settled with nothing left to fall back to — ``scope`` is ``None`` and
+    the bar carries no goal figure, no "raised of" and no "needed" sentence at
+    all: the donor lines and the ordinary encouragement are the whole display.
+    The monthly line additionally stays away at $0, where it would read as a
+    $200 shortfall in the first hour of the month; the daily and weekly lines
+    keep their $0, which is the point of asking by the day and the week.
     """
     _os_k, _ew, g_ok, _p_ok, _ = _resolve_bar_state(inst)
+    if not g_ok or stats.get("covered") or not stats.get("scope"):
+        return True
     raised = float(stats["raised"])
     target = float(stats["target"])
     return bool(
-        not g_ok
-        or stats["reached"]
+        stats["reached"]
         or stats.get("month_reached")
         or (stats["scope"] == "monthly" and raised <= 0.0)
         or (target - raised) < 1.0
@@ -238,12 +239,15 @@ def _goal_is_suppressed(inst, stats) -> bool:
 def _goal_line(stats, short: bool):
     """The goal sentence and bar value for ``stats``'s scope.
 
-    Weekly and monthly are mutually exclusive: only the scope this day of the
-    month names is rendered, so the week's costs and the month's never appear
-    side by side. The figures are transposed 1:1 into the reader's currency
+    Exactly one period is rendered — the first rung on the ladder that is
+    still short — so the day's, the week's and the month's costs never appear
+    side by side. Nothing is rendered when no rung is left (``scope`` is
+    ``None``). The figures are transposed 1:1 into the reader's currency
     (\u00a3/\u20ac/$), never converted.
     """
     sym = stats.get("currency_symbol", "$")
+    if not stats.get("scope"):
+        return "", 0
     if stats["scope"] == "daily":
         key = "donate_goal_day_status_fmt" if short else "donate_goal_day_fmt"
     elif stats["scope"] == "weekly":

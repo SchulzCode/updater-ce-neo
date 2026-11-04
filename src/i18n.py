@@ -3290,8 +3290,9 @@ _STRINGS: dict = {
         "de": "<b>Diese Woche: ${raised} / ${target:.0f}</b>",
         "ja": "<b>今週：${raised} / ${target:.0f}</b>",
     },
-    # The daily goal display: Tuesdays and Wednesdays mid-month name that day's
-    # own costs target ($10), optimized for urgency on generally slow days.
+    # The daily goal display: the quiet weekdays mid-month (Monday, Tuesday,
+    # Wednesday, Saturday) name that day's own costs target ($10), and a week
+    # that filled early hands its ask down to the day.
     "donate_goal_day_fmt": {
         "zh-CN": "<b>您已帮助我们筹集了今天 ${target:.0f} 美元中的 ${raised} 美元</b>",
         "en": "<b>You've helped us raise ${raised} of our ${target:.0f} for today</b>",

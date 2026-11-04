@@ -60,43 +60,54 @@ def test_donation_status_bar_goal_suppression(qapp):
     assert not bar2._goal_bar.isHidden()
     assert not bar2._goal_label.isHidden()
 
-    # When raised is 250 (>= 200), the goal is complete and is never mentioned
+    # When raised is 250 (>= 200) the month is paid for and the ladder has no
+    # smaller rung left to fall back to: no goal bar, no "raised of" and no
+    # "needed" text — donors and encouragement only.
     donations_high = [{"amount": 250.0, "name": "Bob", "dt": datetime(2026, 11, 2)}]
     bar3 = DonationStatusBar(donations=donations_high)
     _draw_goal_at(bar3, monthly_day)
-    assert bar3._goal_reached is True
+    assert bar3._goal_scope is None
     assert bar3._goal_suppressed is True
+    assert bar3._showing_goal is False
     assert not bar3._goal_bar.isVisible()
+    assert not bar3._goal_label.isVisible()
+    assert not bar3._donor_label.isHidden()
 
 
-def test_goal_scope_is_monthly_on_the_months_edge_days_only():
+def test_goal_scope_names_the_month_the_quiet_days_and_the_week():
     from datetime import datetime
 
     from src.donors import get_goal_stats, weekly_goal_usd
 
     donations = [
         {"amount": 30.0, "dt": datetime(2026, 2, 2)},   # opening days
-        {"amount": 10.0, "dt": datetime(2026, 2, 9)},   # first week block (Monday)
+        {"amount": 10.0, "dt": datetime(2026, 2, 9)},   # Monday, first week block
     ]
-    # February 2026 has 28 days: monthly on 1-5 and 22-28.
-    # Between day 6 and 21: Tuesdays and Wednesdays are daily ($10), others are weekly ($50).
+    # February 2026 has 28 days: monthly on 1-5 and 22-28. Between them the
+    # quiet weekdays — Monday, Tuesday, Wednesday, Saturday — name the day's
+    # $10, and Thursday, Friday and Sunday name the week's $50.
     assert get_goal_stats(donations, now=datetime(2026, 2, 5, 12, 0))["scope"] == "monthly"
-    assert get_goal_stats(donations, now=datetime(2026, 2, 6, 12, 0))["scope"] == "weekly"  # Friday
+    assert get_goal_stats(donations, now=datetime(2026, 2, 6, 12, 0))["scope"] == "weekly"   # Friday
+    assert get_goal_stats(donations, now=datetime(2026, 2, 7, 12, 0))["scope"] == "daily"    # Saturday
+    assert get_goal_stats(donations, now=datetime(2026, 2, 8, 12, 0))["scope"] == "weekly"   # Sunday
     assert get_goal_stats(donations, now=datetime(2026, 2, 10, 12, 0))["scope"] == "daily"   # Tuesday
     assert get_goal_stats(donations, now=datetime(2026, 2, 11, 12, 0))["scope"] == "daily"   # Wednesday
-    assert get_goal_stats(donations, now=datetime(2026, 2, 21, 12, 0))["scope"] == "weekly"  # Saturday
+    assert get_goal_stats(donations, now=datetime(2026, 2, 12, 12, 0))["scope"] == "weekly"  # Thursday
+    assert get_goal_stats(donations, now=datetime(2026, 2, 14, 12, 0))["scope"] == "daily"   # Saturday
     assert get_goal_stats(donations, now=datetime(2026, 2, 22, 12, 0))["scope"] == "monthly"
 
     opening = get_goal_stats(donations, now=datetime(2026, 2, 3, 12, 0))
     assert opening["raised"] == 30.0 and opening["target"] == 200.0
 
-    week = get_goal_stats(donations, now=datetime(2026, 2, 9, 12, 0))  # Monday
-    # The opening days' $30 belongs to the month, not to this week.
-    assert week["raised"] == 10.0
+    # Monday the 9th: that day's own $10 is already in, so the ladder names the
+    # week's $50 with the same $10 counted against it.
+    monday = get_goal_stats(donations, now=datetime(2026, 2, 9, 12, 0))
+    assert monday["scope"] == "weekly"
+    assert monday["raised"] == 10.0
     # A week is a quarter of the month's costs, so it is $50 in every month.
-    assert week["target"] == 50.0 and week["target"] == weekly_goal_usd(week["period_start"])
+    assert monday["target"] == 50.0 and monday["target"] == weekly_goal_usd(monday["period_start"])
 
-    # Tuesday: daily target of $10, only today's donations counted
+    # Tuesday: daily target of $10, only today's donations counted.
     tuesday_stats = get_goal_stats(donations, now=datetime(2026, 2, 10, 12, 0))
     assert tuesday_stats["scope"] == "daily"
     assert tuesday_stats["target"] == 10.0
@@ -105,11 +116,52 @@ def test_goal_scope_is_monthly_on_the_months_edge_days_only():
     closing = get_goal_stats(donations, now=datetime(2026, 2, 24, 12, 0))
     assert closing["scope"] == "monthly" and closing["raised"] == 40.0
 
-    # A met goal reports itself as met, so the display can drop it entirely.
-    met = get_goal_stats(
-        [{"amount": 15.0, "dt": datetime(2026, 2, 10)}], now=datetime(2026, 2, 10, 12, 0)
+
+def test_a_paid_week_hands_the_ask_down_to_the_day():
+    from datetime import datetime
+
+    from src.donors import get_goal_stats
+
+    # Thursday the 12th: the week of 6-12 has raised $60, so its $50 is paid
+    # for. The ask drops to the day's $10 rather than naming a finished week.
+    donations = [{"amount": 60.0, "dt": datetime(2026, 2, 9)}]
+    stats = get_goal_stats(donations, now=datetime(2026, 2, 12, 12, 0))
+    assert stats["scope"] == "daily"
+    assert stats["target"] == 10.0
+    assert stats["raised"] == 0.0        # nothing today, only earlier this week
+    assert stats["week_raised"] == 60.0
+    assert stats["covered"] is False
+
+
+def test_a_paid_day_hands_the_ask_up_to_the_week():
+    from datetime import datetime
+
+    from src.donors import get_goal_stats
+
+    # Monday the 9th with $12 today: the day's $10 is covered, so the week's
+    # own $50 is named rather than a day the reader has already paid for.
+    stats = get_goal_stats(
+        [{"amount": 12.0, "dt": datetime(2026, 2, 9)}], now=datetime(2026, 2, 9, 12, 0)
     )
-    assert met["reached"] is True
+    assert stats["scope"] == "weekly"
+    assert stats["target"] == 50.0
+    assert stats["raised"] == 12.0
+
+
+def test_a_covered_month_leaves_no_goal_to_name():
+    from datetime import datetime
+
+    from src.donors import get_goal_stats
+
+    # $200 in the month: every period on the ladder is paid for, so there is
+    # nothing outstanding to show — not a bar, not "raised of", not "needed".
+    stats = get_goal_stats(
+        [{"amount": 200.0, "dt": datetime(2026, 2, 2)}], now=datetime(2026, 2, 12, 12, 0)
+    )
+    assert stats["scope"] is None
+    assert stats["covered"] is True
+    assert stats["month_reached"] is True
+    assert stats["target"] == 0.0
 
 
 def test_currency_transposition(monkeypatch):
@@ -212,9 +264,10 @@ def test_goal_is_dropped_once_the_month_is_covered_even_mid_week(qapp):
         ]
         bar = DonationStatusBar(donations=donations)
         _draw_goal_at(bar, datetime(2026, 11, 12, 12, 0))  # Thursday mid-month
-        assert bar._goal_scope == "weekly"
-        assert bar._goal_reached is False   # the week itself is still short...
-        assert bar._goal_suppressed is True  # ...but the month is covered
+        # The month is covered, so no rung is outstanding and the ladder has
+        # nothing left to name: the bar shows donors and encouragement only.
+        assert bar._goal_scope is None
+        assert bar._goal_suppressed is True
         assert bar._showing_goal is False
         assert not bar._goal_label.isVisible()
         assert not bar._goal_bar.isVisible()

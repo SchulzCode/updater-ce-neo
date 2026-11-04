@@ -197,18 +197,27 @@ def get_monthly_goal_stats(donations, now=None):
 
 
 #: Days of the month whose goal display names the monthly target: the opening
-#: five and the closing seven. Every day between them names the week's own
-#: costs instead — a fraction of the monthly figure — so the ask keeps its
+#: five and the closing seven. Every day between them names a smaller period —
+#: a week's $50, or a day's $10 on the quiet weekdays — so the ask keeps its
 #: urgency instead of going quiet once the month's total looks healthy.
 GOAL_MONTHLY_OPENING_DAYS = 5
 GOAL_MONTHLY_CLOSING_DAYS = 7
 
+#: The quiet weekdays whose display names a single day's costs instead of a
+#: week's (``datetime`` weekday numbers: Monday, Tuesday, Wednesday, Saturday).
+#: They are the slowest days for gifts, so a $10 target measured against that
+#: day's own donations says more than a week that has barely begun.
+GOAL_DAILY_WEEKDAYS = (0, 1, 2, 5)
 
 #: A week of the month's running costs: one quarter of the $200 figure, so
 #: the weekly ask is always the same $50 rather than drifting with the length
-#: of the month.
+#: of the month. A day is a twentieth of the same figure: $10.
 WEEKLY_GOAL_USD = MONTHLY_GOAL_USD / 4.0
-DAILY_GOAL_USD = 10.0
+DAILY_GOAL_USD = MONTHLY_GOAL_USD / 20.0
+
+#: A period with less than this left is treated as paid for: naming a 40-cent
+#: shortfall would read as a rounding error rather than a need.
+GOAL_SETTLED_USD = 1.0
 
 
 def get_user_currency() -> tuple[str, str]:
@@ -319,40 +328,58 @@ def days_in_month(now=None) -> int:
 
 
 def goal_scope(now=None) -> str:
-    """``"monthly"`` on the month's edge days, ``"daily"`` on Tuesdays and
-    Wednesdays between them, and ``"weekly"`` on the remaining days.
+    """The period this day's ask starts on.
 
-    The scopes are mutually exclusive: a reader is shown one funding figure, for
-    the period that is short right now.
+    ``"monthly"`` on the month's edge days, ``"daily"`` on the quiet weekdays
+    between them (Monday, Tuesday, Wednesday, Saturday), and ``"weekly"`` on
+    the rest. This is where the ladder starts, not where it stops:
+    ``get_goal_stats`` walks on from here when the period is already paid for.
     """
     now = now or datetime.now()
     if now.day <= GOAL_MONTHLY_OPENING_DAYS:
         return "monthly"
     if now.day > days_in_month(now) - GOAL_MONTHLY_CLOSING_DAYS:
         return "monthly"
-    if now.weekday() in (1, 2):  # Tuesday = 1, Wednesday = 2
+    if now.weekday() in GOAL_DAILY_WEEKDAYS:
         return "daily"
     return "weekly"
 
 
-def goal_period_start(now=None) -> datetime:
-    """First day of the period the goal names.
+def goal_ladder(now=None) -> tuple:
+    """The periods this day's ask falls through when one is already paid for.
 
-    The monthly phase starts on day 1. The daily phase (Tuesdays and
-    Wednesdays mid-month) names that specific day. The weekly phase opens on
-    day 6, so its periods are seven-day blocks from there (6-12, 13-19, ...).
-    Each block counts from zero: donations from earlier days were already
-    shown against their periods, and counting them again would hide the time
-    that is actually short.
+    The month is the largest rung and never ladders: a covered month has no
+    outstanding costs to name at all, so the display goes silent instead of
+    inventing a fourth ask. A covered week hands down to the day, and a
+    covered day — or a week that filled early — climbs to the week, then the
+    month, so exactly one outstanding target is named, or none.
     """
     now = now or datetime.now()
-    scope = goal_scope(now)
+    base = goal_scope(now)
+    if base == "daily":
+        return ("daily", "weekly", "monthly")
+    if base == "weekly":
+        return ("weekly", "daily", "monthly")
+    return ("monthly",)
+
+
+def goal_period_start(now=None, scope=None) -> datetime:
+    """First day of the period ``scope`` names (default: this day's scope).
+
+    The month starts on day 1. A day's period is that calendar day. A week
+    opens on day 6, so weeks are seven-day blocks from there (6-12, 13-19,
+    ...). Each block counts from zero: donations from earlier days were already
+    shown against their own periods, and counting them again would hide the
+    time that is actually short.
+    """
+    now = now or datetime.now()
+    scope = scope or goal_scope(now)
     if scope == "monthly":
         return datetime(now.year, now.month, 1)
     if scope == "daily":
         return datetime(now.year, now.month, now.day)
-    block = (now.day - GOAL_MONTHLY_OPENING_DAYS - 1) // 7
-    start_day = GOAL_MONTHLY_OPENING_DAYS + 1 + block * 7
+    block = max(0, (now.day - GOAL_MONTHLY_OPENING_DAYS - 1) // 7)
+    start_day = max(1, GOAL_MONTHLY_OPENING_DAYS + 1 + block * 7)
     return datetime(now.year, now.month, start_day)
 
 
@@ -362,7 +389,7 @@ def weekly_goal_usd(now=None) -> float:
 
 
 def daily_goal_usd(now=None) -> float:
-    """Daily costs target ($10) for slower days (Tuesdays and Wednesdays)."""
+    """Daily costs target ($10) for the quiet weekdays mid-month."""
     return DAILY_GOAL_USD
 
 
@@ -372,28 +399,16 @@ def format_goal_amount(amount) -> str:
     return str(int(amount)) if amount.is_integer() else f"{amount:.2f}"
 
 
-def get_goal_stats(donations, now=None):
-    """Raised against the target this day of the month's display should name.
+def _goal_raised_by_window(donations, now):
+    """Money actually raised so far today, in this week block, and this month.
 
-    Returns ``{"scope", "raised", "remaining", "percent", "target",
-    "period_start", "reached", "month_raised", "month_reached",
-    "currency_symbol", "currency_code"}``.
-    ``reached`` reports a complete goal and ``month_reached`` a covered month:
-    either one means no goal may be named, because a finished target is never
-    mentioned, only an outstanding one.
+    Only received gifts count, only from the month being displayed, and never a
+    row dated later than ``now``: a scheduled donation has not arrived yet.
     """
-    now = now or datetime.now()
-    scope = goal_scope(now)
-    if scope == "monthly":
-        target = float(MONTHLY_GOAL_USD)
-    elif scope == "daily":
-        target = float(daily_goal_usd(now))
-    else:
-        target = float(weekly_goal_usd(now))
-    start = goal_period_start(now)
-    start_day = start.date()
-    raised = 0.0
-    month_raised = 0.0
+    today = now.date()
+    week_start = goal_period_start(now, "weekly").date()
+    month_start = datetime(now.year, now.month, 1).date()
+    day_raised = week_raised = month_raised = 0.0
     for donation in donations or ():
         dt = donation.get("dt")
         if not dt:
@@ -404,31 +419,79 @@ def get_goal_stats(donations, now=None):
         day = dt.date() if hasattr(dt, "date") else dt
         if day.year != now.year or day.month != now.month:
             continue
-        # A donation dated later in the month has not happened yet, so it is
-        # not part of what this period has raised.
-        if day > now.date():
+        if day > today:
             continue
         month_raised += amount
-        if day >= start_day:
-            raised += amount
-    percent = min(100.0, max(0.0, (raised / target) * 100.0)) if target > 0 else 0.0
+        if day >= week_start:
+            week_raised += amount
+        if day >= today:
+            day_raised += amount
+    return day_raised, week_raised, month_raised
+
+
+def get_goal_stats(donations, now=None):
+    """Raised against the target this day's display should name.
+
+    The periods nest, so the display walks ``goal_ladder``: the first period
+    that is still short is the one named. A paid period hands the ask to the
+    next rung, and when no rung is left the display is silent — ``scope`` is
+    ``None`` and ``covered`` is true, so no bar, no "raised of" and no
+    "needed" sentence is drawn for costs that are already paid for.
+
+    Returns ``{"scope", "raised", "remaining", "percent", "target",
+    "period_start", "reached", "covered", "day_raised", "week_raised",
+    "month_raised", "month_reached", "currency_symbol", "currency_code"}``.
+    """
+    now = now or datetime.now()
+    day_raised, week_raised, month_raised = _goal_raised_by_window(donations, now)
     sym, code = get_user_currency()
-    return {
+    targets = {
+        "daily": float(DAILY_GOAL_USD),
+        "weekly": float(WEEKLY_GOAL_USD),
+        "monthly": float(MONTHLY_GOAL_USD),
+    }
+    raised_by = {"daily": day_raised, "weekly": week_raised, "monthly": month_raised}
+    month_reached = month_raised >= MONTHLY_GOAL_USD
+
+    scope = None
+    if not month_reached:
+        for candidate in goal_ladder(now):
+            if targets[candidate] - raised_by[candidate] >= GOAL_SETTLED_USD:
+                scope = candidate
+                break
+
+    stats = {
         "scope": scope,
-        "raised": raised,
-        "remaining": max(0.0, target - raised),
-        "percent": percent,
-        "target": target,
-        "period_start": start,
-        # The month's own total travels with the week's: it is one pot of
-        # costs, so a covered month has nothing outstanding to name even in a
-        # week that has not seen a donation yet.
+        "raised": 0.0,
+        "remaining": 0.0,
+        "percent": 0.0,
+        "target": 0.0,
+        "period_start": None,
+        "reached": False,
+        "covered": scope is None,
+        # The three windows travel together: which rung is named depends on
+        # all of them, so the display can fall back without recounting.
+        "day_raised": day_raised,
+        "week_raised": week_raised,
         "month_raised": month_raised,
-        "month_reached": month_raised >= MONTHLY_GOAL_USD,
-        "reached": raised >= target,
+        "month_reached": month_reached,
         "currency_symbol": sym,
         "currency_code": code,
     }
+    if scope is None:
+        return stats
+
+    target = targets[scope]
+    raised = raised_by[scope]
+    stats.update(
+        raised=raised,
+        remaining=max(0.0, target - raised),
+        percent=min(100.0, max(0.0, (raised / target) * 100.0)),
+        target=target,
+        period_start=goal_period_start(now, scope),
+        reached=raised >= target,
+    )
+    return stats
 
 
 def cached_donors_path() -> Path:
