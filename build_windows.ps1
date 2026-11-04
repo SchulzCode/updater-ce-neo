@@ -61,8 +61,15 @@ if (-not $SkipPyInstaller) {
             Write-Error "Python 3.10+ is required. Install it from https://www.python.org/downloads/windows/ (or: winget install -e --id Python.Python.3.12), then run this build again."
             exit 1
         }
+        # The bootstrapper reports progress on stderr; under
+        # $ErrorActionPreference = "Stop" Windows PowerShell turns that into a
+        # terminating NativeCommandError, so collect it and judge the exit code.
+        $BootstrapErrorAction = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
         $BootstrapOutput = & $BootstrapLauncher $BootstrapScript 2>&1
-        if ($LASTEXITCODE -ne 0) {
+        $BootstrapExitCode = $LASTEXITCODE
+        $ErrorActionPreference = $BootstrapErrorAction
+        if ($BootstrapExitCode -ne 0) {
             $BootstrapOutput | ForEach-Object { Write-Host $_ }
             Write-Error "Could not prepare the Python build environment (see the messages above)."
             exit 1
