@@ -168,6 +168,16 @@ def is_flashable(model_id: str) -> bool:
     return bool(known and known.flashable)
 
 
+def brand_for(model_id: str) -> str:
+    """The registry's brand for a model, or "" when the model is unknown.
+
+    A newly discovered player takes its brand here, which is what the Select
+    Software brand filter groups models by (see ``catalog.package_brand``).
+    """
+    known = get(model_id)
+    return known.brand if known is not None else ""
+
+
 def model_from_filename(name: str, exclude=()) -> tuple:
     """Detect ``(model_id, variant_id)`` from a firmware package name.
 

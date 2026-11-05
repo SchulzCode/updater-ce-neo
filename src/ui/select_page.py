@@ -839,21 +839,33 @@ class SelectPackagePage(QWidget):
         filter_layout.setHorizontalSpacing(8)
         filter_layout.setVerticalSpacing(6)
 
-        # Row 0: Model and Type. The help mark sits in the type cell, beside the combo.
+        # Row 0: Brand. Only shown when slidia_manifest.xml tags releases with
+        # a brand attribute; it scopes the release listing and nothing else.
+        self._brand_label = QLabel(f"{tr('sel_brand')}:")
+        self._brand_label.setProperty("cssClass", "field-label")
+        filter_layout.addWidget(self._brand_label, 0, 0)
+
+        self._brand_combo = QComboBox()
+        self._brand_combo.setObjectName("softwareBrandFilter")
+        self._brand_combo.setMinimumWidth(80)
+        self._brand_combo.currentIndexChanged.connect(self._on_brand_changed)
+        filter_layout.addWidget(self._brand_combo, 0, 1)
+
+        # Row 1: Model and Type. The help mark sits in the type cell, beside the combo.
         self._model_label = QLabel(f"{tr('sel_model')}:")
         self._model_label.setProperty("cssClass", "field-label")
-        filter_layout.addWidget(self._model_label, 0, 0)
+        filter_layout.addWidget(self._model_label, 1, 0)
 
         self._model_combo = QComboBox()
         self._model_combo.setObjectName("softwareModelFilter")
         self._model_combo.setMinimumWidth(80)
         self.refresh_models()
         self._model_combo.currentTextChanged.connect(self._on_model_changed)
-        filter_layout.addWidget(self._model_combo, 0, 1)
+        filter_layout.addWidget(self._model_combo, 1, 1)
 
         self._type_label = QLabel(f"{tr('sel_type')}:")
         self._type_label.setProperty("cssClass", "field-label")
-        filter_layout.addWidget(self._type_label, 0, 2)
+        filter_layout.addWidget(self._type_label, 1, 2)
 
         self._type_combo = QComboBox()
         self._type_combo.setObjectName("softwareTypeFilter")
@@ -875,23 +887,23 @@ class SelectPackagePage(QWidget):
         self._type_help_icon.setContentsMargins(0, 0, 0, 0)
         type_row.addWidget(self._type_help_icon, 0, Qt.AlignVCenter)
         self._apply_type_help_hint()
-        filter_layout.addWidget(self._type_field, 0, 3)
+        filter_layout.addWidget(self._type_field, 1, 3)
 
-        # Row 1: Software & Refresh
+        # Row 2: Software & Refresh
         self._software_label = QLabel(f"{tr('sel_software')}:")
         self._software_label.setProperty("cssClass", "field-label")
-        filter_layout.addWidget(self._software_label, 1, 0)
+        filter_layout.addWidget(self._software_label, 2, 0)
 
         self._software_combo = QComboBox()
         self._software_combo.setObjectName("softwareReleaseFilter")
         self._software_combo.setMinimumWidth(120)
         self._software_combo.currentTextChanged.connect(self._on_software_changed)
-        filter_layout.addWidget(self._software_combo, 1, 1, 1, 2)
+        filter_layout.addWidget(self._software_combo, 2, 1, 1, 2)
 
         self._refresh_btn = QPushButton(tr("sel_refresh"))
         self._refresh_btn.setToolTip(tr("sel_refresh_tooltip"))
         self._refresh_btn.clicked.connect(lambda: self._refresh_releases(force_refresh=True))
-        filter_layout.addWidget(self._refresh_btn, 1, 3)
+        filter_layout.addWidget(self._refresh_btn, 2, 3)
 
         filter_layout.setColumnStretch(1, 1)
         filter_layout.setColumnStretch(3, 1)
@@ -1754,6 +1766,12 @@ class SelectPackagePage(QWidget):
         settings = self.settings or QSettings("innioasis", "updater")
         settings.remove("battery_hint_dismissed")
         self._check_battery_toast_visibility()
+        if hasattr(self, "_brand_combo") and self._brand_combo.count() > 0:
+            # Back to the default brand first: the device list is scoped to it.
+            self._brand_combo.blockSignals(True)
+            self._brand_combo.setCurrentIndex(0)
+            self._brand_combo.blockSignals(False)
+            self._populate_model_combo()
         if hasattr(self, "_model_combo") and self._model_combo.count() > 0:
             self._model_combo.blockSignals(True)
             self._model_combo.setCurrentIndex(0)
@@ -1783,6 +1801,7 @@ class SelectPackagePage(QWidget):
         self._install_online_link.setText(
             self._link_html("sel_install_online", bold=False)
         )
+        self._brand_label.setText(f"{tr('sel_brand')}:")
         self._model_label.setText(f"{tr('sel_model')}:")
         self._type_label.setText(f"{tr('sel_type')}:")
         self._software_label.setText(f"{tr('sel_software')}:")
@@ -1925,18 +1944,56 @@ class SelectPackagePage(QWidget):
                 install_progress_readability(bar)
 
     def refresh_models(self):
-        """Repopulate the device drop-down from what the catalogue offers.
+        """Repopulate the brand and device drop-downs from the catalogue.
 
-        Only models with a release in the live catalogue (``slidia_manifest.xml``)
-        are listed — there is no point offering a device with nothing to install,
-        and a package browsed by hand must never add a row here. Such a package
-        keeps its model on ``_current_package_model``, which is what the prompts
-        and the install use; the drop-down returns to its default row instead.
+        The brand drop-down only exists when ``slidia_manifest.xml`` tags
+        releases with a ``brand`` attribute; it scopes this listing and nothing
+        else. Only models with a release in the live catalogue
+        (``slidia_manifest.xml``) are listed — there is no point offering a
+        device with nothing to install, and a package browsed by hand must
+        never add a row here. Such a package keeps its model on
+        ``_current_package_model``, which is what the prompts and the install
+        use; the drop-down returns to its default row instead.
         """
+        self._sync_brand_combo()
+        self._populate_model_combo()
+
+    def current_brand(self) -> str:
+        """Brand the release listing is scoped to, or "" when none is offered."""
+        combo = getattr(self, "_brand_combo", None)
+        if combo is None or combo.count() == 0 or combo.currentIndex() < 0:
+            return ""
+        return str(combo.itemData(combo.currentIndex()) or combo.currentText())
+
+    def _sync_brand_combo(self) -> None:
+        """Fill the brand drop-down, hiding it when the manifest has no brands."""
+        combo = getattr(self, "_brand_combo", None)
+        if combo is None:
+            return
+        brands = catalog.brand_names()
+        current = self.current_brand()
+        combo.blockSignals(True)
+        combo.clear()
+        for brand in brands:
+            combo.addItem(brand, brand)
+        if brands:
+            idx = combo.findData(current) if current else -1
+            # Innioasis is the first brand, so index 0 is the default.
+            combo.setCurrentIndex(idx if idx >= 0 else 0)
+        combo.blockSignals(False)
+        combo.setVisible(bool(brands))
+        if hasattr(self, "_brand_label"):
+            self._brand_label.setVisible(bool(brands))
+
+    def _on_brand_changed(self, *_):
+        """Brand scopes the model list, and through it the release listing."""
+        self._populate_model_combo(refresh_selection=True)
+
+    def _populate_model_combo(self, refresh_selection: bool = False) -> None:
         from .. import device_models
 
         model_ids = device_models.selectable_models(
-            available_ids=catalog.available_models(),
+            available_ids=catalog.available_models(brand=self.current_brand()),
             fallback=DEVICE_MODELS,
         )
         current = self._model_combo.currentText().strip()
@@ -1953,7 +2010,7 @@ class SelectPackagePage(QWidget):
             # back to the default row, and the software list follows it below.
             self._model_combo.setCurrentIndex(0)
         self._model_combo.blockSignals(False)
-        if reset and hasattr(self, "_software_combo"):
+        if (reset or refresh_selection) and hasattr(self, "_software_combo"):
             self._on_model_changed()
 
     def _select_model_for_manual(self, model: str) -> None:
@@ -1987,7 +2044,7 @@ class SelectPackagePage(QWidget):
             self._selected_type = "A"
         else:
             self._selected_type = self._type_combo.currentData() or "A"
-        names = catalog.software_names_for_model(model)
+        names = catalog.software_names_for_model(model, brand=self.current_brand())
         self._populate_software_combo(names)
         self._update_device_status_copy()
         self._on_software_changed()
@@ -2207,8 +2264,14 @@ class SelectPackagePage(QWidget):
 
     def _on_manifest_refreshed(self, entries):
         if entries:
+            # A refreshed manifest can add, retire or newly brand a model, so
+            # rebuild the drop-downs before relisting the current model's
+            # software. A retired model resets the list to its default row.
+            self.refresh_models()
             current_sw = self.current_software()
-            names = catalog.software_names_for_model(self.current_model())
+            names = catalog.software_names_for_model(
+                self.current_model(), brand=self.current_brand()
+            )
             combo = self._software_combo
             existing = [
                 str(combo.itemData(i) or combo.itemText(i)) for i in range(combo.count())
@@ -2457,7 +2520,9 @@ class SelectPackagePage(QWidget):
         if prompt and installed_tag:
             package = None
             try:
-                pkgs = catalog.packages_for_model_software(curr_model, software_name)
+                pkgs = catalog.packages_for_model_software(
+                    curr_model, software_name, brand=self.current_brand()
+                )
                 package = pkgs[0] if pkgs else None
             except Exception:
                 package = None
@@ -3887,7 +3952,9 @@ class SelectPackagePage(QWidget):
     def _package_for_selection(self):
         try:
             pkgs = catalog.packages_for_model_software(
-                self.current_model(), self.current_software()
+                self.current_model(),
+                self.current_software(),
+                brand=self.current_brand(),
             )
         except Exception:
             return None
@@ -4156,7 +4223,9 @@ class SelectPackagePage(QWidget):
     def current_package(self):
         model = self.current_model()
         software = self.current_software()
-        pkgs = catalog.packages_for_model_software(model, software)
+        pkgs = catalog.packages_for_model_software(
+            model, software, brand=self.current_brand()
+        )
         return pkgs[0] if pkgs else None
 
     def get_package_path(self):

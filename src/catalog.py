@@ -84,6 +84,10 @@ class FirmwarePackage:
     # (``portable_zips`` in slidia_manifest.xml, comma separated). The row's
     # download is then the package a mirror built for this platform.
     portable_zips: str = ""
+    # Brand the release belongs to (``brand`` in slidia_manifest.xml). Empty
+    # means the device registry's brand for the model applies; a model the
+    # registry does not know yet is :data:`DEFAULT_BRAND`.
+    brand: str = ""
 
 
 def post_install_urls_for(*packages) -> tuple[str, str]:
@@ -108,6 +112,37 @@ def post_install_urls_for(*packages) -> tuple[str, str]:
 # fetched; the static table remains the offline first-run fallback.
 LIVE_CATALOG: list = []
 
+#: ``(model, name)`` / ``(model, repo)`` pairs the live manifest used to list
+#: but which publish no installable release. ``_catalog_packages`` merges the
+#: static table for models the live catalogue does not cover, so it must also
+#: skip a static row whose live twin was filtered out: a dead firmware must
+#: not return through the offline table.
+_UNAVAILABLE_NAMES: set = set()
+_UNAVAILABLE_REPOS: set = set()
+
+
+def _remember_unavailable(entries) -> None:
+    global _UNAVAILABLE_NAMES, _UNAVAILABLE_REPOS
+    names, repos = set(), set()
+    for package in entries or []:
+        model = str(getattr(package, "model", "") or "").strip().upper()
+        name = str(getattr(package, "name", "") or "").strip().lower()
+        repo = str(getattr(package, "repo", "") or "").strip().lower()
+        if model and name:
+            names.add((model, name))
+        if model and repo:
+            repos.add((model, repo))
+    _UNAVAILABLE_NAMES, _UNAVAILABLE_REPOS = names, repos
+
+
+def _unavailable_static_entry(package) -> bool:
+    model = str(getattr(package, "model", "") or "").strip().upper()
+    name = str(getattr(package, "name", "") or "").strip().lower()
+    repo = str(getattr(package, "repo", "") or "").strip().lower()
+    return (model and name and (model, name) in _UNAVAILABLE_NAMES) or (
+        model and repo and (model, repo) in _UNAVAILABLE_REPOS
+    )
+
 
 def set_live_catalog(entries: list):
     """Install firmware entries parsed from the live ``slidia_manifest.xml``.
@@ -125,6 +160,7 @@ def _catalog_packages():
         p for p in CATALOG
         if (p.model.upper(), p.name.strip().lower()) not in covered_models_and_names
         and (p.model.upper(), p.repo.strip().lower()) not in covered_models_and_repos
+        and not _unavailable_static_entry(p)
     ]
     return list(LIVE_CATALOG) + fallback
 
@@ -163,22 +199,70 @@ CATALOG = [
 ]
 
 
-def packages_for_model(model: str):
+#: Brand an entry without an explicit ``brand`` belongs to.
+DEFAULT_BRAND = "Innioasis"
+
+
+def package_brand(package) -> str:
+    """The brand a catalogue entry belongs to.
+
+    A ``brand`` attribute in ``slidia_manifest.xml`` wins. Otherwise the device
+    registry's brand for that model applies — that is where a newly discovered
+    player is tagged — and an unknown model counts as the vendor's own.
+    """
+    explicit = str(getattr(package, "brand", "") or "").strip()
+    if explicit:
+        return explicit
+    from . import device_models
+
+    return device_models.brand_for(getattr(package, "model", "")) or DEFAULT_BRAND
+
+
+def _brand_matches(package, brand: str) -> bool:
+    wanted = str(brand or "").strip()
+    if not wanted:
+        return True
+    return package_brand(package).casefold() == wanted.casefold()
+
+
+def brand_names() -> list:
+    """Brands the catalogue offers, Innioasis first.
+
+    Empty when no package carries a ``brand`` attribute: the Select Software
+    brand drop-down only appears when the manifest actually tags releases.
+    """
+    packages = LIVE_CATALOG or list(CATALOG)
+    if not any(str(getattr(p, "brand", "") or "").strip() for p in packages):
+        return []
+    names = []
+    for package in packages:
+        brand = package_brand(package)
+        if not any(brand.casefold() == known.casefold() for known in names):
+            names.append(brand)
+    # Innioasis is the default pick, so it leads regardless of document order.
+    names.sort(key=lambda name: name.casefold() != DEFAULT_BRAND.casefold())
+    return names
+
+
+def packages_for_model(model: str, brand: str = ""):
     # An info_repo package without a post-install page has no instructions for
     # its APK, so it is not offered at all.
     return [
         p for p in _catalog_packages()
-        if p.model == model and (not p.info_repo or p.post_install or p.post_install_2)
+        if p.model == model
+        and _brand_matches(p, brand)
+        and (not p.info_repo or p.post_install or p.post_install_2)
     ]
 
 
-def available_models():
+def available_models(brand: str = ""):
     """Model ids the user may pick in the device drop-down.
 
     Driven by ``slidia_manifest.xml`` (``LIVE_CATALOG``): a model is offered
     only when the manifest actually lists a release for it. When no manifest
     has loaded — first run offline, or a failed fetch — the static table is
-    used instead so the app never presents an empty model list.
+    used instead so the app never presents an empty model list. ``brand``
+    narrows the list to the releases of one brand (the Select Software filter).
 
     Note this is deliberately *not* :func:`_catalog_packages`: that helper
     merges the static fallback in, which is right for looking up a package but
@@ -187,15 +271,15 @@ def available_models():
     packages = LIVE_CATALOG or list(CATALOG)
     seen = []
     for pkg in packages:
-        if pkg.model and pkg.model not in seen:
+        if pkg.model and _brand_matches(pkg, brand) and pkg.model not in seen:
             seen.append(pkg.model)
     return seen
 
 
-def software_names_for_model(model: str):
+def software_names_for_model(model: str, brand: str = ""):
     seen_lower = set()
     seen = []
-    for p in packages_for_model(model):
+    for p in packages_for_model(model, brand=brand):
         norm = p.name.strip().lower()
         if norm not in seen_lower:
             seen_lower.add(norm)
@@ -203,9 +287,13 @@ def software_names_for_model(model: str):
     return seen
 
 
-def packages_for_model_software(model: str, software: str):
+def packages_for_model_software(model: str, software: str, brand: str = ""):
     target = (software or "").strip().lower()
-    return [p for p in packages_for_model(model) if p.name.strip().lower() == target]
+    return [
+        p
+        for p in packages_for_model(model, brand=brand)
+        if p.name.strip().lower() == target
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -2284,6 +2372,239 @@ class ReleasesClient:
             row["firmware_tag_name"] = latest.get("tag_name", "")
             out.append(row)
         return sorted(out, key=release_sort_key, reverse=True)
+
+    def available_release_rows(self, repo):
+        """Raw release rows for the catalogue's availability gate, or ``None``.
+
+        Deliberately one request, without :meth:`get_all_releases`'s backup
+        feed and Atom fallbacks: proving that a repository has *nothing*
+        published must not cost several more requests each time the manifest
+        loads. ``None`` means the answer could not be obtained (offline,
+        rate-limited, repository missing); an empty list is a real answer.
+        """
+        repo = resolve_firmware_repo(repo)
+        url = f"{GITHUB_API}/repos/{repo}/releases?per_page={GITHUB_RELEASES_PER_PAGE}"
+        data = self._get_json(url)
+        if not isinstance(data, list):
+            return None
+        if data:
+            releases = self._build_releases(data, repo)
+            if releases:
+                # The same rows serve the listing when the user picks this
+                # software, so the check is not extra work for it.
+                self.cache_releases(
+                    repo, sorted(releases, key=release_sort_key, reverse=True)
+                )
+        return data
+
+
+# ---------------------------------------------------------------------------
+# Catalogue availability: a listed firmware must lead to a release
+# ---------------------------------------------------------------------------
+#: How long a live answer about a repository is reused. The bundled release
+#: snapshot answers most entries without touching the network; this only
+#: bounds re-checks for repositories the snapshot does not cover yet.
+RELEASE_AVAILABILITY_TTL_SECONDS = 30 * 60
+
+_SNAPSHOT_CACHE: tuple | None = None
+_AVAILABILITY_CACHE: dict = {}
+
+
+def _release_snapshot_path():
+    """The release backup to read: downloaded copy first, then bundled copy."""
+    from . import online_data
+
+    for getter in (online_data.cached_path, online_data.bundled_path):
+        try:
+            path = getter("releases_backup.json")
+        except Exception:
+            continue
+        if path is None:
+            continue
+        try:
+            if path.is_file() and path.stat().st_size > 0:
+                return path
+        except OSError:
+            continue
+    return None
+
+
+def _release_snapshot_rows():
+    """Raw release rows from ``releases_backup.json`` keyed by repository.
+
+    ``None`` means the snapshot itself is unreadable, in which case a dead
+    entry and a brand-new one look the same and nothing may be hidden. A
+    repository mapped to ``[]`` is known to publish no releases.
+    """
+    global _SNAPSHOT_CACHE
+    path = _release_snapshot_path()
+    if path is None:
+        return None
+    try:
+        stat = path.stat()
+        key = (str(path), stat.st_mtime_ns, stat.st_size)
+    except OSError:
+        return None
+    if _SNAPSHOT_CACHE is not None and _SNAPSHOT_CACHE[0] == key:
+        return _SNAPSHOT_CACHE[1]
+    try:
+        data = json.loads(path.read_text(encoding="utf-8", errors="ignore"))
+    except Exception as e:
+        logger.debug("Release snapshot read failed: %s", e)
+        return None
+    raw_repos = data.get("repos") if isinstance(data, dict) else None
+    rows_by_repo: dict = {}
+    if isinstance(raw_repos, dict):
+        for repo, value in raw_repos.items():
+            releases = value.get("releases") if isinstance(value, dict) else value
+            if isinstance(releases, list):
+                rows_by_repo[str(repo).strip().lower()] = releases
+    _SNAPSHOT_CACHE = (key, rows_by_repo)
+    return rows_by_repo
+
+
+def _rows_have_installable_release(package, rows) -> bool:
+    """True when ``rows`` hold a release with a zip usable by ``package``."""
+    repo = str(getattr(package, "repo", "") or "").strip()
+    model = str(getattr(package, "model", "") or "").strip()
+    releases = [row for row in (rows or []) if isinstance(row, dict)]
+    if not releases:
+        return False
+    repo_has_rom = any(
+        _is_rom_zip_name(asset.get("name"))
+        for release in releases
+        for asset in (release.get("assets") or [])
+        if isinstance(asset, dict)
+    )
+    for release in releases:
+        tag = str(release.get("tag_name") or "").strip()
+        if not tag or is_base_release_tag(tag):
+            continue
+        if not release_version_ok(
+            repo,
+            tag,
+            model=model,
+            show_nightly=True,
+            show_old_rockbox=True,
+            release_name=release.get("name"),
+        ):
+            continue
+        variants = _release_rom_variants(
+            release.get("assets") or [],
+            tag,
+            repo,
+            repo_has_rom=repo_has_rom,
+            package=package,
+        )
+        if filter_rom_variants_for_model(variants, model, model, repo):
+            return True
+    return False
+
+
+def _availability_key(package) -> tuple:
+    return (
+        str(getattr(package, "repo", "") or "").strip().lower(),
+        str(getattr(package, "model", "") or "").strip().upper(),
+    )
+
+
+def _cached_availability(package):
+    hit = _AVAILABILITY_CACHE.get(_availability_key(package))
+    if hit is None:
+        return None
+    checked_at, usable = hit
+    if (time.time() - checked_at) >= RELEASE_AVAILABILITY_TTL_SECONDS:
+        return None
+    return usable
+
+
+def _remember_availability(package, usable) -> None:
+    _AVAILABILITY_CACHE[_availability_key(package)] = (time.time(), bool(usable))
+
+
+def filter_unavailable_packages(entries, *, allow_network: bool = False, client=None):
+    """Keep only catalogue entries that can list an installable release.
+
+    ``slidia_manifest.xml`` is maintained by hand, so it can name a repository
+    that has published no releases yet, or whose releases carry no firmware zip
+    for the model it lists. Such an entry only ever produces an empty Select
+    Software listing, so it is not offered at all.
+
+    The answer comes from the bundled/downloaded release snapshot, then the
+    per-repo release cache, then (with ``allow_network``) one GitHub request per
+    still-unknown repository. When no source can answer — no snapshot, offline,
+    rate-limited — the entry is kept: an unverifiable firmware must not vanish
+    from the catalogue.
+    """
+    entries = list(entries or [])
+    if not entries:
+        _remember_unavailable([])
+        return entries
+    snapshot = _release_snapshot_rows()
+    if snapshot is None:
+        return entries
+
+    network_client = client
+    client_ready = client is not None
+
+    def _client():
+        nonlocal network_client, client_ready
+        if not client_ready:
+            client_ready = True
+            try:
+                network_client = ReleasesClient()
+            except Exception:
+                logger.debug("Release availability client unavailable", exc_info=True)
+                network_client = None
+        return network_client
+
+    kept, dropped = [], []
+    for package in entries:
+        repo = str(getattr(package, "repo", "") or "").strip()
+        repo_key = repo.lower()
+        # The snapshot is the freshest local word (5 min TTL): when it covers
+        # the repository, its answer outranks an older live verdict, so a
+        # release published since the last check appears without waiting out
+        # RELEASE_AVAILABILITY_TTL_SECONDS.
+        snapshot_rows = snapshot.get(repo_key)
+        if snapshot_rows is not None:
+            usable = _rows_have_installable_release(package, snapshot_rows)
+        else:
+            usable = _cached_availability(package)
+        if usable is None:
+            cache_client = _client()
+            cached_rows = None
+            if cache_client is not None:
+                try:
+                    cached_rows = cache_client.get_cached_releases(repo)
+                except Exception:
+                    cached_rows = None
+            if cached_rows:
+                usable = _rows_have_installable_release(package, cached_rows)
+        if usable is None and allow_network and repo:
+            live_client = _client()
+            if live_client is not None:
+                try:
+                    live_rows = live_client.available_release_rows(repo)
+                except Exception:
+                    live_rows = None
+                if live_rows is not None:
+                    usable = _rows_have_installable_release(package, live_rows)
+                    _remember_availability(package, usable)
+        if usable is False:
+            dropped.append(package)
+        else:
+            kept.append(package)
+
+    _remember_unavailable(dropped)
+    if dropped:
+        logger.info(
+            "Catalogue: %d entr%s publish no installable release; hidden: %s",
+            len(dropped),
+            "y" if len(dropped) == 1 else "ies",
+            ", ".join(f"{p.model} {p.name}" for p in dropped),
+        )
+    return kept
 
 
 def _app_cache_dir():

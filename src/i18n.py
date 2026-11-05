@@ -653,6 +653,14 @@ _STRINGS: dict = {
         "de": "Modell",
         "ja": "モデル",
     },
+    "sel_brand": {
+        "zh-CN": "品牌",
+        "en": "Brand",
+        "fr": "Marque",
+        "es": "Marca",
+        "de": "Marke",
+        "ja": "ブランド",
+    },
     "sel_software": {
         "zh-CN": "软件",
         "en": "Software",

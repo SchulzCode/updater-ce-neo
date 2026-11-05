@@ -17,7 +17,9 @@
 
   FIELDS
   id        Stable short id used in code and in settings keys.
-  brand     Innioasis | Timmkoo.
+  brand     Innioasis | Timmkoo. Groups the model in the Select Software
+            brand filter (a slidia_manifest.xml brand attribute still wins
+            for that release).
   product   Marketing name shown to users.
   flashable "true" when Updater CE can write firmware to it over MediaTek
             BROM/preloader (needs a scatter file and a DA). "false" means the

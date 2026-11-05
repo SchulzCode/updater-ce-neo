@@ -11,6 +11,11 @@ Manifest format (attributes on ``<package/>`` elements):
     <package name="Original Software" repo="y1-community/y1-stock-rom"
              device="Y1" url="..." type="img" handler="Custom Firmware" />
 
+``brand`` (optional) tags a package with the brand it belongs to and wins
+over the device registry. Entries without it take the registry's brand for
+their model; an unknown model counts as Innioasis (see
+``catalog.package_brand``).
+
 ``portable_zips`` (or the legacy ``portable_zip``) names one or more
 Portable Flashing Zip Packager mirrors for the release, comma separated. The
 catalogue then downloads the portable package a mirror built for the current
@@ -146,6 +151,7 @@ def _packages_from_mapping(mapping: dict, description: str = "") -> list[Firmwar
         raw_device = str(mapping.get("device") or mapping.get("model") or "").strip()
         handler = str(mapping.get("handler") or "").strip()
         ptype = str(mapping.get("type") or "").strip()
+        brand = str(mapping.get("brand") or "").strip()
         icon = str(mapping.get("icon") or "").strip()
         image = str(mapping.get("image") or "").strip()
         icon_dark = str(mapping.get("icon_dark") or mapping.get("image_dark") or "").strip()
@@ -225,6 +231,7 @@ def _packages_from_mapping(mapping: dict, description: str = "") -> list[Firmwar
                 type_b_asset=type_b_asset,
                 asset_pattern=asset_pattern,
                 portable_zips=portable_zips,
+                brand=brand,
             )
         )
     return out
@@ -319,6 +326,7 @@ def cache_manifest(entries):
              "derivative": getattr(e, "derivative", "") or "",
              "info_repo": getattr(e, "info_repo", "") or "",
              "apk_repo": getattr(e, "apk_repo", "") or "",
+             "brand": getattr(e, "brand", "") or "",
              "do_not_keep_data": bool(getattr(e, "do_not_keep_data", False))}
             for e in entries
         ]
@@ -355,6 +363,7 @@ def load_cached_manifest():
                 derivative=e.get("derivative", "") or "",
                 info_repo=e.get("info_repo", "") or "",
                 apk_repo=e.get("apk_repo", "") or "",
+                brand=e.get("brand", "") or "",
                 do_not_keep_data=bool(e.get("do_not_keep_data", False)),
             )
             for e in data
@@ -385,24 +394,38 @@ def load_snapshot_manifest():
     return entries or None
 
 
-def refresh_catalog(force_refresh=False):
+def refresh_catalog(force_refresh=False, check_releases=True, allow_release_network=False):
     """Best-effort live manifest refresh: network-first, cache when offline.
 
     The live slidia_manifest.xml is always preferred. The cached copy is used
     only when the fetch fails, then the build-time snapshot. Installs entries
     into ``catalog.LIVE_CATALOG`` (static table remains the fallback when this
     yields nothing). Returns the entry list (possibly []).
+
+    ``check_releases`` drops entries that cannot list an installable release
+    (see ``catalog.filter_unavailable_packages``), so a hand-edited manifest
+    cannot leave a model in the drop-downs with nothing to install.
+    ``allow_release_network`` lets that check ask GitHub about repositories the
+    local release snapshot does not know yet; only the off-UI manifest worker
+    enables it, because the answer is not worth blocking a caller for.
     """
     from . import catalog
 
-    entries = fetch_manifest()
-    if entries:
-        cache_manifest(entries)
+    fetched = fetch_manifest()
+    if fetched:
+        cache_manifest(fetched)
+        entries = fetched
     else:
         entries = load_cached_manifest()
     if not entries:
         # Baked in at build time: no connection, no cache, still a catalogue.
         entries = load_snapshot_manifest()
+    if entries and check_releases:
+        # A failed manifest fetch means no connection: keep the entry rather
+        # than spend minutes on release requests that cannot be answered.
+        entries = catalog.filter_unavailable_packages(
+            entries, allow_network=allow_release_network and bool(fetched)
+        )
     catalog.set_live_catalog(entries or [])
     return entries or []
 
@@ -420,7 +443,10 @@ class ManifestWorker(QThread):
         try:
             if self.isInterruptionRequested():
                 return
-            entries = refresh_catalog(force_refresh=self.force_refresh)
+            entries = refresh_catalog(
+                force_refresh=self.force_refresh,
+                allow_release_network=True,
+            )
             if self.isInterruptionRequested():
                 return
             self.finished.emit(entries)
