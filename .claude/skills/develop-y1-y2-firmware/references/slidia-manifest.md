@@ -25,16 +25,28 @@ for it — nothing in the code is per-model beyond display names.
 | `repo` | `owner/repo` whose GitHub Releases carry the firmware zip |
 | `device` | Target model (`Y1`, `Y2`, `A5`, `Q5`, `G1`, ...) |
 | `url` | Human-facing project URL (release notes / repo) |
-| `type` | `img` (or `firmware`). Anything else is skipped — APK entries belong elsewhere |
+| `type` | `img` (also accepts `firmware` / `rom`). Anything else is skipped — APK entries belong elsewhere |
 | `handler` | Must contain `firmware` (conventionally `Custom Firmware`) |
+| `brand` | Catalogue brand (`Innioasis`, `Timmkoo`). Empty uses the model registry's brand |
 | `portable_zips` | Comma-separated `*-mirror` repos that publish ready-to-run packages |
 | `derivative` | Repo this firmware is built from; drives Keep Data compatibility |
-| `info_repo` / `apk_repo` | Instructions / APK source for companion apps |
+| `info_repo` | App repo whose releases describe what the firmware deploys (needs a `post_install` page) |
+| `apk_repo` | App repo whose APK is installed after the firmware |
 | `post_install`, `post_install2` | Page(s) opened after a successful install |
-| `icon`, `icon_dark`, `image`, `image_dark` | Catalogue artwork URLs |
+| `icon`, `icon_dark`, `image`, `image_dark` | Logo URLs; the app prefers the release's `updater.png` / `updater.jpg`, then `icon` (and `icon_dark` in dark mode) |
 | `min_version` / `min_app_version` | Hide the entry from older app builds |
-| `package_name` | Release asset name; defaults to `rom.zip` for Y1 and `rom_<device>.zip` otherwise |
-| `do_not_keep_data` | `true` marks a firmware that must not inherit user data |
+| `package_name` | Release asset name; defaults to `rom.zip` for Y1 and `rom_<device>.zip` otherwise (accepts `package` as a legacy alias) |
+| `asset_pattern` | Glob for releases whose zips are not named `rom*.zip` (e.g. `my-firmware-*.zip`) |
+| `type_a_asset` / `type_b_asset` | Globs naming the Y1 Type A / Type B package when its filename does not say so |
+| `slug` | Stable identifier for links and saved installs; generated from name + model when empty |
+| `description` | Catalogue description (attribute value or element text) |
+| `do_not_keep_data` | `true` (also `1` / `yes`) marks a firmware that must not inherit user data |
+
+Aliases still accepted: `model` (`device`), `package` (`package_name`),
+`portable_zip` (`portable_zips`), `post_install_2` (`post_install2`),
+`min_app_version` (`min_version`) and `image_dark` (`icon_dark`). New entries
+should use the names above; `https://innioasis.app/developers.html` generates
+entries for every attribute and previews the result against the live file.
 
 Skipped automatically: `repo="Please-Click/Updates-Available"` (the app's own
 update placeholder), non-`img` types, handlers that are not firmware, and

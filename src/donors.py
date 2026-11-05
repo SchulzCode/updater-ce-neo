@@ -1,9 +1,10 @@
 import csv
 import logging
+import random
 import re
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from . import fx
@@ -185,21 +186,33 @@ def get_monthly_goal_stats(donations, now=None):
     return raised, remaining, percent, target
 
 
-# The monthly figure is a summary, not the everyday ask: it leads only on the
-# first and last three days of a month, and otherwise appears once the smaller
-# rungs are covered. Tuesday to Thursday climb daily -> weekly -> monthly and
-# the rest of the week climbs weekly -> monthly, so a supporter is always shown
-# the smallest goal still short of its target rather than a whole month's.
+# The monthly figure is a summary, not the everyday ask: it leads on the first
+# and last three days of a month, and otherwise appears once the smaller rungs
+# are covered. Tuesday, Wednesday and Saturday open on a single day's costs;
+# the rest of the week opens on the week. A day still short of $9.99 names
+# today's costs whichever rung it opened on, so a supporter sees the smallest
+# outstanding target rather than a whole month's.
 GOAL_MONTHLY_OPENING_DAYS = 3
 GOAL_MONTHLY_CLOSING_DAYS = 3
 
-# The quiet weekdays open on a single day's costs.
-GOAL_DAILY_WEEKDAYS = (1, 2, 3)  # Tuesday, Wednesday, Thursday
+# The slow weekdays whose ask opens on a single day's costs.
+GOAL_DAILY_WEEKDAYS = (1, 2, 5)  # Tuesday, Wednesday, Saturday
 
 WEEKLY_GOAL_USD = MONTHLY_GOAL_USD / 4.0
 DAILY_GOAL_USD = MONTHLY_GOAL_USD / 20.0
 
-GOAL_SETTLED_USD = 1.0
+# A day is paid at $9.99, not the full $10: a one-cent shortfall is a rounding
+# artefact, and the next rung should take over before the line reads complete.
+GOAL_DAILY_REACHED_USD = 9.99
+
+# When neither the week nor the month is complete, the ask is randomly one of
+# the two. A strong rolling week ($60 in the last seven days) leans the display
+# towards the month, whose summary then has the more useful context. The roll
+# is kept for the calendar day so a rotating bar does not flip every refresh.
+GOAL_WEEK_MONTH_SHARE = 0.5
+GOAL_MONTHLY_BOOST_USD = 60.0
+GOAL_MONTHLY_BOOST_SHARE = 0.8
+_GOAL_MONTH_ROLLS = {}
 
 GOAL_COPY_KEYS = {
     "daily": "donate_goal_day_fmt",
@@ -225,9 +238,9 @@ def goal_scope(now=None) -> str:
     """The rung a day opens on.
 
     The first and last three days of a month summarise the month so far.
-    Tuesday to Thursday open on the day's own costs; the rest of the week
-    opens on the week, so a fresh day with nothing raised yet does not replace
-    the line with a "$0 today".
+    Tuesday, Wednesday and Saturday open on the day's own costs; the rest of
+    the week opens on the week. A day that is still short of $9.99 names
+    today's costs whichever rung it opened on (see :func:`get_goal_stats`).
     """
     now = now or datetime.now()
     if now.day <= GOAL_MONTHLY_OPENING_DAYS:
@@ -240,26 +253,32 @@ def goal_scope(now=None) -> str:
 
 
 def goal_ladder(now=None) -> tuple:
-    """Rungs in the order they are shown: the smallest unmet goal first."""
+    """Rungs a day's display may name, smallest first.
+
+    Month-edge days name only the month. Every other day can name today's
+    costs while they are short, then either the week or the month. The choice
+    between those two is made in :func:`get_goal_stats` so it stays stable for
+    the day instead of changing on every refresh.
+    """
     now = now or datetime.now()
-    base = goal_scope(now)
-    if base == "daily":
-        return ("daily", "weekly", "monthly")
-    if base == "weekly":
-        return ("weekly", "monthly")
-    return ("monthly",)
+    if goal_scope(now) == "monthly":
+        return ("monthly",)
+    return ("daily", "weekly", "monthly")
 
 
 def goal_period_start(now=None, scope=None) -> datetime:
+    """First day of ``scope`` (default: this day's opening rung).
+
+    Weeks are calendar weeks, Monday to Sunday, matching the website's funding
+    bar. A day is the calendar day and a month starts on the 1st.
+    """
     now = now or datetime.now()
     scope = scope or goal_scope(now)
     if scope == "monthly":
         return datetime(now.year, now.month, 1)
     if scope == "daily":
         return datetime(now.year, now.month, now.day)
-    block = max(0, (now.day - GOAL_MONTHLY_OPENING_DAYS - 1) // 7)
-    start_day = max(1, GOAL_MONTHLY_OPENING_DAYS + 1 + block * 7)
-    return datetime(now.year, now.month, start_day)
+    return datetime(now.year, now.month, now.day) - timedelta(days=now.weekday())
 
 
 def weekly_goal_usd(now=None) -> float:
@@ -278,10 +297,30 @@ def format_goal_amount(amount) -> str:
     return f"{amount:,.2f}" if big else f"{amount:.2f}"
 
 
+def _goal_monthly_roll(now):
+    """A stable 0..1 roll for the day's week-or-month choice."""
+    key = now.date()
+    roll = _GOAL_MONTH_ROLLS.get(key)
+    if roll is None:
+        _GOAL_MONTH_ROLLS.clear()
+        roll = random.random()
+        _GOAL_MONTH_ROLLS[key] = roll
+    return roll
+
+
 def _goal_raised_by_window(donations, now):
+    """Money actually raised today, this week, this month and in the last week.
+
+    Only received gifts count, and never a row dated later than ``now``: a
+    scheduled donation has not arrived yet. The month counts from the 1st; the
+    week is the calendar week (Monday to Sunday) and may begin in the previous
+    month; the rolling week is the seven days ending today.
+    """
     today = now.date()
     week_start = goal_period_start(now, "weekly").date()
-    day_raised = week_raised = month_raised = 0.0
+    month_start = today.replace(day=1)
+    rolling_start = today - timedelta(days=6)
+    day_raised = week_raised = month_raised = rolling_raised = 0.0
     for donation in donations or ():
         dt = donation.get("dt")
         if not dt:
@@ -290,21 +329,29 @@ def _goal_raised_by_window(donations, now):
         if amount <= 0:
             continue
         day = dt.date() if hasattr(dt, "date") else dt
-        if day.year != now.year or day.month != now.month:
-            continue
         if day > today:
             continue
-        month_raised += amount
+        if day >= month_start:
+            month_raised += amount
         if day >= week_start:
             week_raised += amount
         if day >= today:
             day_raised += amount
-    return day_raised, week_raised, month_raised
+        if day >= rolling_start:
+            rolling_raised += amount
+    return day_raised, week_raised, month_raised, rolling_raised
 
 
-def get_goal_stats(donations, now=None):
+def get_goal_stats(donations, now=None, monthly_roll=None):
+    """Raised against the target this day's display should name.
+
+    The ladder follows the website's funding bar: a month-edge day always
+    names the month; a day short of $9.99 names today; after that a completed
+    week names the month, and while both week and month are open the display
+    picks one of them for the day. A finished month is silent.
+    """
     now = now or datetime.now()
-    day_raised, week_raised, month_raised = _goal_raised_by_window(donations, now)
+    day_raised, week_raised, month_raised, rolling_raised = _goal_raised_by_window(donations, now)
     sym, code = fx.pair()
     targets = {
         "daily": float(DAILY_GOAL_USD),
@@ -316,11 +363,20 @@ def get_goal_stats(donations, now=None):
 
     scope = None
     if not month_reached:
-        for candidate in goal_ladder(now):
-            if targets[candidate] - raised_by[candidate] < GOAL_SETTLED_USD:
-                continue
-            scope = candidate
-            break
+        if goal_scope(now) == "monthly":
+            scope = "monthly"
+        elif day_raised < GOAL_DAILY_REACHED_USD:
+            scope = "daily"
+        elif week_raised >= WEEKLY_GOAL_USD:
+            scope = "monthly"
+        else:
+            roll = _goal_monthly_roll(now) if monthly_roll is None else float(monthly_roll)
+            monthly_share = (
+                GOAL_MONTHLY_BOOST_SHARE
+                if rolling_raised >= GOAL_MONTHLY_BOOST_USD
+                else GOAL_WEEK_MONTH_SHARE
+            )
+            scope = "monthly" if roll < monthly_share else "weekly"
 
     stats = {
         "scope": scope,
@@ -334,6 +390,7 @@ def get_goal_stats(donations, now=None):
         "day_raised": day_raised,
         "week_raised": week_raised,
         "month_raised": month_raised,
+        "last_week_raised": rolling_raised,
         "month_reached": month_reached,
         "currency_symbol": sym,
         "currency_code": code,
@@ -386,9 +443,10 @@ def format_goal_line(stats) -> str:
     """Warm, period-aware costs line for the status bar and modal.
 
     ``stats`` comes from :func:`get_goal_stats`, so the sentence names the
-    same daily/weekly/monthly rung the support appeal is using. A zero or
-    already-covered rung returns an empty string; the caller shows a donor or
-    appeal line instead of a cold "$0 of ..." sentence.
+    same daily/weekly/monthly rung the support appeal is using. A quiet day
+    still names today's smallest ask ("$0 of $10 costs for today"); a zero
+    weekly/monthly summary stays silent rather than reading as a cold target.
+    An already-covered rung also returns an empty string.
     """
     from .i18n import tr
 
@@ -398,7 +456,9 @@ def format_goal_line(stats) -> str:
         return ""
     raised = float(stats.get("shown_raised") or 0)
     target = float(stats.get("shown_target") or 0)
-    if raised <= 0 or target <= 0 or raised >= target:
+    if target <= 0 or raised >= target:
+        return ""
+    if raised <= 0 and stats.get("scope") != "daily":
         return ""
     code = str(stats.get("currency_code") or "USD")
     raised_text = fx.money_local(raised, code)

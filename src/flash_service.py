@@ -720,6 +720,22 @@ def sp_error_code(value) -> str:
     return match.group(1) if match else ""
 
 
+_SP_PMT_FORMAT_RE = re.compile(
+    r"(?<!\d)8502(?!\d)|PMT CHANGED FOR THE ROM",
+    re.IGNORECASE,
+)
+
+
+def is_pmt_format_required_error(value) -> bool:
+    """True when SP Flash Tool says the partition table must be reformatted.
+
+    Error 8502 is the tool's "PMT changed for the ROM; it must be downloaded"
+    result. Its console log sometimes names the error without the number, so
+    the tool's own sentence is accepted as well.
+    """
+    return bool(_SP_PMT_FORMAT_RE.search(str(value or "")))
+
+
 def is_wrong_model_error(value) -> bool:
     """True when the failure means the wrong player is connected."""
     text = str(value or "").upper()
@@ -828,6 +844,13 @@ def parse_flash_error(value, model: str = "") -> tuple[str, str]:
 
     if raw == "CACHE_FILE_MISSING":
         return tr("install_failed_title"), tr("err_cache_file_missing_desc")
+
+    # The partition table changed, so Download Only cannot proceed. The
+    # guided flow normally catches this before the failure card and asks for
+    # Format All + Download; this keeps a raw code understandable if it does
+    # reach the card.
+    if is_pmt_format_required_error(raw):
+        return tr("install_failed_title"), tr("err_pmt_format_required_desc")
 
     # 1. Host disk full / out of storage
     if is_storage_full_error(raw):
@@ -2538,27 +2561,35 @@ class SpAuthFileError(Exception):
         self.reason = reason
 
 
-def sp_flash_tool_console_args(scatter_arg, da_arg, auth_file="", log=None):
+def sp_flash_tool_console_args(scatter_arg, da_arg, auth_file="", log=None, format_all=False):
     """Console arguments for flash_tool, carrying an auth file when one is set.
 
     The ordinary run is the reference build's own command line — the same
     executable, Download Agent, scatter handling, battery mode and log redirection
-    — with ``-c download`` in place of ``-c format-download``: Download Only
-    writes the scatter's downloadable images and formats nothing, so a partition
-    left out of the scatter keeps its contents. That is the path the shipped
-    Chinese build drives, and the one that flashes a hand-selected scatter the
-    way users expect.
+    — with ``-c download``: Download Only writes the scatter's downloadable
+    images and formats nothing, so a partition left out of the scatter keeps
+    its contents. That is the path the shipped Chinese build drives, and the one
+    that flashes a hand-selected scatter the way users expect.
+
+    ``format_all`` is the one opt-in difference: a package that declares
+    ``PMT_format_needed="true"`` needs ``-c format-download`` (or
+    ``<format-download/>`` on the auth-file XML path) because Download Only
+    cannot replace its partition table. Everything else about the command
+    stays identical.
 
     ALIGNMENT WITH THE CHINESE MARKET RELEASE & OVERLAY FIRMWARE COMPATIBILITY:
     While we must be aligned with the Chinese market release for flashing back-end
     functionality in SP Flash Tool and MTKclient with correct scatter handling
     and partition image writes, we must however ensure that console mode XML
-    runs do not run in the format mode, just the download mode (<download-only/>
-    or -c download), to ensure compatibility with "overlay firmware packages" like
-    Reborn (Y2Linux) which leave some partitions untouched (see
-    MT6582_Android_scatter.txt). Overlay packages leave foundational partitions
-    (PRELOADER, MBR, EBR, UBOOT/LK, SECCFG, PROTECT_F/S) intact. Running in format
-    mode would erase those untouched partitions and brick the device.
+    runs do not run in the format mode unless the package explicitly opts in,
+    just the download mode (<download-only/> or -c download), to ensure
+    compatibility with "overlay firmware packages" like Reborn (Y2Linux) which
+    leave some partitions untouched (see MT6582_Android_scatter.txt). Overlay
+    packages leave foundational partitions (PRELOADER, MBR, EBR, UBOOT/LK,
+    SECCFG, PROTECT_F/S) intact. Running in format mode would erase those
+    untouched partitions and brick the device. A package that declares
+    ``PMT_format_needed="true"`` is the explicit exception: its partition table
+    is known to need replacement.
     We must also, in aligning with the reliable Chinese market release, not
     negatively impact our clearly intentional front end functionality like the
     keep data feature which simply excludes the usr/usrdata partition from the
@@ -2578,7 +2609,9 @@ def sp_flash_tool_console_args(scatter_arg, da_arg, auth_file="", log=None):
         if not sp_console_config.auth_file_usable(auth):
             raise SpAuthFileError(auth, "missing")
         try:
-            config = sp_console_config.write_console_config(scatter_arg, da_arg, auth)
+            config = sp_console_config.write_console_config(
+                scatter_arg, da_arg, auth, format_all=format_all
+            )
         except sp_console_config.SpConfigError as e:
             raise SpAuthFileError(auth, e.reason) from e
         except OSError as e:
@@ -2587,7 +2620,7 @@ def sp_flash_tool_console_args(scatter_arg, da_arg, auth_file="", log=None):
             log(tr("sp_auth_loaded").format(path=auth))
         return ["-r", "-i", str(config)]
     return [
-        "-c", "download",
+        "-c", "format-download" if format_all else "download",
         "-s", scatter_arg,
         "-d", da_arg,
         "-t", "without",
@@ -4045,16 +4078,20 @@ class FlashWorker(QThread):
 
     def __init__(self, package_path, pre_extracted_dir="", method="auto", model="",
                  parent=None, device_loss_hold=None, da_file="", auth_file="", is_rockbox=False,
-                 primed_mtk=None, keep_data=False):
+                 primed_mtk=None, keep_data=False, format_all=False):
         super().__init__(parent)
         self.package_path = package_path
         self.pre_extracted_dir = pre_extracted_dir
         self.model = (model or "").strip()
         self._primed_mtk = primed_mtk
+        # A package whose partition table must be replaced uses SP Flash Tool's
+        # Format All + Download. That mode reformats internal storage, so it
+        # can never be combined with Keep Data.
+        self.format_all = bool(format_all)
         # "Keep my data": user data partitions are written by neither
         # backend. SP Flash Tool gets a scatter that leaves them out; the
         # MTKClient write plan simply never addresses them.
-        self.keep_data = bool(keep_data)
+        self.keep_data = bool(keep_data) and not self.format_all
         pkg_low = (Path(package_path).name if package_path else "").lower()
         self._is_rockbox_flow = bool(is_rockbox or "rockbox" in pkg_low)
         # User-chosen Download Agent and authentication file. Updater CE leaves
@@ -4893,6 +4930,12 @@ class FlashWorker(QThread):
         self._sp_last_part_total = 0
         self._sp_last_sent = 0
 
+        if self.format_all:
+            self._log(
+                "SP Flash Tool will use Format All + Download for this firmware "
+                "(partition table change)."
+            )
+
         auth_file = self._resolve_auth_file()
         if self.da_file and str(Path(da_file)) != str(Path(sp_dir) / "MTK_AllInOne_DA.bin"):
             self._log(f"Download agent: {Path(da_file).name}")
@@ -4905,7 +4948,9 @@ class FlashWorker(QThread):
         # refuses such an agent outright ("lib DA NOT match!").
         da_arg = _to_short_path(da_file) if IS_WINDOWS else str(da_file)
         try:
-            sp_args = sp_flash_tool_console_args(scatter_arg, da_arg, auth_file, self._log)
+            sp_args = sp_flash_tool_console_args(
+                scatter_arg, da_arg, auth_file, self._log, format_all=self.format_all
+            )
         except SpAuthFileError as e:
             self._log(f"Authentication file cannot be used: {e.path}")
             self.finished.emit(False, "SP_AUTH_FILE_UNUSABLE")
@@ -4965,6 +5010,13 @@ class FlashWorker(QThread):
             if "CHIP_TYPE_NOT_MATCH" in str(error_detail).upper():
                 self.finished.emit(False, "DEVICE_PACKAGE_MISMATCH")
                 return
+
+            if is_pmt_format_required_error(error_detail):
+                self._sp_err_code = self._sp_err_code or "8502"
+                self._log(
+                    "SP Flash Tool error 8502: the partition table changed; "
+                    "Format All + Download is required."
+                )
 
             # The console's completion line ("All command exec" or "Flash complete!")
             # marks an unconditionally successful flash execution.
@@ -5164,6 +5216,13 @@ class FlashWorker(QThread):
             return
         if is_sp_flash_complete_line(line):
             self._sp_flash_complete = True
+            return
+        if is_pmt_format_required_error(line):
+            self._sp_err_code = "8502"
+            self._log(
+                "SP Flash Tool error 8502: the partition table changed; "
+                "Format All + Download is required."
+            )
             return
         if is_disconnection_error(line):
             # The tool has already reported the command finished: the cable
@@ -8442,7 +8501,8 @@ class FlashService(QObject):
 
     # -- flashing -----------------------------------------------------------
     def start_flash(self, package_path, pre_extracted_dir="", method="auto", model="",
-                    da_file="", auth_file="", is_rockbox=False, keep_data=False):
+                    da_file="", auth_file="", is_rockbox=False, keep_data=False,
+                    format_all=False):
         # Kill any backend still running (e.g. a searching flash_tool) first,
         # then start the new one. The cancelled worker's late terminal signals
         # are detached so they cannot reach the UI or clobber the new run.
@@ -8471,6 +8531,7 @@ class FlashService(QObject):
             is_rockbox=is_rockbox,
             primed_mtk=primed,
             keep_data=keep_data,
+            format_all=format_all,
         )
         worker._wait_for = retired
         self._flash_worker = worker

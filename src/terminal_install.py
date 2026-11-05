@@ -40,6 +40,7 @@ def sp_flash_tool_command(
     sp_dir: Optional[Path] = None,
     da_file: Optional[Path] = None,
     auth_file: str = "",
+    format_all: bool = False,
 ) -> Optional[list]:
     """Console-mode SP Flash Tool command, matching the guided flow's arguments.
 
@@ -95,7 +96,12 @@ def sp_flash_tool_command(
     # reachable through SP Flash Tool's console configuration file.
     from .flash_service import sp_flash_tool_console_args
 
-    return [str(exe), *sp_flash_tool_console_args(str(scatter), str(da), auth_file)]
+    return [
+        str(exe),
+        *sp_flash_tool_console_args(
+            str(scatter), str(da), auth_file, format_all=format_all
+        ),
+    ]
 
 
 def _bundle_path(exe: str) -> str:
@@ -248,6 +254,7 @@ def build_install_command(
     auth_file: str = "",
     da_file: str = "",
     model: str = "",
+    format_all: bool = False,
 ) -> Optional[list]:
     """Console command for ``method``.
 
@@ -258,9 +265,14 @@ def build_install_command(
     uses: an auth file reaches SP Flash Tool through its console configuration
     file and MTKClient through ``--auth``; a Download Agent overrides SP Flash
     Tool's ``-d`` and MTKClient's ``--loader``.
+
+    ``format_all`` changes only the SP Flash Tool console command's mode to
+    Format All + Download; the MTKClient fallback ignores it.
     """
     if normalise_method(method) == METHOD_SP:
-        cmd = sp_flash_tool_command(scatter, da_file=da_file or None, auth_file=auth_file)
+        cmd = sp_flash_tool_command(
+            scatter, da_file=da_file or None, auth_file=auth_file, format_all=format_all
+        )
         if cmd:
             return cmd
     return mtkclient_command(

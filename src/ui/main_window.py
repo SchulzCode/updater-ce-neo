@@ -865,6 +865,12 @@ class MainWindow(QMainWindow):
         # "Keep my data", as read from the install card when the user
         # confirmed the player was off. Off means the firmware is written whole.
         self._keep_data = False
+        # A package that needs Format All + Download (manifest flag or a
+        # previous 8502) runs the same SP backend with only the command mode
+        # changed. Keep Data is unavailable while this is set.
+        self._format_all_required = False
+        self._format_all_confirm_pending = False
+        self._keep_data_pkg = None
         self._gui_handoff_prepare = False
         self._gui_handoff_ready = False
         self._gui_launch_when_ready = False
@@ -4433,6 +4439,56 @@ class MainWindow(QMainWindow):
         self._adjust_window_geometry()
         QTimer.singleShot(0, self._verify_native_chrome)
 
+    def _current_firmware_package(self):
+        """The selected catalogue package, when one is known.
+
+        A local package has no catalogue row; its install still gets the
+        manifest/learned checks, but nothing can be looked up from the page.
+        """
+        page = getattr(self, "_select_page", None)
+        pkg = getattr(page, "_details_package", None) if page is not None else None
+        if pkg is None and page is not None and hasattr(page, "current_package"):
+            try:
+                pkg = page.current_package()
+            except Exception:
+                pkg = None
+        if pkg is None and self._package_model:
+            from .. import catalog
+
+            for candidate in catalog.packages_for_model(self._package_model):
+                name = str(getattr(candidate, "name", "") or "").casefold()
+                if name and name in (self._package_name or "").casefold():
+                    pkg = candidate
+                    break
+        return pkg
+
+    def _apply_pmt_format_state(self, pkg=None, model: str = "") -> bool:
+        """Apply the manifest/learned Format All + Download requirement.
+
+        This only changes the SP console command's mode and the Keep Data
+        choice; extraction, validation, retries and failover remain untouched.
+        """
+        from .. import pmt_format
+
+        pkg = pkg or self._current_firmware_package()
+        if pkg is not None:
+            self._keep_data_pkg = pkg
+        model = model or self._package_model or getattr(pkg, "model", "") or ""
+        required = pmt_format.pmt_format_required(
+            pkg,
+            model=model,
+            software=self._package_name,
+            settings=self.settings,
+        )
+        if pkg is None and getattr(self, "_format_all_required", False):
+            required = True
+        self._format_all_required = bool(required)
+        if hasattr(self, "_flash_page") and self._flash_page is not None:
+            self._flash_page.set_format_all_required(required, model)
+        if required:
+            self._keep_data = False
+        return bool(required)
+
     def _flash_inputs(self):
         """Explicit Download Agent / auth file from Select Software.
 
@@ -4483,6 +4539,9 @@ class MainWindow(QMainWindow):
         self._sp_1013_seen = False
         # A new install starts with the tick off; the card can turn it on again.
         self._keep_data = False
+        self._format_all_required = False
+        self._format_all_confirm_pending = False
+        self._keep_data_pkg = None
         self._flash_method = self._preferred_flash_method()
         if hasattr(self, "_flash_page"):
             self._flash_page.set_method(self._flash_method)
@@ -4538,6 +4597,9 @@ class MainWindow(QMainWindow):
         except Exception as e:
             logger.debug("Terminal install: platform detection failed: %s", e)
 
+        format_all = self._apply_pmt_format_state(
+            getattr(self, "_keep_data_pkg", None), self._package_model
+        )
         da_file, auth_file = self._flash_inputs()
         from ..flash_service import SpAuthFileError
 
@@ -4551,6 +4613,7 @@ class MainWindow(QMainWindow):
                 auth_file=auth_file,
                 da_file=da_file,
                 model=self._package_model,
+                format_all=format_all,
             )
         except SpAuthFileError as e:
             QMessageBox.warning(
@@ -4938,8 +5001,10 @@ class MainWindow(QMainWindow):
                         pkg = candidate
                         break
             self._keep_data_pkg = pkg
+            self._apply_pmt_format_state(pkg, model)
             self._flash_page.set_keep_data_available(
-                keep_data.keep_data_available(model, pkg, self.settings),
+                keep_data.keep_data_available(model, pkg, self.settings)
+                and not self._format_all_required,
                 keep_data.keep_data_label(model),
             )
         except Exception:
@@ -5155,6 +5220,9 @@ class MainWindow(QMainWindow):
                 self._flash_page.set_has_userdata(has_ud, preserve_data_default=has_preserve)
         except Exception as e:
             logger.debug("Could not inspect scatter platform in _begin_flash_flow: %s", e)
+        self._apply_pmt_format_state(
+            getattr(self, "_keep_data_pkg", None), self._package_model
+        )
         da_file, auth_file = self._flash_inputs()
         self._saw_all_command_exec = False
         self._completion_notified = False
@@ -5172,6 +5240,7 @@ class MainWindow(QMainWindow):
             auth_file=auth_file,
             is_rockbox=self._is_360p_rockbox,
             keep_data=getattr(self, "_keep_data", False),
+            format_all=getattr(self, "_format_all_required", False),
         )
         self.service.stop_device_monitor()
 
@@ -6154,6 +6223,56 @@ class MainWindow(QMainWindow):
             if service is not None:
                 service.stop()
 
+    def _handle_pmt_format_required(self, error_code):
+        """Offer the one destructive retry that can clear SP Flash error 8502.
+
+        Download Only cannot replace the changed partition table. The user is
+        told what will be erased and must confirm before the app goes back to
+        the power-off/pin-reset stage; the next run only swaps the console
+        command to Format All + Download.
+        """
+        from .. import pmt_format
+
+        pkg = getattr(self, "_keep_data_pkg", None) or self._current_firmware_package()
+        if pkg is not None:
+            self._keep_data_pkg = pkg
+        newly = pmt_format.mark_pmt_format_required(
+            pkg,
+            model=self._package_model,
+            software=self._package_name,
+            settings=self.settings,
+        )
+        self._format_all_required = True
+        self._format_all_confirm_pending = True
+        self._keep_data = False
+        self._install_failed = False
+        self._power_off_prompt = True
+        self._pre_install_guided = False
+        self.service.stop_device_monitor()
+        self._elapsed_timer.stop()
+        self._flash_page.set_format_all_required(True, self._package_model)
+        self._flash_page.clear_install_failure()
+        self._flash_page.clear_keep_data_confirmation()
+        self._flash_page.show_format_all_confirmation(
+            self._package_name or Path(self._package_path).name,
+            self._package_model,
+        )
+        detail = (
+            f"SP Flash Tool error 8502 (PMT changed) while installing "
+            f"{self._package_name or self._package_path} on "
+            f"{self._package_model or 'the player'}: Format All + Download "
+            f"required; Keep Data is unavailable for this software."
+        )
+        logger.warning(detail)
+        self._append_log(detail)
+        if newly:
+            self._append_log(
+                "Recorded this software as requiring Format All + Download."
+            )
+        self._sync_install_nav_entry()
+        self._nav_to_page(_PAGE_FLASH)
+        self._update_header_title()
+
     def _show_install_failure(self, message: str):
         """Failure stays on the install progress card. Retry is where Cancel was."""
         if hasattr(self, "_flash_page") and self._flash_page is not None:
@@ -6190,7 +6309,14 @@ class MainWindow(QMainWindow):
 
     def _handle_flash_failure(self, error_code):
         self._download_active = False
-        from ..flash_service import is_attempt_timeout_error, is_connect_failure, is_disconnection_error, is_mtk_device_connected, is_storage_full_error
+        from ..flash_service import (
+            is_attempt_timeout_error,
+            is_connect_failure,
+            is_disconnection_error,
+            is_mtk_device_connected,
+            is_pmt_format_required_error,
+            is_storage_full_error,
+        )
         if is_storage_full_error(error_code):
             try:
                 from ..downloads import clear_firmware_cache, downloads_dir
@@ -6236,6 +6362,9 @@ class MainWindow(QMainWindow):
         ) or str(error_code or "") == "CACHE_FILE_MISSING"
         if cache_failure and self._recover_missing_firmware(error_code):
             # A download is running in place of the failure card.
+            return
+        if not cache_failure and is_pmt_format_required_error(error_code):
+            self._handle_pmt_format_required(error_code)
             return
         is_sp_tool_error = str(error_code or "").startswith("SP_") or "S_" in str(error_code or "")
         if not cache_failure and not is_sp_tool_error and (
@@ -6397,6 +6526,7 @@ class MainWindow(QMainWindow):
             logger.debug("Could not stop leftover flashing sessions", exc_info=True)
         self._elapsed_timer.stop()
         self._install_failed = False
+        self._format_all_confirm_pending = False
         self._power_off_prompt = True
         self._pre_install_guided = False
         if self.sm.state in (
@@ -6525,6 +6655,17 @@ class MainWindow(QMainWindow):
 
     def _on_power_off_continue(self):
         """The user confirmed the device is off and unplugged. Start the run."""
+        if getattr(self, "_format_all_confirm_pending", False):
+            # The destructive retry was accepted. Go back to the ordinary
+            # power-off/pin-reset stage; Continue now starts the same SP
+            # backend with only its console mode changed.
+            self._format_all_confirm_pending = False
+            self._format_all_required = True
+            self._keep_data = False
+            self._flash_page.clear_keep_data_confirmation()
+            self._return_to_power_off_stage(self._flash_method)
+            self._flash_page.show_format_all_power_off_prompt()
+            return
         # Read the card's "Keep my data" tick here: this is the moment
         # the user confirmed the player is off and unplugged, so the run that
         # follows has to obey what the card showed then.

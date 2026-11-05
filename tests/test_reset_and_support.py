@@ -52,28 +52,51 @@ def test_get_appeal_messages():
     assert "family" in full_text.lower() or "free" in full_text.lower()
 
 
-def test_donation_status_bar_goal_suppression(qapp):
-    # When raised == 0, goal bar should be suppressed (hidden)
+def test_donation_status_bar_goal_suppression(qapp, monkeypatch):
+    from datetime import datetime
+
+    import src.donation_dialog as dialog
+    from src.donors import get_goal_stats
+
+    now = datetime(2026, 11, 5, 12)
+    zero = get_goal_stats([], now=now)
+    mid = get_goal_stats(
+        [{"amount": 50.0, "name": "Alice", "dt": now}],
+        now=now,
+        monthly_roll=0.9,
+    )
+    high = get_goal_stats(
+        [{"amount": 250.0, "name": "Bob", "dt": now}], now=now
+    )
+
+    def stats_for(donations):
+        if not donations:
+            return zero
+        if float(donations[0].get("amount") or 0) >= 200:
+            return high
+        return mid
+
+    monkeypatch.setattr(dialog, "get_goal_stats", stats_for)
+    monkeypatch.setattr(dialog, "_resolve_bar_state", lambda widget: (0, 0, 1, 1, True))
+
+    # A quiet day names today's smallest ask instead of hiding the goal.
     bar = DonationStatusBar(donations=[])
     bar._refresh_goal()
-    assert bar._goal_suppressed is True
-    assert not bar._goal_bar.isVisible()
-    assert not bar._goal_label.isVisible()
-    assert not bar._donor_label.isHidden()
+    assert bar._goal_suppressed is False
+    assert not bar._goal_bar.isHidden()
+    assert not bar._goal_label.isHidden()
+    assert "0" in bar._goal_label.text()
+    assert "today" in bar._goal_label.text()
 
-    # When raised is 50 (< 200), goal bar is visible
-    donations_mid = [{"amount": 50.0, "name": "Alice", "dt": None}]
-    from datetime import datetime
-    donations_mid[0]["dt"] = datetime.now()
-    bar2 = DonationStatusBar(donations=donations_mid)
+    # When raised is 50 (< 200), goal bar is visible.
+    bar2 = DonationStatusBar(donations=[{"amount": 50.0, "name": "Alice", "dt": now}])
     bar2._refresh_goal()
     assert bar2._goal_suppressed is False
     assert not bar2._goal_bar.isHidden()
     assert not bar2._goal_label.isHidden()
 
-    # When raised is 250 (>= 200), goal bar is suppressed
-    donations_high = [{"amount": 250.0, "name": "Bob", "dt": datetime.now()}]
-    bar3 = DonationStatusBar(donations=donations_high)
+    # When raised is 250 (>= 200), goal bar is suppressed.
+    bar3 = DonationStatusBar(donations=[{"amount": 250.0, "name": "Bob", "dt": now}])
     bar3._refresh_goal()
     assert bar3._goal_suppressed is True
     assert not bar3._goal_bar.isVisible()

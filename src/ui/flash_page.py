@@ -1886,6 +1886,8 @@ class FlashPage(QWidget):
         self._keep_data_confirm_active = False
         self._keep_data_erase_confirm_active = False
         self._keep_data_force_hidden = False
+        self._format_all_required = False
+        self._format_all_confirm_active = False
         self._wait_col = copy
 
         self._keep_data_microsd_note = QLabel(tr("keep_data_microsd_reassurance"))
@@ -2155,8 +2157,21 @@ class FlashPage(QWidget):
         self._appeal_label = self._intro.headline
         appeal_layout.addWidget(self._intro)
 
+        # The extra-steps sentence is the guide link itself: the reader is
+        # told why the install is not finished, so that sentence is what they
+        # click to finish it.
         self._completion_guide_hint = QLabel()
         self._completion_guide_hint.setWordWrap(True)
+        self._completion_guide_hint.setTextFormat(Qt.TextFormat.RichText)
+        self._completion_guide_hint.setTextInteractionFlags(
+            Qt.TextInteractionFlag.LinksAccessibleByMouse
+            | Qt.TextInteractionFlag.LinksAccessibleByKeyboard
+        )
+        self._completion_guide_hint.setOpenExternalLinks(False)
+        self._completion_guide_hint.setCursor(Qt.PointingHandCursor)
+        self._completion_guide_hint.linkActivated.connect(
+            lambda _href: self._open_view_guide()
+        )
         self._completion_guide_hint.setProperty("cssClass", "dimmed")
         self._completion_guide_hint.setAutoFillBackground(False)
         self._completion_guide_hint.setStyleSheet("")
@@ -3113,6 +3128,7 @@ class FlashPage(QWidget):
             self._cancel_btn.setEnabled(True)
         self._update_paperclip_hint()
         self._apply_stop_hold()
+        self._update_keep_data_warning()
         self.view_generation = getattr(self, "view_generation", 0) + 1
         self._notify_geometry_change()
         self._notify_geometry_change()
@@ -3847,6 +3863,7 @@ class FlashPage(QWidget):
         return bool(
             getattr(self, "_has_userdata", True)
             and getattr(self, "_keep_data_allowed", True)
+            and not getattr(self, "_format_all_required", False)
             and getattr(self, "_wait_copy", "") == "power_off"
             and not getattr(self, "_permission_prompt", False)
             and not getattr(self, "_keep_data_confirm_active", False)
@@ -3888,6 +3905,19 @@ class FlashPage(QWidget):
             self._keep_data_cb.setAccessibleName(text)
         self._sync_keep_data_visibility()
 
+    def set_format_all_required(self, required: bool, model: str = "") -> None:
+        """Mark this firmware as needing Format All + Download.
+
+        There is no keep-data choice to make in that mode: the format command
+        erases the user data partition before the images are written. The
+        prompt therefore hides the tick and shows what will be deleted.
+        """
+        self._format_all_required = bool(required)
+        if model:
+            self._model = str(model)
+        self._sync_keep_data_visibility()
+        self._update_keep_data_warning()
+
     def _update_keep_data_warning(self) -> None:
         """Explain what happens without the tick, in model-appropriate terms."""
         warning = getattr(self, "_keep_data_warning", None)
@@ -3897,15 +3927,33 @@ class FlashPage(QWidget):
             return
         model = str(getattr(self, "_model", "") or "").upper()
         y1_like = "Y1" in model or "A5" in model
+        wait_copy = getattr(self, "_wait_copy", "")
+        format_required = bool(getattr(self, "_format_all_required", False))
+        on_prompt = wait_copy in ("power_off", "usb_disconnected")
         visible = (
             bool(getattr(self, "_has_userdata", True))
-            and getattr(self, "_wait_copy", "") == "power_off"
+            and wait_copy == "power_off"
             and not getattr(self, "_keep_data_confirm_active", False)
             and not getattr(self, "_permission_prompt", False)
             and not getattr(self, "_keep_data_force_hidden", False)
         )
+        format_visible = bool(
+            format_required
+            and on_prompt
+            and not getattr(self, "_keep_data_confirm_active", False)
+            and not getattr(self, "_format_all_confirm_active", False)
+            and not getattr(self, "_permission_prompt", False)
+            and not getattr(self, "_keep_data_force_hidden", False)
+        )
         text = ""
-        if visible:
+        if format_visible:
+            key = (
+                "format_all_data_warning_y1"
+                if y1_like
+                else "format_all_data_warning_other"
+            )
+            text = tr(key)
+        elif visible:
             if not getattr(self, "_keep_data_allowed", True):
                 key = (
                     "flash_keep_data_unavailable_y1"
@@ -3920,8 +3968,9 @@ class FlashPage(QWidget):
             warning.setText(text)
         warning.setVisible(bool(text))
         if microsd_note is not None:
-            microsd_visible = visible
-            microsd_note.setVisible(microsd_visible)
+            # The format-all warning already says what happens to microSD
+            # media; the standalone reassurance would repeat it.
+            microsd_note.setVisible(bool(text) and not format_visible)
         self._notify_geometry_change()
 
     def show_keep_data_confirmation(
@@ -3993,6 +4042,72 @@ class FlashPage(QWidget):
         self.view_generation = getattr(self, "view_generation", 0) + 1
         self._notify_geometry_change()
 
+    def show_format_all_confirmation(self, software: str, model: str = "") -> None:
+        """Ask before retrying an 8502 install with Format All + Download.
+
+        This is a destructive mode change, so it is a question on the same
+        progress card rather than an automatic retry. The tick/Next chip is
+        the confirmation; the X cancels the install.
+        """
+        from html import escape
+
+        model_text = str(model or self._model or self._connect_model_text())
+        y1_like = "Y1" in model_text.upper() or "A5" in model_text.upper()
+        effect = tr(
+            "format_all_data_warning_y1"
+            if y1_like
+            else "format_all_data_warning_other"
+        )
+        question = tr("format_all_confirm_question").format(model=model_text)
+        body = tr("format_all_confirm_body").format(
+            software=escape(str(software or self._package_name or "")),
+            model=escape(model_text),
+            data_effect=escape(effect),
+        )
+        self._format_all_confirm_active = True
+        self._keep_data_confirm_active = False
+        self._keep_data_erase_confirm_active = False
+        self._wait_copy = "format_all_confirm"
+        self._keep_data_force_hidden = True
+        self._prompt_only = True
+        self._failed = False
+        self._complete = False
+        self._wait_prompt_label.setVisible(False)
+        self._keep_data_cb.setVisible(False)
+        self._keep_data_warning.setVisible(False)
+        self._show_keep_data_choice(False)
+        self._show_wait_question(question)
+        self._keep_data_hint.setText(body.replace("\n", "<br>"))
+        self._keep_data_hint.setVisible(True)
+        if hasattr(self, "_keep_data_microsd_note"):
+            self._keep_data_microsd_note.setVisible(False)
+        self._set_yes_no_glyphs(True)
+        self._wait_continue_btn.setVisible(True)
+        self._wait_continue_btn.setEnabled(True)
+        self._wait_cancel_btn.setVisible(True)
+        self._wait_cancel_btn.setEnabled(True)
+        self._set_determinate(self._wait_progress_bar, 0)
+        if hasattr(self, "_paperclip_hint_host"):
+            self._paperclip_hint_host.setVisible(False)
+        self._stack.setCurrentWidget(self._waiting_view)
+        self.view_generation = getattr(self, "view_generation", 0) + 1
+        self._notify_geometry_change()
+
+    def show_format_all_power_off_prompt(self) -> None:
+        """First-stage retry prompt after the format confirmation.
+
+        It keeps the ordinary power-off card (so the format-only warning is
+        visible) but uses the paperclip recovery line the user needs after a
+        failed SP Flash Tool run.
+        """
+        self.show_power_off_prompt()
+        self._power_off_recovery = True
+        self._power_off_recovery_key = "format_all_recovery"
+        self._power_off_recovery_kwargs = {"model": self._connect_model_text()}
+        self._wait_prompt_label.setText(self._power_off_prompt_text())
+        self._update_keep_data_warning()
+        self._update_paperclip_hint()
+
     def on_try_anyway(self, cb) -> None:
         self._try_anyway_callback = cb
 
@@ -4060,6 +4175,7 @@ class FlashPage(QWidget):
         asking = bool(
             getattr(self, "_keep_data_confirm_active", False)
             or getattr(self, "_keep_data_erase_confirm_active", False)
+            or getattr(self, "_format_all_confirm_active", False)
         )
         if asking and question is not None and question.text().strip():
             wanted = question
@@ -4087,6 +4203,7 @@ class FlashPage(QWidget):
     def clear_keep_data_confirmation(self) -> None:
         self._keep_data_confirm_active = False
         self._keep_data_erase_confirm_active = False
+        self._format_all_confirm_active = False
         self._keep_data_force_hidden = False
         self._set_yes_no_glyphs(False)
         self._show_keep_data_choice(False)
@@ -4120,6 +4237,10 @@ class FlashPage(QWidget):
     def keep_data_checked(self) -> bool:
         """Whether the user asked this run to leave their user data untouched."""
         if not getattr(self, "_has_userdata", True):
+            return False
+        if getattr(self, "_format_all_required", False) or not getattr(
+            self, "_keep_data_allowed", True
+        ):
             return False
         cb = getattr(self, "_keep_data_cb", None)
         return bool(cb is not None and cb.isChecked())
@@ -4236,6 +4357,8 @@ class FlashPage(QWidget):
         self._update_paperclip_hint()
         if hasattr(self, "_post_install_hint"):
             self._post_install_hint.setText(self._post_install_hint_html())
+        if hasattr(self, "_completion_guide_hint"):
+            self._completion_guide_hint.setText(self._completion_guide_html())
         if hasattr(self, "_appeal_dont"):
             self._appeal_dont.setText(self._dont_ask_html())
             self._appeal_dont.setToolTip(
@@ -4288,6 +4411,17 @@ class FlashPage(QWidget):
         link = f'<a href="post-install">{tr("post_install_find_out_more")}</a>'
         return tr("post_install_explain").format(
             globe=globe_html, find_out_more=link
+        )
+
+    def _completion_guide_html(self) -> str:
+        """The completion card's extra-steps sentence, as one link.
+
+        The appeal already has a View Guide button; this makes the sentence
+        that announces the extra steps open the same guide when clicked, so
+        the instruction itself is the action.
+        """
+        return _themed_link(
+            "post-install", tr("post_install_explain_completion")
         )
 
     def _apply_post_install_state(self) -> None:
@@ -4411,7 +4545,7 @@ class FlashPage(QWidget):
             _apply_card_text(self._intro.subtitle)
         has_guide = bool(getattr(self, "_post_install_url_2", "") or getattr(self, "_post_install_url", ""))
         if hasattr(self, "_completion_guide_hint"):
-            self._completion_guide_hint.setText(tr("post_install_explain_completion"))
+            self._completion_guide_hint.setText(self._completion_guide_html())
             self._completion_guide_hint.setVisible(has_guide)
             _apply_card_text(self._completion_guide_hint)
         if getattr(self, "_active_appeal_key", None) not in COMPLETION_BODY_KEYS:

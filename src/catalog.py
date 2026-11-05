@@ -72,6 +72,11 @@ class FirmwarePackage:
     apk_repo: str = ""
     # Whether Keep Data is completely blocked/disallowed for this firmware
     do_not_keep_data: bool = False
+    # Whether this firmware needs SP Flash Tool's Format All + Download mode
+    # because its partition table differs from the installed one
+    # (``PMT_format_needed="true"`` in slidia_manifest.xml). That mode
+    # reformats internal storage, so Keep Data is never offered for it.
+    pmt_format_needed: bool = False
     # Explicit hardware type target: 'A' or 'B' (or empty for both/auto)
     hw_type: str = ""
     # Asset filename/glob pattern for Type A variant

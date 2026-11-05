@@ -180,6 +180,11 @@ def _packages_from_mapping(mapping: dict, description: str = "") -> list[Firmwar
             do_not_keep_data = raw_dnkd
         else:
             do_not_keep_data = str(raw_dnkd or "").strip().lower() in ("true", "1", "yes")
+        raw_pmt = mapping.get("PMT_format_needed", mapping.get("pmt_format_needed"))
+        if isinstance(raw_pmt, bool):
+            pmt_format_needed = raw_pmt
+        else:
+            pmt_format_needed = str(raw_pmt or "").strip().lower() in ("true", "1", "yes")
         desc = str(mapping.get("description") or description or "").strip()
         type_a_asset = str(mapping.get("type_a_asset") or "").strip()
         type_b_asset = str(mapping.get("type_b_asset") or "").strip()
@@ -227,6 +232,7 @@ def _packages_from_mapping(mapping: dict, description: str = "") -> list[Firmwar
                 info_repo=resolve_firmware_repo(info_repo) if info_repo else "",
                 apk_repo=apk_repo,
                 do_not_keep_data=do_not_keep_data,
+                pmt_format_needed=pmt_format_needed,
                 type_a_asset=type_a_asset,
                 type_b_asset=type_b_asset,
                 asset_pattern=asset_pattern,
@@ -327,7 +333,8 @@ def cache_manifest(entries):
              "info_repo": getattr(e, "info_repo", "") or "",
              "apk_repo": getattr(e, "apk_repo", "") or "",
              "brand": getattr(e, "brand", "") or "",
-             "do_not_keep_data": bool(getattr(e, "do_not_keep_data", False))}
+             "do_not_keep_data": bool(getattr(e, "do_not_keep_data", False)),
+             "PMT_format_needed": bool(getattr(e, "pmt_format_needed", False))}
             for e in entries
         ]
         _cache_root().joinpath("packages.json").write_text(
@@ -365,6 +372,9 @@ def load_cached_manifest():
                 apk_repo=e.get("apk_repo", "") or "",
                 brand=e.get("brand", "") or "",
                 do_not_keep_data=bool(e.get("do_not_keep_data", False)),
+                pmt_format_needed=bool(
+                    e.get("PMT_format_needed", e.get("pmt_format_needed", False))
+                ),
             )
             for e in data
             if e.get("name") and e.get("repo")

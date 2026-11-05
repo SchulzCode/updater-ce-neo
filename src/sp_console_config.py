@@ -24,15 +24,19 @@ parsing the same progress lines.
 
 ``<download-only/>`` is Download Only, the same operation as the CLI's
 ``-c download``: it writes the scatter's downloadable images and formats
-nothing. Format All + Download (``<format-download/>``) is never used.
+nothing. ``<format-download/>`` is used when a package declares
+``PMT_format_needed="true"`` or the guided flow has learned from SP Flash
+Tool error 8502 that its partition table must be replaced with Format All +
+Download.
 
 NOTE ON ALIGNMENT WITH THE CHINESE MARKET RELEASE & OVERLAY FIRMWARES:
 While we must be aligned with the Chinese market release for flashing
 back-end functionality in SP Flash Tool and MTKclient with correct scatter
 handling and partition image writes, we must however ensure that console mode
-XML runs do not run in the format mode, just the download mode, to ensure
-compatibility with "overlay firmware packages" like Reborn (Y2Linux) which
-leave some partitions untouched (see MT6582_Android_scatter.txt).
+XML runs do not run in the format mode unless the package opts in, just the
+download mode, to ensure compatibility with "overlay firmware packages" like
+Reborn (Y2Linux) which leave some partitions untouched (see
+MT6582_Android_scatter.txt).
 Overlay firmwares rely on existing base bootloader/table/security partitions
 (PRELOADER, MBR/EBR, UBOOT/LK, SECCFG, PROTECT_F/S) already on the device.
 Running in format mode would erase those un-downloaded partitions and brick
@@ -123,12 +127,15 @@ def auth_file_usable(path) -> bool:
 
 
 def build_console_config_xml(
-    scatter, da_file, auth_file=None, connection_timeout_ms: int = CONNECTION_TIMEOUT_MS
+    scatter, da_file, auth_file=None, connection_timeout_ms: int = CONNECTION_TIMEOUT_MS,
+    format_all: bool = False,
 ) -> str:
     """Console configuration XML for a flash, with or without an auth file.
 
-    The command is always ``<download-only/>``: partitions are written, none
-    are formatted. User data is kept only by leaving it out of ``scatter``.
+    The command is ``<download-only/>`` unless ``format_all`` is set for a
+    firmware that needs Format All + Download; then it is
+    ``<format-download/>``. User data is kept only by leaving it out of
+    ``scatter``.
     ``high-speed="true"`` runs the BROM download at the tool's fastest write
     speed (USB 2.0 High Speed 480 Mbps).
 
@@ -161,7 +168,7 @@ def build_console_config_xml(
             f' timeout-count="{int(connection_timeout_ms)}" com-port="" />',
             "    </general>",
             "    <commands>",
-            "        <download-only/>",
+            "        <format-download/>" if format_all else "        <download-only/>",
             "    </commands>",
             "</flashtool-config>",
             "",
@@ -175,6 +182,7 @@ def write_console_config(
     auth_file=None,
     target_dir: Optional[Path] = None,
     connection_timeout_ms: int = CONNECTION_TIMEOUT_MS,
+    format_all: bool = False,
 ) -> Path:
     """Write the console configuration for a flash (auth file optional)."""
     directory = Path(target_dir) if target_dir else config_dir()
@@ -182,7 +190,11 @@ def write_console_config(
     path = directory / CONFIG_FILE_NAME
     path.write_text(
         build_console_config_xml(
-            scatter, da_file, auth_file, connection_timeout_ms=connection_timeout_ms
+            scatter,
+            da_file,
+            auth_file,
+            connection_timeout_ms=connection_timeout_ms,
+            format_all=format_all,
         ),
         encoding="utf-8",
     )

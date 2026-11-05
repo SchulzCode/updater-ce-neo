@@ -161,6 +161,12 @@ def keep_data_available(model: str, pkg, settings: Optional[QSettings] = None, h
     """Whether the Keep Data choice may be offered for this install."""
     if pkg is not None and getattr(pkg, "do_not_keep_data", False):
         return False
+    from .pmt_format import pmt_format_required
+
+    if pmt_format_required(pkg, model=model, settings=settings):
+        # Format All + Download reformats internal storage by design, so a
+        # keep-data scatter would be undone by the format command.
+        return False
     if pkg is None:
         return True
     if allow_keep_data_any(settings):
@@ -172,6 +178,10 @@ def keep_data_available(model: str, pkg, settings: Optional[QSettings] = None, h
 def needs_confirmation(model: str, pkg, settings: Optional[QSettings] = None, hardware_type: str = "") -> bool:
     """True when the user must confirm the currently installed firmware."""
     if pkg is None or getattr(pkg, "do_not_keep_data", False) or allow_keep_data_any(settings):
+        return False
+    from .pmt_format import pmt_format_required
+
+    if pmt_format_required(pkg, model=model, settings=settings):
         return False
     return tracked_is_compatible(model, pkg, settings=settings, hardware_type=hardware_type) is None
 

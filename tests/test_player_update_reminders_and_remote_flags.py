@@ -296,6 +296,11 @@ def test_completion_screen_layout_and_post_install_buttons(app, monkeypatch):
         assert fp._coffee_btn.text() == "View Guide + Donate"
         assert not fp._view_guide_btn.isHidden()
         assert not fp._completion_guide_hint.isHidden()
+        # The sentence announcing the extra steps is itself the guide link.
+        assert 'href="post-install"' in fp._completion_guide_hint.text()
+        opened.clear()
+        fp._completion_guide_hint.linkActivated.emit("post-install")
+        assert opened[-1] == "https://innioasis.app/guide/reborn"
         # One letter layout: the message stays above the signature, guide or not.
         assert not fp._appeal_body.isHidden()
         assert not fp._appeal_signature_row.isHidden()
