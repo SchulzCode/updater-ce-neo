@@ -35,6 +35,7 @@ from PySide6.QtCore import (
     QEventLoop,
     QPoint,
     QPropertyAnimation,
+    QRectF,
     QSettings,
     QSize,
     Qt,
@@ -43,7 +44,16 @@ from PySide6.QtCore import (
     QUrl,
     Signal,
 )
-from PySide6.QtGui import QColor, QFont, QGuiApplication, QIcon, QPalette, QPixmap
+from PySide6.QtGui import (
+    QColor,
+    QCursor,
+    QFont,
+    QGuiApplication,
+    QIcon,
+    QPalette,
+    QPen,
+    QPixmap,
+)
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -676,6 +686,7 @@ class _DropOverlay(QWidget):
         self.setAcceptDrops(True)
         self.hide()
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(40, 40, 40, 40)
         self._label = QLabel(tr("drop_firmware_here"))
         self._label.setAlignment(Qt.AlignCenter)
         self._label.setWordWrap(True)
@@ -695,8 +706,24 @@ class _DropOverlay(QWidget):
         from PySide6.QtGui import QPainter
 
         painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         # A dim scrim, not a solid plate. The window material stays visible.
-        painter.fillRect(self.rect(), QColor(0, 0, 0, 64))
+        painter.fillRect(self.rect(), QColor(0, 0, 0, 96))
+
+        # The inset the native drop targets use: a translucent tint inside a
+        # broken line. It says "drop here" without hiding the page beneath it.
+        zone = QRectF(self.rect()).adjusted(18, 18, -18, -18)
+        if zone.width() > 80 and zone.height() > 80:
+            accent = self.palette().color(QPalette.ColorRole.Highlight)
+            if not accent.isValid():
+                accent = QColor(255, 255, 255)
+            tint = QColor(accent)
+            tint.setAlpha(44)
+            pen = QPen(accent, 2, Qt.PenStyle.DashLine)
+            pen.setDashPattern([7.0, 5.0])
+            painter.setPen(pen)
+            painter.setBrush(tint)
+            painter.drawRoundedRect(zone, 18, 18)
         painter.end()
 
     def dragEnterEvent(self, event):  # noqa: N802
@@ -897,6 +924,13 @@ class MainWindow(QMainWindow):
         self.setAcceptDrops(True)
         self._drop_overlay = _DropOverlay(self)
         self._drop_check_active = False
+        # Drag events go to the child under the cursor, not to the window. The
+        # app-level filter lets a package dropped anywhere -- the catalogue,
+        # Settings, a donation card, the scroll bars -- take the same path as
+        # one dropped on the window frame.
+        app = QApplication.instance()
+        if app is not None:
+            app.installEventFilter(self)
         self._connect_signals()
         self._nav_to_page(_PAGE_SELECT)
         from .surfaces import harmonise_window_plates
@@ -987,21 +1021,34 @@ class MainWindow(QMainWindow):
                 paths.append(Path(local))
         return paths
 
-    def _drag_enter_firmware(self, event) -> None:
+    def _drag_enter_firmware(self, event) -> bool:
         from ..drop_install import first_accepted_drop
 
+        if self._install_run_active() or getattr(self, "_drop_check_active", False):
+            event.ignore()
+            return False
         paths = self._local_paths_from_mime(event.mimeData())
         if first_accepted_drop(paths) is None:
             event.ignore()
-            return
+            return False
         event.acceptProposedAction()
         overlay = getattr(self, "_drop_overlay", None)
         if overlay is None:
-            return
+            return True
         overlay._label.setText(tr("drop_firmware_here"))
         overlay.setGeometry(self.rect())
         overlay.raise_()
         overlay.show()
+        return True
+
+    def _hide_drop_overlay_if_outside(self) -> None:
+        overlay = getattr(self, "_drop_overlay", None)
+        if overlay is None:
+            return
+        # Moving between child widgets sends a drag-leave to each one; only a
+        # cursor that has actually left the window retires the overlay.
+        if not self.rect().contains(self.mapFromGlobal(QCursor.pos())):
+            overlay.hide()
 
     def _drop_firmware(self, event) -> None:
         from ..drop_install import first_accepted_drop
@@ -1010,10 +1057,53 @@ class MainWindow(QMainWindow):
         if overlay is not None:
             overlay.hide()
         path = first_accepted_drop(self._local_paths_from_mime(event.mimeData()))
+        if path is None:
+            event.ignore()
+            return
         event.acceptProposedAction()
-        if path is None or self._install_run_active():
+        if self._install_run_active() or getattr(self, "_drop_check_active", False):
             return
         self._start_drop_check(path)
+
+    def accept_local_package(self, path) -> bool:
+        """Install a package opened from outside the window.
+
+        Taskbar/dock drops and file-open events arrive after the window exists;
+        this routes them through the same check as a drop onto the window.
+        """
+        from ..drop_install import classify_drop
+
+        candidate = Path(path)
+        if classify_drop(candidate) is None:
+            return False
+        self._show_from_tray()
+        if self._install_run_active() or getattr(self, "_drop_check_active", False):
+            return False
+        self._start_drop_check(candidate)
+        return True
+
+    def eventFilter(self, watched, event):  # noqa: N802
+        """Catch a firmware drag over any child of the window.
+
+        Qt delivers drag events to the widget under the cursor. Without this
+        filter, Settings, a donation card or a scroll viewport would swallow a
+        drop the window itself accepts. Other drags are left to the widget.
+        """
+        if isinstance(watched, QWidget) and watched.window() is self:
+            kind = event.type()
+            if kind in (QEvent.Type.DragEnter, QEvent.Type.DragMove):
+                return self._drag_enter_firmware(event)
+            if kind == QEvent.Type.DragLeave:
+                self._hide_drop_overlay_if_outside()
+                return False
+            if kind == QEvent.Type.Drop:
+                from ..drop_install import first_accepted_drop
+
+                if first_accepted_drop(self._local_paths_from_mime(event.mimeData())) is None:
+                    return False
+                self._drop_firmware(event)
+                return True
+        return super().eventFilter(watched, event)
 
     def dragEnterEvent(self, event):  # noqa: N802
         self._drag_enter_firmware(event)
@@ -1022,9 +1112,7 @@ class MainWindow(QMainWindow):
         self._drag_enter_firmware(event)
 
     def dragLeaveEvent(self, event):  # noqa: N802
-        overlay = getattr(self, "_drop_overlay", None)
-        if overlay is not None and not overlay.underMouse():
-            overlay.hide()
+        self._hide_drop_overlay_if_outside()
         super().dragLeaveEvent(event)
 
     def dropEvent(self, event):  # noqa: N802
@@ -1035,6 +1123,8 @@ class MainWindow(QMainWindow):
 
         The drop is a local package, so it does not become an installed-version record.
         """
+        if getattr(self, "_drop_check_active", False):
+            return
         self._drop_check_active = True
         from .. import catalog
 

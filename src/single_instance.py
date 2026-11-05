@@ -41,7 +41,7 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from PySide6.QtCore import QLockFile, QObject, QStandardPaths, Signal
+from PySide6.QtCore import QCoreApplication, QLockFile, QObject, QStandardPaths, Signal
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
 logger = logging.getLogger(__name__)
@@ -56,6 +56,9 @@ _ERROR_ALREADY_EXISTS = 183
 # the copy that inherits the guard is told to wait for it rather than to
 # treat it as somebody else's launch.
 TAKE_OVER_ARG = "--take-over"
+# A package dropped on the running copy's icon travels over the focus socket.
+# The NUL separator keeps paths with spaces (and other odd characters) intact.
+DROP_MESSAGE_PREFIX = b"drop\x00"
 
 _focus_server = None
 _windows_mutex = None
@@ -392,14 +395,16 @@ def watch_show_requests(callback, interval_ms: int = 1500, baseline: Optional[fl
 
 
 class FocusServer(QObject):
-    """Lets a second launch ask the running copy to show its window."""
+    """Lets a second launch ask the running copy to show its window or install a file."""
 
     focus_requested = Signal()
+    drop_requested = Signal(str)
 
     def __init__(self, name: Optional[str] = None):
         super().__init__()
         self._name = name or focus_server_name()
         self._server = QLocalServer(self)
+        self._buffers: dict[QLocalSocket, bytearray] = {}
         # A socket left behind by a crash is not a live copy; Qt's cleanup only
         # matters on desktops that use a real socket file.
         QLocalServer.removeServer(self._name)
@@ -414,12 +419,39 @@ class FocusServer(QObject):
             conn = self._server.nextPendingConnection()
             if conn is None:
                 continue
-            conn.readyRead.connect(conn.deleteLater)
-            if conn.bytesAvailable() <= 0:
-                conn.waitForReadyRead(250)
-            conn.readAll()
+            # Keep the payload until the peer closes. A local socket can
+            # deliver the write after newConnection(), so reading only once
+            # here lost the path and turned the request into a bare focus.
+            self._buffers[conn] = bytearray()
+            conn.readyRead.connect(lambda c=conn: self._read_available(c))
+            conn.disconnected.connect(lambda c=conn: self._finish(c))
+            self._read_available(conn)
+
+    def _read_available(self, conn: QLocalSocket) -> None:
+        buffer = self._buffers.get(conn)
+        if buffer is None:
+            return
+        try:
+            buffer.extend(bytes(conn.readAll()))
+        except Exception:
+            logger.debug("Could not read the focus channel payload", exc_info=True)
+
+    def _finish(self, conn: QLocalSocket) -> None:
+        buffer = self._buffers.get(conn)
+        if buffer is None:
+            return
+        self._read_available(conn)
+        data = bytes(self._buffers.pop(conn, buffer))
+        if data.startswith(DROP_MESSAGE_PREFIX):
+            path = os.fsdecode(data[len(DROP_MESSAGE_PREFIX):])
+            if path:
+                self.drop_requested.emit(path)
+        else:
             self.focus_requested.emit()
-            conn.disconnectFromServer()
+        try:
+            conn.deleteLater()
+        except Exception:
+            pass
 
 
 def start_focus_server() -> Optional[FocusServer]:
@@ -435,24 +467,56 @@ def start_focus_server() -> Optional[FocusServer]:
     return server
 
 
-def request_focus(timeout_ms: int = 500) -> bool:
-    """Ask an already-running copy to come to the front.
+def _send_focus_payload(payload: bytes, timeout_ms: int) -> bool:
+    """Deliver one message to the running copy's focus channel.
 
-    A successful connection is itself proof that a copy is alive: the OS owns
-    the name, so it cannot be left behind by a crash.
+    ``disconnectFromServer`` can discard a payload that has not reached the
+    event loop yet, and this launch has no event loop of its own. Pump the
+    pending write for a moment before closing; the server keeps the buffer
+    until the peer disconnects and then dispatches it.
     """
     try:
         socket = QLocalSocket()
         socket.connectToServer(focus_server_name())
         if not socket.waitForConnected(timeout_ms):
             return False
-        socket.write(b"show")
+        socket.write(payload)
         socket.flush()
-        socket.waitForBytesWritten(timeout_ms)
+        app = QCoreApplication.instance()
+        deadline = time.monotonic() + max(0.05, timeout_ms / 1000.0)
+        while socket.bytesToWrite() and time.monotonic() < deadline:
+            if app is not None:
+                app.processEvents()
+            socket.waitForBytesWritten(30)
         socket.disconnectFromServer()
+        if app is not None:
+            app.processEvents()
         return True
     except Exception:
+        logger.debug("Focus channel message could not be sent", exc_info=True)
         return False
+
+
+def request_focus(timeout_ms: int = 500) -> bool:
+    """Ask an already-running copy to come to the front.
+
+    A successful connection is itself proof that a copy is alive: the OS owns
+    the name, so it cannot be left behind by a crash.
+    """
+    return _send_focus_payload(b"show", timeout_ms)
+
+
+def request_drop(path, timeout_ms: int = 500) -> bool:
+    """Hand a package to the running copy and ask it to show its window.
+
+    A taskbar or desktop drop can start a second process with the file as an
+    argument. That launch must not run beside the copy already holding the USB
+    device; it forwards the path over the same per-user local socket used for
+    focus requests, then exits. A successful connection is proof of a live copy.
+    """
+    return _send_focus_payload(
+        DROP_MESSAGE_PREFIX + os.fsencode(str(path)), timeout_ms
+    )
 
 
 def _win_kernel32():

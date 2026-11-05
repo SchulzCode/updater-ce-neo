@@ -1,8 +1,9 @@
-"""Drag-and-drop firmware packages onto the main window.
+"""Drag-and-drop firmware packages onto the main window or the app icon.
 
 A drop is a local file, not an online release. It is never written into the
 installed-version record. The check picks the package's own scatter and then
-requires every image it lists before any flash starts.
+requires every image it lists before any flash starts. Desktop and Dock drops
+arrive as launch arguments or file-open events; they use the same check.
 
 Scatter acceptance is the same as a browsed folder or a downloaded release:
 ``*_Android_scatter.txt`` outranks its ``preserve_data`` variant and any other
@@ -16,6 +17,7 @@ import os
 import re
 from pathlib import Path
 from typing import Iterable, Optional
+from urllib.parse import unquote, urlparse
 
 
 def is_scatter_filename(name: str) -> bool:
@@ -59,6 +61,45 @@ def first_accepted_drop(paths: Iterable[Path]) -> Optional[Path]:
     for raw in paths:
         path = Path(raw)
         if classify_drop(path):
+            return path
+    return None
+
+
+def argument_path(raw) -> Optional[Path]:
+    """A filesystem path from one command-line argument.
+
+    Linux desktop entries pass ``%U`` file URLs, while Windows taskbar and
+    shortcut drops pass a plain path. Switches (``--tray``, ``-psn_...``) are
+    not paths and are skipped.
+    """
+    text = str(raw or "").strip()
+    if not text or text.startswith("-"):
+        return None
+    text = text.strip('"')
+    if text.lower().startswith("file:"):
+        parsed = urlparse(text)
+        if parsed.scheme.lower() != "file":
+            return None
+        text = unquote(parsed.path or "")
+        if parsed.netloc and parsed.netloc.lower() not in {"", "localhost"}:
+            text = f"//{parsed.netloc}{text}"
+        # A Windows file URL is /C:/…; Path needs C:/. A POSIX path keeps
+        # its leading slash because only a drive letter may lose it.
+        if re.match(r"^/[A-Za-z]:", text):
+            text = text[1:]
+    return Path(text) if text else None
+
+
+def external_package_from_arguments(args: Iterable[str]) -> Optional[Path]:
+    """The firmware package the app was launched to open, if any.
+
+    Dropping a file on a taskbar/Dock/desktop icon runs the app with that file
+    as an argument. Only a package the drop flow already understands is
+    returned, so an unrelated file in the command line cannot start an install.
+    """
+    for raw in args:
+        path = argument_path(raw)
+        if path is not None and classify_drop(path):
             return path
     return None
 

@@ -7,7 +7,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.drop_install import (
+    argument_path,
     classify_drop,
+    external_package_from_arguments,
     first_accepted_drop,
     package_check_error,
 )
@@ -85,6 +87,25 @@ def test_drop_overlay_string_in_six_locales():
         text = table.get(lang) or ""
         assert text.strip()
         assert text != "drop_firmware_here"
+
+
+def test_drop_check_message_says_please_wait():
+    assert "Please wait" in _STRINGS["drop_checking"]["en"]
+
+
+def test_icon_drop_arguments_accept_plain_paths_and_file_urls():
+    """A taskbar/shortcut drop can arrive as a path or a %U file URL."""
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        archive = root / "firmware.zip"
+        archive.write_bytes(b"PK")
+        notes = root / "notes.txt"
+        notes.write_text("not firmware", encoding="utf-8")
+
+        assert external_package_from_arguments(["--tray", str(notes), str(archive)]) == archive
+        assert external_package_from_arguments([archive.as_uri()]) == archive
+        assert external_package_from_arguments(["--tray"]) is None
+        assert argument_path(archive.as_uri()) == archive
 
 
 if __name__ == "__main__":

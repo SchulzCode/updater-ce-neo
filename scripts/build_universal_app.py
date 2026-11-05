@@ -690,13 +690,16 @@ def build():
         "NSHumanReadableCopyright": "Copyright © 2024-2026 Ryan Specter. All rights reserved.",
         "CFBundleDocumentTypes": [
             {
-                "CFBundleTypeName": "Firmware Archive",
+                "CFBundleTypeName": "Firmware Package",
                 "CFBundleTypeRole": "Viewer",
                 "LSHandlerRank": "Alternate",
                 "LSItemContentTypes": [
                     "com.pkware.zip-archive",
                     "public.zip-archive",
                     "org.rarlab.rar-archive",
+                    # Dock drops of a firmware folder or a scatter file.
+                    "public.folder",
+                    "public.plain-text",
                 ],
             }
         ],

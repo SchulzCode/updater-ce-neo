@@ -2225,7 +2225,7 @@ _STRINGS: dict = {
     },
     "flash_paperclip_hint": {
         "zh-CN": "用卡针或回形针按下耳机接口和 USB 接口之间的隐藏按钮以完全关闭您的 {model}。",
-        "en": "Completely power off your {model} by pressing the hidden button between the headphone and USB ports using a paperclip or pin.",
+        "en": "You can completely power off your {model} by pressing the hidden button between the headphone and USB ports using a paperclip or pin.",
         "fr": "Éteignez complètement votre {model} en appuyant sur le bouton caché entre la prise casque et le port USB à l'aide d'un trombone ou d'une aiguille.",
         "es": "Apaga completamente tu {model} presionando el botón oculto entre el puerto de auriculares y el puerto USB con un clip o alfiler.",
         "de": "Schalten Sie Ihr {model} vollständig aus, indem Sie die versteckte Taste zwischen Kopfhörer- und USB-Anschluss mit einer Büroklammer oder Nadel drücken.",
@@ -2233,7 +2233,7 @@ _STRINGS: dict = {
     },
     "flash_paperclip_hint_a5": {
         "zh-CN": "用卡针或回形针按下电源键旁边的隐藏按钮以完全关闭您的 A5。",
-        "en": "Completely power off your A5 by pressing the hidden button beside the power button with a clip using a paperclip or pin.",
+        "en": "You can completely power off your A5 by pressing the hidden button beside the power button with a clip using a paperclip or pin.",
         "fr": "Éteignez complètement votre A5 en appuyant sur le bouton caché à côté du bouton d'alimentation à l'aide d'un trombone ou d'une aiguille.",
         "es": "Apaga completamente tu A5 presionando el botón oculto al lado del botón de encendido con un clip o alfiler.",
         "de": "Schalten Sie Ihr A5 vollständig aus, indem Sie die versteckte Taste neben dem Ein-/Ausschalter mit einer Büroklammer oder Nadel drücken.",
@@ -3358,12 +3358,12 @@ _STRINGS: dict = {
         "ja": "インストールするファームウェアファイルをここにドロップ",
     },
     "drop_checking": {
-        "zh-CN": "正在检查固件文件…",
-        "en": "Checking the firmware file…",
-        "fr": "Vérification du fichier firmware…",
-        "es": "Comprobando el archivo de firmware…",
-        "de": "Firmware-Datei wird geprüft…",
-        "ja": "ファームウェアファイルを確認しています…",
+        "zh-CN": "正在检查固件包，请稍候…",
+        "en": "Please wait while the firmware package is checked…",
+        "fr": "Veuillez patienter pendant la vérification du paquet firmware…",
+        "es": "Espera mientras se comprueba el paquete de firmware…",
+        "de": "Bitte warten, während das Firmware-Paket geprüft wird…",
+        "ja": "ファームウェアパッケージを確認しています。しばらくお待ちください…",
     },
     "drop_missing_scatter": {
         "zh-CN": "未找到 scatter 文件，因此没有开始安装。",

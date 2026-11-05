@@ -924,8 +924,8 @@ class SettingsPage(QWidget):
                 ("desktop", "settings_shortcut_desktop"),
                 ("menu", "settings_shortcut_menu"),
             ):
-                sw = self._add_switch(sc_layout, tr(kind_key))
-                sw.setText(f"{tr(name_key)} — {tr(kind_key)}")
+                label = f"{tr(name_key)} — {tr(kind_key)}"
+                sw = self._add_switch(sc_layout, label)
                 sw.toggled.connect(
                     lambda checked, s=sid, k=kind: self._on_shortcut_toggled(s, k, checked)
                 )
@@ -1248,14 +1248,14 @@ class SettingsPage(QWidget):
         The app's own desktop and Start Menu shortcuts are everyday choices;
         SP Flash Tool's are for the guided install's advanced path, so they
         stay out of the way until that switch is on. Nothing changes on disk:
-        only the two switches are hidden.
+        only the tool's two rows are hidden.
         """
         show_tools = bool(getattr(self, "_advanced_revealed", False))
         if hasattr(self, "_cb_advanced_settings"):
             show_tools = self._cb_advanced_settings.isChecked()
         for (shortcut_id, _kind), switch in getattr(self, "_shortcut_switches", {}).items():
             if shortcut_id == shortcut_manager.TOOL_ID:
-                switch.setVisible(show_tools)
+                self._set_switch_row_visible(switch, show_tools)
         self.refresh_shortcut_state()
 
     def reveal_advanced_methods(self):
@@ -1488,8 +1488,7 @@ class SettingsPage(QWidget):
             if labels is None:
                 continue
             name_key, kind_key = labels
-            self._set_switch_caption(switch, tr(kind_key))
-            switch.setText(f"{tr(name_key)} — {tr(kind_key)}")
+            self._set_switch_caption(switch, f"{tr(name_key)} — {tr(kind_key)}")
 
     def legacy_offer_available(self) -> bool:
         """Whether the pre-3.0 removal offer may be shown at all.

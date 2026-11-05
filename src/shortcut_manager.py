@@ -850,7 +850,7 @@ def _write_linux_desktop(target: Path, shortcut_id: str) -> None:
         "Type=Application\n"
         "Version=1.0\n"
         f"Name={name}\n"
-        f"Exec=\"{exe}\"\n"
+        f"Exec=\"{exe}\" %U\n"
         f"Path={workdir}\n"
         f"Icon={exe}\n"
         "Terminal=false\n"

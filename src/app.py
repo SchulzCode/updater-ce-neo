@@ -4,6 +4,7 @@ donations modal (see ASSESSMENT.md for the port map)."""
 
 import logging
 import sys
+from pathlib import Path
 
 if __package__ is None or __package__ == "":
     import os
@@ -15,7 +16,7 @@ if __package__ is None or __package__ == "":
     import src
     __package__ = "src"
 
-from PySide6.QtCore import Qt, QSettings
+from PySide6.QtCore import QEvent, QObject, Qt, QSettings
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
@@ -64,6 +65,27 @@ def _startup_step(label, fn, /, *args, **kwargs):
     except Exception:
         logger.warning("Host integration step failed: %s", label, exc_info=True)
         return None
+
+
+class _FileOpenFilter(QObject):
+    """Route macOS Dock/Finder open-file events to the local-package handler.
+
+    A Dock drop on a running app never becomes a command-line argument: AppKit
+    delivers a ``QFileOpenEvent`` to the application object instead. The filter
+    is kept on the application for the process lifetime.
+    """
+
+    def __init__(self, on_path):
+        super().__init__()
+        self._on_path = on_path
+
+    def eventFilter(self, watched, event):  # noqa: N802
+        if event.type() == QEvent.Type.FileOpen:
+            path = event.url().toLocalFile()
+            if path:
+                self._on_path(path)
+            return True
+        return False
 
 
 def _apply_native_chrome(window, *, dark=None):
@@ -600,6 +622,25 @@ def main():
     app.setApplicationName(config.get_app_name())
     app.setOrganizationName("innioasis")
 
+    # A Dock/Finder open arrives as an event, not as an argument. Keep the
+    # early paths queued until the window and its drop handler exist.
+    external_drops: list[Path] = []
+
+    def _queue_external_drop(path: str) -> None:
+        from .drop_install import classify_drop
+
+        candidate = Path(path)
+        if classify_drop(candidate) is None:
+            return
+        external_drops.append(candidate)
+        flush = getattr(app, "_flush_external_drops", None)
+        if flush is not None:
+            flush()
+
+    _file_open_filter = _FileOpenFilter(_queue_external_drop)
+    app.installEventFilter(_file_open_filter)
+    app._file_open_filter = _file_open_filter
+
     import sys as _sys
     if _sys.platform != "darwin":
         # On Windows and Linux, set the window/taskbar icon explicitly.
@@ -631,10 +672,33 @@ def main():
     # language when the app ships a catalog for it, else English. A menu bar
     # notice is localized by this too, so it is restored before the tray exists.
     try:
-        stored = str(QSettings("innioasis", "updater").value("language", "") or "")
+        settings = QSettings("innioasis", "updater")
+        stored = str(settings.value("language", "") or "")
     except Exception:
+        settings = None
         stored = ""
+    if settings is not None:
+        try:
+            from .install_language import consume_installer_language
+
+            # A fresh Windows install leaves the language chosen in Inno Setup
+            # behind once. It outranks both a stored value and the host's
+            # detected language; store it as the reader's choice, then delete
+            # the marker so later launches keep whatever language they select.
+            stored = consume_installer_language(settings) or stored
+        except Exception:
+            logging.getLogger(__name__).debug(
+                "Installer language handoff failed", exc_info=True
+            )
     translator().set_language(initial_language(stored))
+
+    # Dropping a package on the app icon runs the app with the package as an
+    # argument. Windows taskbar/desktop shortcuts pass a plain path; Linux
+    # desktop entries use %U, which may be a file URL. The same parser feeds a
+    # cold launch below.
+    from .drop_install import external_package_from_arguments
+
+    startup_drop = external_package_from_arguments(sys.argv[1:])
 
     # One copy at a time. Two windows would compete for the same USB device, SP
     # Flash Tool's settings files and the shared cache, so a second launch stops
@@ -648,7 +712,7 @@ def main():
 
     # A start-at-login launch must never raise a window: if another copy is
     # already running, this one leaves quietly instead of asking for the window.
-    start_in_tray = "--tray" in sys.argv[1:]
+    start_in_tray = "--tray" in sys.argv[1:] and startup_drop is None
 
     # Capture the marker before the guard: one left by the launch that started
     # this one is stale, while one written during startup belongs to a second
@@ -668,6 +732,15 @@ def main():
             "Start-at-login launch skipped: background mode is off"
         )
         sys.exit(0)
+
+    # A taskbar/desktop drop can start a second process while the app is
+    # already running. Hand the package to that copy and leave; if no copy
+    # answers, this launch continues and installs the package itself.
+    if startup_drop is not None:
+        from .single_instance import request_drop
+
+        if request_drop(startup_drop, timeout_ms=300):
+            sys.exit(0)
 
     # The window's theme is a QSS stylesheet plus a palette: roughly 10 MB of Qt
     # style machinery the menu bar item never reads. A tray-only launch applies
@@ -701,6 +774,8 @@ def main():
     # reference to it after the shed. The agent clears this before deleting.
     holder = {"window": None}
     agent = None
+    if startup_drop is not None:
+        external_drops.append(startup_drop)
 
     def _forget_window() -> None:
         holder["window"] = None
@@ -773,12 +848,45 @@ def main():
         if window is not None:
             window._show_from_tray()
 
+    external_drop_ready = {"value": False}
+    external_drop_attempts = {"count": 0}
+
+    def _flush_external_drops() -> None:
+        """Show the window if needed, then hand queued packages to it."""
+        if not external_drop_ready["value"] or not external_drops:
+            return
+        window = holder["window"]
+        if window is None:
+            _show_main_window()
+            window = holder["window"]
+            if window is None:
+                if external_drop_attempts["count"] < 25:
+                    external_drop_attempts["count"] += 1
+                    QTimer.singleShot(120, _flush_external_drops)
+                return
+        external_drop_attempts["count"] = 0
+        while external_drops:
+            window.accept_local_package(external_drops.pop(0))
+
+    app._flush_external_drops = _flush_external_drops
+
+    def _deliver_external_drop(path: str) -> None:
+        """Accept a package forwarded by a second launch's focus socket."""
+        from .drop_install import classify_drop
+
+        candidate = Path(path)
+        if classify_drop(candidate) is None:
+            return
+        external_drops.append(candidate)
+        _flush_external_drops()
+
     try:
         from .single_instance import start_focus_server
 
         _focus_server = start_focus_server()
         if _focus_server is not None:
             _focus_server.focus_requested.connect(lambda: _show_main_window())
+            _focus_server.drop_requested.connect(_deliver_external_drop)
     except Exception:
         logging.getLogger(__name__).debug(
             "Single-instance focus channel could not start", exc_info=True
@@ -895,6 +1003,12 @@ def main():
         if agent is not None:
             agent.start(show_tray=True)
         clear_show_request(startup_show_stamp)
+
+    # A package that arrived before the window existed (Dock open, taskbar
+    # argument, forwarded second launch) now has somewhere to go.
+    external_drop_ready["value"] = True
+    if external_drops:
+        QTimer.singleShot(0, _flush_external_drops)
 
     # Work the first screen does not need: the catalogue refresh, the donation
     # marker, shedding the redundant payload and (on Linux) the SP Flash Tool

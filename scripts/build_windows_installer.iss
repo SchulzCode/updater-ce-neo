@@ -111,6 +111,13 @@ DisableProgramGroupPage=yes
 UsePreviousAppDir=yes
 UsePreviousGroup=no
 UsePreviousTasks=yes
+; Preselect the installer language from the Windows display language. English
+; is the first [Languages] entry, so it is the fallback when the system
+; language has no shipped translation. Keep the dialog: detection only picks
+; the default, and the person can still override it.
+LanguageDetectionMethod=uilanguage
+UsePreviousLanguage=no
+ShowLanguageDialog=yes
 ; All users (admin) is the only install mode. Running processes are stopped
 ; explicitly in CurStepChanged(ssInstall), so the Restart Manager prompt is off.
 PrivilegesRequired=admin
@@ -897,6 +904,23 @@ begin
   Result := IsUpdateInstall or HasLegacyUserData;
 end;
 
+{ The app consumes this marker on first launch, stores the language as its
+  normal preference, and deletes the file. It lives in LocalAppData because
+  Program Files is read-only to the installed user; a marker in the app
+  folder could be read but not removed. ActiveLanguage is the internal name
+  from [Languages]. }
+procedure SaveInstallLanguage;
+var
+  MarkerPath: String;
+begin
+  if ShouldPreserveUserData then
+    Exit;
+  MarkerPath := ExpandConstant('{localappdata}\Updater CE\install-language');
+  ForceDirectories(ExtractFileDir(MarkerPath));
+  if not SaveStringToFile(MarkerPath, ActiveLanguage, False) then
+    Log('Could not write installer language marker: ' + MarkerPath);
+end;
+
 function ShouldInstallMainApp: Boolean;
 begin
 #ifdef MyIsMediaTek
@@ -1501,6 +1525,7 @@ begin
   begin
     RestoreSettings;
     InstallBundledDriver;
+    SaveInstallLanguage;
   end
   else if CurStep = ssDone then
   begin

@@ -215,7 +215,9 @@ def test_shortcut_card_relabels_without_rebuilding_its_layout(app):
         SettingsPage._retranslate_shortcut_switches(page)
 
         assert page._shortcuts_card.title() == "Ярлыки приложений"
-        assert caption.text() == "Ярлыки на рабочем столе"
-        assert "Ярлыки на рабочем столе" in switch.text()
+        assert caption.text() == i18n.tr(
+            "settings_shortcut_updater"
+        ) + " — " + i18n.tr("settings_shortcut_desktop")
+        assert switch.text() == ""
     finally:
         i18n.translator().set_language(old)
