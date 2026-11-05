@@ -84,11 +84,23 @@ def register_handoff_pid(pid: int) -> None:
     """Mark a process (e.g. handed-off SP Flash Tool or its launcher) as immune from stray tool sweeps."""
     if pid and pid > 1:
         _HANDOFF_PIDS.add(pid)
+        try:
+            from . import instance_marker
+
+            instance_marker.note_owned_pid(pid)
+        except Exception:
+            logger.debug("Could not record a handed-off tool for other copies", exc_info=True)
 
 
 def unregister_handoff_pid(pid: int) -> None:
     """Remove a process from the handoff immunity set."""
     _HANDOFF_PIDS.discard(pid)
+    try:
+        from . import instance_marker
+
+        instance_marker.forget_owned_pid(pid)
+    except Exception:
+        logger.debug("Could not forget a handed-off tool", exc_info=True)
 
 
 def handoff_pids() -> frozenset:
@@ -317,9 +329,21 @@ def stray_tool_processes(snapshot=None) -> list:
     rows = process_snapshot() if snapshot is None else snapshot
     safe = _own_ancestry(rows)
     by_pid = {pid: ppid for pid, ppid, _cmd in rows}
+    try:
+        from . import instance_marker
+
+        foreign_owned = instance_marker.owned_pids()
+    except Exception:
+        foreign_owned = frozenset()
     found = []
     for pid, _ppid, command in rows:
-        if pid in safe or pid <= 1 or pid in _HANDOFF_PIDS or _is_handoff_descendant(pid, by_pid):
+        if (
+            pid in safe
+            or pid <= 1
+            or pid in _HANDOFF_PIDS
+            or pid in foreign_owned
+            or _is_handoff_descendant(pid, by_pid)
+        ):
             continue
         tool = _tool_invocation(command)
         if not tool:
@@ -414,6 +438,14 @@ def begin_install_session(reason: str = "") -> None:
     with _SESSION_LOCK:
         _ACTIVE_SESSIONS = 1
     logger.debug("Install session opened%s", f" ({reason})" if reason else "")
+    # Another copy must be able to see that this install owns its tools, even
+    # while this window is hidden in the tray.
+    try:
+        from . import instance_marker
+
+        instance_marker.begin_task("install")
+    except Exception:
+        logger.debug("Could not publish the install session", exc_info=True)
     # A flash backend is about to talk to the player over USB: the host must
     # not suspend in the middle of a write. The hold ends with the session.
     try:
@@ -430,6 +462,12 @@ def end_install_session(reason: str = "", sweep: bool = True) -> list:
     with _SESSION_LOCK:
         _ACTIVE_SESSIONS = 0
     logger.debug("Install session closed%s", f" ({reason})" if reason else "")
+    try:
+        from . import instance_marker
+
+        instance_marker.end_task("install")
+    except Exception:
+        logger.debug("Could not retire the install marker", exc_info=True)
     try:
         from .sleep_inhibit import release_sleep
 
@@ -561,6 +599,22 @@ def sweep_stray_tools(force: bool = False, reason: str = "") -> list:
     session owns its tool, and killing it would abort a healthy flash.
     """
     global _LAST_SWEEP
+    if not force:
+        # A second copy that is alive owns its tools and its install. Sweeping
+        # from here would kill the flash it is running, which is exactly the
+        # collision the single-instance guard exists to prevent — but a copy
+        # that bypassed the guard can still reach this point.
+        try:
+            from . import instance_marker
+
+            if instance_marker.foreign_busy():
+                logger.info(
+                    "Sweep skipped%s: another running copy is alive and owns its tools",
+                    f" ({reason})" if reason else "",
+                )
+                return []
+        except Exception:
+            logger.debug("Could not check the running-copy marker", exc_info=True)
     if install_session_active() and not force:
         logger.debug(
             "Sweep skipped%s: an install session is running and owns its tool",

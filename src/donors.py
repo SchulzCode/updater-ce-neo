@@ -10,7 +10,6 @@ from . import fx
 from .config import DONORS_CSV_URL, MONTHLY_GOAL_USD, site_source_urls
 from .network import requests_module
 
-requests = requests_module()
 logger = logging.getLogger(__name__)
 
 _DONORS_HOST = "innioasis.app"
@@ -439,7 +438,10 @@ def fetch_remote_donors_async(on_result):
         return parse_donors_csv_text(text) or None
 
     def _fetch_text(url):
-        return requests.get(
+        # Imported here, not at module import: the donation bar is built on
+        # every launch, and requests/urllib3 on the first-paint path is ~100 ms
+        # and several MB of mapped pages for a fetch that runs seconds later.
+        return requests_module().get(
             url,
             headers={
                 "User-Agent": "InnioasisUpdater/1.0",

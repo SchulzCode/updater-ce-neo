@@ -14,7 +14,11 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from src import downloads
 from src.catalog import FirmwarePackage
-from src.flash_service import EXTRACT_COMPLETE_MARKER, _is_extract_complete
+from src.flash_service import (
+    EXTRACT_COMPLETE_MARKER,
+    _is_extract_complete,
+    prune_extracted_cache,
+)
 from src.fw_package import prune_to_firmware_package
 from src.ui.select_page import SelectPackagePage
 
@@ -115,6 +119,91 @@ def test_a_local_firmware_is_not_fetched_over_the_network():
             pass
 
     assert MainWindow._recover_missing_firmware(_Window(), "missing") is False
+
+
+def test_pruning_keeps_the_active_archive_and_extract_regardless_of_case(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(downloads, "downloads_dir", lambda: tmp_path)
+    archive = tmp_path / "Rockbox-Y1.zip"
+    archive.write_bytes(b"zip")
+    extract = tmp_path / ".Rockbox-Y1_extracted"
+    extract.mkdir()
+
+    removed = prune_extracted_cache(keep_package_path=tmp_path / "rockbox-y1.zip")
+
+    assert removed == []
+    assert archive.exists()
+    assert extract.exists()
+
+
+def test_retry_keeps_the_extracted_cache_and_does_not_download_again(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(downloads, "downloads_dir", lambda: tmp_path)
+    archive = tmp_path / "rondo_v1_rom.zip"
+    archive.write_bytes(b"zip")
+    extract = _cached_package(tmp_path)
+    calls = []
+
+    class _Page:
+        _current_selected_rel = {"tag_name": "v1", "asset_name": "rom.zip"}
+        _current_package_path = str(archive)
+        _current_installed_release_info = {"tag_name": "v1"}
+        _pending_install_release_info = None
+        _details_package = object()
+
+        def current_package(self):
+            return self._details_package
+
+        def _release_cache_paths(self, rel, package):
+            return archive, extract
+
+        def purge_release_cache(self, *args, **kwargs):
+            raise AssertionError("a retry must not purge the extracted cache")
+
+        def _trigger_release_install(self, *args, **kwargs):
+            raise AssertionError("a complete extract must be reused, not downloaded")
+
+        def _on_online_prep_done(self, ok, extract_dir, err):
+            calls.append((ok, extract_dir, err))
+
+    SelectPackagePage.retry_missing_cached_firmware(_Page())  # type: ignore[arg-type]
+
+    assert calls == [(True, str(extract), "")]
+    assert archive.exists()
+    assert extract.exists()
+
+
+def test_leaving_the_journey_releases_only_its_own_cache():
+    from src.ui.main_window import MainWindow
+
+    calls = []
+    logs = []
+    release = {"tag_name": "v1", "asset_name": "rondo_v1_rom.zip"}
+    package = object()
+
+    class _Page:
+        _current_selected_rel = release
+        _details_package = package
+
+        def purge_release_cache(self, rel=None, pkg=None):
+            calls.append((rel, pkg))
+            return ["/tmp/downloads/rom.zip"]
+
+    class _Window:
+        _package_path = "/tmp/downloads/rondo_v1_rom.zip"
+        _select_page = _Page()
+
+        def _append_log(self, text):
+            logs.append(text)
+
+    MainWindow._release_install_cache(_Window())
+    _Window._package_path = "/tmp/downloads/.rondo_v1_rom_extracted"
+    MainWindow._release_install_cache(_Window())
+
+    assert calls == [(release, package), (release, package)]
+    assert any("after leaving the install" in line for line in logs)
 
 
 def test_purging_one_release_keeps_another_release_cache(tmp_path, monkeypatch):

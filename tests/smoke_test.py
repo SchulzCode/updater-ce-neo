@@ -5789,8 +5789,12 @@ def test_device_model_registry():
 
 
 def test_model_dropdown_manifest_filtered():
-    """The device drop-down offers only models the manifest lists a release
-    for, but a hand-imported model stays selectable so guidance names it."""
+    """The device drop-down offers only models the manifest lists a release for.
+
+    Firmware dropped in by hand for a model with no manifest entry must not
+    appear there: the drop-down returns to its default row and the package's
+    own model stays on the package, for the prompts and the install.
+    """
     from PySide6.QtWidgets import QApplication
     from src import catalog
     from src.ui.select_page import SelectPackagePage
@@ -5807,14 +5811,16 @@ def test_model_dropdown_manifest_filtered():
         items = [page._model_combo.itemText(i) for i in range(page._model_combo.count())]
         assert items == ["Y2"], f"only manifest models may be offered, got {items}"
 
-        # Firmware dropped in by hand for a model with no release yet must
-        # still be selectable so the prompts name the right player.
+        # A hand-imported G5 package is not in the manifest, so it must not
+        # add a row: the drop-down stays on its default model.
         page._select_model_for_manual("G5")
-        assert page.current_model() == "G5"
+        items = [page._model_combo.itemText(i) for i in range(page._model_combo.count())]
+        assert items == ["Y2"], f"a hand-imported model must not be offered, got {items}"
+        assert page.current_model() == "Y2"
         page.refresh_models()
         items = [page._model_combo.itemText(i) for i in range(page._model_combo.count())]
-        assert "G5" in items, items
-        assert page.current_model() == "G5"
+        assert items == ["Y2"], items
+        assert page.current_model() == "Y2"
         page.deleteLater()
     finally:
         catalog.set_live_catalog(saved)

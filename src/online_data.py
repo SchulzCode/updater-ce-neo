@@ -374,41 +374,85 @@ _refresh_lock = threading.Lock()
 _refresh_thread: Optional[threading.Thread] = None
 
 
-def refresh_all(force: bool = False, timeout: float = REQUEST_TIMEOUT) -> dict[str, bool]:
-    """Refresh every stale file, sequentially, off any UI thread."""
+#: Files a windowless background session keeps listening to. Donors, the
+#: release feeds and the blocklist are only read for something on screen; a
+#: tray-only copy has no donation bar to update and no feed snapshot to show.
+#: ``notice.xml`` is refreshed by NoticeService (it has to parse the feed and
+#: post the notification itself), so the manifest is the only file fetched
+#: directly from this module by the background agent.
+BACKGROUND_FILES = ("slidia_manifest.xml",)
+
+
+def refresh_files(
+    names: Iterable[str],
+    force: bool = False,
+    timeout: float = REQUEST_TIMEOUT,
+    now: Optional[float] = None,
+) -> dict[str, bool]:
+    """Refresh only ``names``, sequentially, off any UI thread.
+
+    The background agent uses this to keep the firmware manifest current
+    without pulling the donors feed, the release feeds or the blocklist that
+    no window is showing.
+    """
+    wanted = tuple(dict.fromkeys(str(name) for name in (names or ())))
+    if not wanted:
+        return {}
     # Seeding first means a fresh install counts as fresh off the build's own
     # copies instead of downloading everything again on the first launch.
-    seed_cache()
+    seed_cache(wanted)
     updated: dict[str, bool] = {}
-    for name, spec in FILES.items():
+    for name in wanted:
         try:
-            updated[name] = refresh(name, force=force, timeout=timeout)
+            updated[name] = refresh(name, force=force, timeout=timeout, now=now)
         except Exception:
-            logger.debug("Refreshing %s failed", spec.name, exc_info=True)
+            logger.debug("Refreshing %s failed", name, exc_info=True)
             updated[name] = False
     return updated
 
 
-def refresh_all_async(force: bool = False, timeout: float = REQUEST_TIMEOUT) -> bool:
-    """Start a background refresh unless one is already running.
+def refresh_all(force: bool = False, timeout: float = REQUEST_TIMEOUT) -> dict[str, bool]:
+    """Refresh every stale file, sequentially, off any UI thread."""
+    return refresh_files(tuple(FILES), force=force, timeout=timeout)
 
-    Deliberately lazy: called after the first window is shown (and again when
-    connectivity returns), so launch never waits for a byte from the network.
-    Returns True when a new worker was started.
+
+def refresh_files_async(
+    names: Iterable[str],
+    force: bool = False,
+    timeout: float = REQUEST_TIMEOUT,
+) -> bool:
+    """Start a background refresh of just ``names`` unless one is running.
+
+    There is one refresh worker per process, whatever its file set: a window
+    and the background agent asking at the same moment must not download the
+    same manifest twice.
     """
     global _refresh_thread
+    wanted = tuple(dict.fromkeys(str(name) for name in (names or ())))
+    if not wanted:
+        return False
     with _refresh_lock:
         if _refresh_thread is not None and _refresh_thread.is_alive():
             return False
         thread = threading.Thread(
-            target=refresh_all,
-            kwargs={"force": force, "timeout": timeout},
+            target=refresh_files,
+            kwargs={"names": wanted, "force": force, "timeout": timeout},
             name="online-data-refresh",
             daemon=True,
         )
         _refresh_thread = thread
         thread.start()
         return True
+
+
+def refresh_all_async(force: bool = False, timeout: float = REQUEST_TIMEOUT) -> bool:
+    """Refresh every online file in the background (the window's policy).
+
+    Deliberately lazy: called after the first window is shown (and again when
+    connectivity returns), so launch never waits for a byte from the network.
+    Returns True when a new worker was started.
+    """
+    return refresh_files_async(tuple(FILES), force=force, timeout=timeout)
 
 
 def wait_for_refresh(timeout: float = 0.0) -> None:

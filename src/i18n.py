@@ -1621,6 +1621,14 @@ _STRINGS: dict = {
         "de": "Die laufende Kopie konnte nicht beendet werden. Beenden Sie sie selbst und starten Sie den Updater erneut.",
         "ja": "実行中のコピーを終了できませんでした。手動で終了してから、もう一度起動してください。",
     },
+    "single_instance_busy_body": {
+        "en": "The running copy is installing software or talking to the player, so ending it now would interrupt that. This launch will close; use the existing window or its menu bar icon when the install finishes.",
+        "zh-CN": "正在运行的副本正在安装软件或与播放器通信，现在结束它会中断当前操作。本次启动将退出；安装完成后请使用原窗口或菜单栏图标。",
+        "fr": "L'autre copie installe un logiciel ou communique avec le lecteur ; la fermer maintenant interromprait cette opération. Ce lancement va se fermer ; utilisez la fenêtre existante ou son icône de barre de menus une fois l'installation terminée.",
+        "es": "La otra copia está instalando software o comunicándose con el reproductor; cerrarla ahora interrumpiría esa tarea. Esta instancia se cerrará; usa la ventana existente o su icono de la barra de menús cuando termine la instalación.",
+        "de": "Die laufende Kopie installiert gerade Software oder spricht mit dem Player; sie jetzt zu beenden würde das abbrechen. Dieser Start wird geschlossen; nutze das vorhandene Fenster oder sein Menüleisten-Symbol, wenn die Installation fertig ist.",
+        "ja": "実行中のコピーはソフトウェアのインストール中か、プレーヤーと通信しています。今終了するとその処理が中断されます。この起動は終了します。インストール完了後に既存のウインドウまたはメニューバーのアイコンから開いてください。",
+    },
     "notices_see_more": {
         "en": "See More",
         "zh-CN": "查看更多",

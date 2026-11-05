@@ -180,6 +180,41 @@ def test_reminders_are_one_switch_per_tracked_model(monkeypatch):
         app.processEvents()
 
 
+def test_rebuilding_reminder_rows_never_leaves_a_floating_window():
+    """Rebuilt rows stay parented and hidden until deleteLater runs.
+
+    A visible QWidget promoted with setParent(None) becomes a top-level window
+    for one event-loop turn. On Windows that is a small empty window flashing
+    over Settings every time the reminder rows are rebuilt.
+    """
+    from src.i18n import translator
+    from src.ui.settings_page import SettingsPage
+
+    app = _app()
+    translator().set_language("en")
+    page = SettingsPage()
+    try:
+        page.show()
+        app.processEvents()
+        page._rebuild_reminder_switches(
+            [("Y1", {"model": "Y1", "software_name": "Rockbox"})]
+        )
+        app.processEvents()
+        old_row = page._reminder_rows[0]
+        old_switch = page._reminder_switches["Y1"]
+        assert old_row.isVisible()
+
+        page._rebuild_reminder_switches([])
+        assert old_row.isHidden()
+        assert not old_row.isWindow()
+        assert old_switch.isHidden()
+        assert not old_switch.isWindow()
+    finally:
+        page.close()
+        page.deleteLater()
+        app.processEvents()
+
+
 def test_a_single_tracked_install_names_its_software_in_the_copy(monkeypatch):
     from src.i18n import translator
     from src.ui.settings_page import SettingsPage

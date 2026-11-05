@@ -1614,12 +1614,16 @@ class SettingsPage(QWidget):
         if not hasattr(self, "_reminders_list_layout"):
             return
         for row in getattr(self, "_reminder_rows", []):
-            row.setParent(None)
+            # Keep the row parented while deleteLater waits for the event loop.
+            # setParent(None) promotes a visible child to a top-level window,
+            # which flashed as a small window over the page on every rebuild.
+            self._reminders_list_layout.removeWidget(row)
+            row.hide()
             row.deleteLater()
         for switch in self._reminder_switches.values():
             self._switch_rows.pop(switch, None)
-            switch.setParent(None)
-            switch.deleteLater()
+            # The switch is a child of its row; deleting the row takes it too.
+            switch.hide()
         self._reminder_rows = []
         self._reminder_switches = {}
         show = len(tracked) >= 1

@@ -723,6 +723,14 @@ def end_running_copy(pid: int, wait_s: float = 5.0) -> bool:
     if pid <= 0:
         return False
     try:
+        from . import instance_marker
+
+        if instance_marker.busy_for_pid(pid):
+            logger.info("Refusing to end pid %s: it is running an install or owns a tool", pid)
+            return False
+    except Exception:
+        logger.debug("Could not read the running-copy marker", exc_info=True)
+    try:
         if sys.platform.startswith("win"):
             kernel32 = getattr(ctypes, "WinDLL", ctypes.windll).kernel32
             process_terminate = 0x0001
@@ -819,6 +827,29 @@ def _explain_already_running(focus_failed: bool = False, pid: int = 0) -> str:
     return choice
 
 
+def _busy_copy_running() -> bool:
+    """True when the live copy published work another launch must not kill."""
+    try:
+        from . import instance_marker
+
+        return bool(instance_marker.foreign_busy())
+    except Exception:
+        return False
+
+
+def _explain_busy_copy() -> None:
+    """Refuse the takeover while the running copy owns the USB device."""
+    from PySide6.QtWidgets import QMessageBox
+
+    from .i18n import tr
+
+    box = QMessageBox()
+    box.setWindowTitle(tr("single_instance_title"))
+    box.setText(tr("single_instance_busy_body"))
+    box.setIcon(QMessageBox.Icon.Information)
+    box.exec()
+
+
 def _hold_lock(app, lock: InstanceLock) -> None:
     app._instance_lock = lock
     try:
@@ -883,6 +914,9 @@ def _guarded(app, lock: Optional["InstanceLock"], quiet: bool = False) -> bool:
             return False
         pids = find_running_copy_pids()
         pid = pid or (pids[0] if pids else 0)
+        if _busy_copy_running():
+            _explain_busy_copy()
+            return False
         if _explain_already_running(focus_failed=True, pid=pid) != "force":
             return False
         if not end_running_copy(pid):
@@ -917,6 +951,10 @@ def _guarded(app, lock: Optional["InstanceLock"], quiet: bool = False) -> bool:
             # A copy built before this guard has no socket and may be hidden in
             # the tray, so there is no window to raise. Offer the same explicit
             # takeover as a guarded copy rather than exiting with no way in.
+            if _busy_copy_running():
+                _explain_busy_copy()
+                lock.release()
+                return False
             if _explain_already_running(focus_failed=True, pid=pids[0]) != "force":
                 lock.release()
                 return False
@@ -955,6 +993,9 @@ def _guarded(app, lock: Optional["InstanceLock"], quiet: bool = False) -> bool:
         return False
     logger.info("Another copy is running (pid %s); asking it to show", pid)
     if _ask_running_copy_to_show(pid):
+        return False
+    if _busy_copy_running():
+        _explain_busy_copy()
         return False
     if _explain_already_running(focus_failed=True, pid=pid) != "force":
         return False

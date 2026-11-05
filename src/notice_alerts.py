@@ -6,8 +6,9 @@ follows whether this computer can show system notifications at all.
 
 Categories map onto what a notice *is* rather than onto its severity alone:
 
-- general (``info``): announcements. Off by default, since most are readable
-  in the app whenever the user wants them.
+- general (``info``): announcements. On by default: a new notice is meant to
+  reach the user on the desktop even when the window is hidden; the switch in
+  Settings turns it off.
 - warning (``warning`` and ``critical``): safety advice. On by default.
 - player_update: a newer player firmware release. On by default.
 - app_update: a newer Updater CE build. On by default.
@@ -34,7 +35,7 @@ CATEGORY_PLAYER = "player_update"
 CATEGORY_APP = "app_update"
 
 _CATEGORY_SETTINGS = {
-    CATEGORY_GENERAL: ("notify_general_notices", False),
+    CATEGORY_GENERAL: ("notify_general_notices", True),
     CATEGORY_WARNING: ("notify_warning_notices", True),
     CATEGORY_PLAYER: ("notify_player_updates", True),
     CATEGORY_APP: ("notify_app_updates", True),

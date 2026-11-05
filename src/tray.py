@@ -309,11 +309,20 @@ class NativeStatusItem(QObject):
         message: str,
         icon=None,
         timeout_ms: int = 10000,
+        route: str = "",
     ) -> None:
-        """Post the notice through the app's own Notification Center entry."""
+        """Post the notice through the app's own Notification Center entry.
+
+        The route is what a click opens, so it must survive this hop: calling
+        ``show_system_notification`` without it cleared the app's pending route
+        and a menu bar notice then opened nothing.
+        """
         from .notifications import show_system_notification
 
-        show_system_notification(title, message)
+        if not route:
+            app = QApplication.instance()
+            route = str(getattr(app, "_last_notification_route", "") or "") if app else ""
+        show_system_notification(title, message, route=route)
 
     # -- menu actions ------------------------------------------------------
     def _open_window(self) -> None:

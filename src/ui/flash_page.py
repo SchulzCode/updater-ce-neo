@@ -1712,6 +1712,18 @@ class FlashPage(QWidget):
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
         self._wait_head_stack.addWidget(self._wait_progress_bar)
+        # A one-line question the card asks — "Is Rockbox already installed on
+        # your Y1?" — takes the band's place instead of sitting under it. A bar
+        # frozen at 0% while nothing is being written reports nothing, and in
+        # the band's slot the question shares its row and its axis with the X
+        # and the tick, so those chips read as the question's two answers.
+        self._wait_question_label = QLabel("")
+        self._wait_question_label.setWordWrap(True)
+        self._wait_question_label.setTextFormat(Qt.PlainText)
+        self._wait_question_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        _style_card_heading(self._wait_question_label)
+        self._wait_question_label.setVisible(False)
+        self._wait_head_stack.addWidget(self._wait_question_label)
         self._wait_card, self._wait_head, copy = self._new_progress_card(
             self._wait_icon,
             self._wait_pkg_label,
@@ -1742,8 +1754,14 @@ class FlashPage(QWidget):
         self._keep_data_choice.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
-        # Lives in the head stack, not in the copy column: it replaces the band.
-        self._wait_head_stack.addWidget(self._keep_data_choice)
+        # The firmware list sits directly under the question that asks for it,
+        # where the single-firmware question used to be: the card asks "Which
+        # software is currently running on your Y1?" in the band's slot, then
+        # lists the software to choose from beneath that line.
+        copy.insertWidget(
+            copy.indexOf(self._wait_prompt_label) + 1, self._keep_data_choice
+        )
+        self._keep_data_choice.setVisible(False)
         self._wait_head_stack.setCurrentWidget(self._wait_progress_bar)
         self._keep_data_hint = QLabel("")
         self._keep_data_hint.setWordWrap(True)
@@ -2469,6 +2487,7 @@ class FlashPage(QWidget):
         """Native busy throbber. Range (0, 0) is the platform indeterminate bar."""
         bar.setRange(0, 0)
         bar.setTextVisible(False)
+        self._sync_wait_band_page()
 
     def show_please_wait(self, connecting: bool = False) -> None:
         """Indeterminate bar and "Please wait", never the connect sentence.
@@ -2715,6 +2734,7 @@ class FlashPage(QWidget):
         bar.setFormat("%p%")
         bar.setValue(val)
         bar.setTextVisible(True)
+        self._sync_wait_band_page()
 
     def show_install_failure(
         self,
@@ -3833,6 +3853,7 @@ class FlashPage(QWidget):
         self._keep_data_force_hidden = True
         self._prompt_only = True
         self._wait_prompt_label.setText(question or "")
+        self._wait_prompt_label.setVisible(False)
         self._keep_data_cb.setVisible(False)
         if hasattr(self, "_keep_data_warning"):
             self._keep_data_warning.setVisible(False)
@@ -3842,6 +3863,7 @@ class FlashPage(QWidget):
         if selected and selected in names:
             self._keep_data_choice.setCurrentText(selected)
         self._show_keep_data_choice(len(names) > 1)
+        self._show_wait_question(question or "")
         self._keep_data_hint.setText(hint or "")
         self._keep_data_hint.setVisible(bool(hint))
         if hasattr(self, "_keep_data_microsd_note"):
@@ -3868,8 +3890,10 @@ class FlashPage(QWidget):
         self._keep_data_force_hidden = True
         self._prompt_only = True
         self._wait_prompt_label.setText(question or "")
+        self._wait_prompt_label.setVisible(False)
         self._keep_data_cb.setVisible(False)
         self._show_keep_data_choice(False)
+        self._show_wait_question(question or "")
         if hasattr(self, "_keep_data_warning"):
             self._keep_data_warning.setVisible(False)
         self._keep_data_hint.setText(explainer or "")
@@ -3919,14 +3943,49 @@ class FlashPage(QWidget):
             btn.setAccessibleName(label)
 
     def _show_keep_data_choice(self, active: bool) -> None:
-        """Swap the card head between the progress band and the firmware dropdown."""
-        stack = getattr(self, "_wait_head_stack", None)
+        """Show the firmware list under the question that asks about it."""
         choice = getattr(self, "_keep_data_choice", None)
-        if stack is None or choice is None:
+        if choice is None:
             return
-        wanted = choice if active else self._wait_progress_bar
         choice.setVisible(bool(active))
-        stack.setCurrentWidget(wanted)
+
+    def _show_wait_question(self, text: str) -> None:
+        """Ask a one-line question in the band's slot, in bold.
+
+        The question replaces the progress band while the card is only asking
+        something: the X and the tick then sit on the row of the words they
+        answer, instead of under a bar that is merely showing 0%.
+        """
+        label = getattr(self, "_wait_question_label", None)
+        if label is None:
+            return
+        label.setText(str(text or ""))
+        self._sync_wait_band_page()
+
+    def _sync_wait_band_page(self) -> None:
+        """The band's slot belongs to the question while the card is asking.
+
+        Every path that moves the card on sets a progress value again, so the
+        band comes back by itself once the question has been answered or
+        abandoned; a question must never be left standing over a live run.
+        """
+        stack = getattr(self, "_wait_head_stack", None)
+        if stack is None:
+            return
+        question = getattr(self, "_wait_question_label", None)
+        asking = bool(
+            getattr(self, "_keep_data_confirm_active", False)
+            or getattr(self, "_keep_data_erase_confirm_active", False)
+        )
+        if asking and question is not None and question.text().strip():
+            wanted = question
+        else:
+            wanted = self._wait_progress_bar
+        if stack.currentWidget() is not wanted:
+            stack.setCurrentWidget(wanted)
+        question_visible = wanted is question
+        if question is not None and question.isVisible() != question_visible:
+            question.setVisible(question_visible)
 
     def keep_data_confirm_choice(self) -> str:
         return self._keep_data_choice.currentText() if hasattr(self, "_keep_data_choice") else ""
@@ -3937,6 +3996,9 @@ class FlashPage(QWidget):
         self._keep_data_force_hidden = False
         self._set_yes_no_glyphs(False)
         self._show_keep_data_choice(False)
+        self._show_wait_question("")
+        if hasattr(self, "_wait_prompt_label"):
+            self._wait_prompt_label.setVisible(True)
         if hasattr(self, "_keep_data_hint"):
             self._keep_data_hint.setVisible(False)
         if hasattr(self, "_keep_data_microsd_note"):

@@ -179,6 +179,14 @@ MAXIMUM_AUTO_FIT_HEIGHT = 620
 # last card's shadow and the status bar are never clipped.
 CONTENT_FIT_SLACK = 16
 
+# A window closed to the tray keeps its whole widget tree: hide() releases no
+# pages, so the process stays the size it was with the window open. After this
+# long with nothing on screen and nothing running the window is handed back
+# entirely, and the process returns to the size of a --tray launch. Coming back
+# costs one rebuild, never a flash.
+IDLE_TRAY_SHED_SECONDS = 120
+IDLE_TRAY_SHED_MS = IDLE_TRAY_SHED_SECONDS * 1000
+
 
 def default_window_size(screen=None) -> tuple[int, int]:
     """Client size for Choose Software and the rest of the ordinary UI.
@@ -871,6 +879,13 @@ class MainWindow(QMainWindow):
         # A stalled connection makes the backend repeat the same errno line
         # many times over; this keeps the guidance dialog to once per attempt.
         self._active_workers = set()
+        # The headless tray owner, when this session has one. It takes the
+        # window back after a long idle and builds a new one on demand.
+        self._background_agent = None
+        self._idle_shed_timer = None
+        # The exact bound callable: PySide matches a disconnect against the
+        # object it was given, and a fresh bound method is a new object.
+        self._notices_slot = self._on_notices_ready
         self._build_ui()
         self._install_themes_shortcut()
         self.setAcceptDrops(True)
@@ -1261,7 +1276,7 @@ class MainWindow(QMainWindow):
             app = QApplication.instance()
             if app is not None:
                 app._notification_click_handler = self._on_notification_clicked
-            _notices.notices_ready.connect(self._on_notices_ready)
+            _notices.notices_ready.connect(self._notices_slot)
             # Select Software starts a fetch while it is being built, before
             # this signal could be heard: take its current answer now, then
             # refetch once after the first paint so a changed feed is noticed.
@@ -4452,6 +4467,8 @@ class MainWindow(QMainWindow):
         self._package_model = model or ""
         # Only the auto-started ROM-bundled run ends on Retry or Quit.
         self._bundled_firmware_run = bool(path) and path == getattr(self, "_bundled_package_path", None)
+        if not self._bundled_firmware_run:
+            self._bundled_rockbox = False
         if hasattr(self, "_flash_page"):
             self._flash_page.set_bundled_run(self._bundled_firmware_run)
         self._is_240p_rockbox = False
@@ -4949,6 +4966,7 @@ class MainWindow(QMainWindow):
         self.themes.finish()
         self._run_output_open = False
         self._download_active = False
+        self._release_install_cache()
         self._reset_after_run()
         page = getattr(self, "_select_page", None)
         if page is not None and hasattr(page, "show_catalogue_section"):
@@ -5079,7 +5097,11 @@ class MainWindow(QMainWindow):
         is_360p_rockbox, eff_model = self._rockbox_themes_required()
         apk_path, apk_url = self._apk_install_info()
         self.themes.set_apk(apk_path, apk_url)
-        self._is_360p_rockbox = is_360p_rockbox or bool(apk_path or apk_url)
+        self._is_360p_rockbox = (
+            is_360p_rockbox
+            or bool(apk_path or apk_url)
+            or bool(getattr(self, "_bundled_rockbox", False))
+        )
 
 
         self._flash_page.set_package_name(self._package_name)
@@ -5432,6 +5454,8 @@ class MainWindow(QMainWindow):
         package = str(getattr(self, "_package_path", "") or "")
         if not package or getattr(self, "_cache_recovered_package", "") == package:
             return False
+        # A retry keeps this journey's extract even when the archive is gone:
+        # retry_missing_cached_firmware reuses it rather than purging it.
         page = getattr(self, "_select_page", None)
         rel = getattr(page, "_current_selected_rel", None) if page is not None else None
         if not rel or not rel.get("download_url"):
@@ -5468,28 +5492,11 @@ class MainWindow(QMainWindow):
         if self._recover_missing_firmware(detail):
             return True
         package = Path(getattr(self, "_package_path", "") or "")
-        first_report = not getattr(self, "_cache_recovery_needed", False)
         self._cache_recovery_needed = True
-        if first_report:
-            # Clear this release's cached files so Retry downloads and extracts
-            # it again — only this release's: the other cached firmware is not
-            # the one that failed.
-            removed = []
-            try:
-                purge = getattr(getattr(self, "_select_page", None), "purge_release_cache", None)
-                if callable(purge):
-                    removed = purge()
-                else:
-                    from .. import downloads
-                    count, _freed = downloads.clear_firmware_cache()
-                    removed = [f"{count} cached item(s)"]
-            except Exception:
-                logger.warning("Could not clear the cached firmware", exc_info=True)
-            if removed:
-                self._append_log(
-                    "Cleared the cached firmware files so the next install downloads "
-                    "and extracts them again."
-                )
+        # Keep this journey's extracted cache. A failure is not permission to
+        # delete it: the Retry button may be pressed any number of times, and
+        # the extract is the source once the downloaded archive is gone. It is
+        # released only when the user leaves the install journey.
         if package.is_dir():
             self._append_log(
                 "Selected local firmware directory is incomplete; choose Select Software and "
@@ -5929,14 +5936,30 @@ class MainWindow(QMainWindow):
         self._adjust_window_geometry()
 
     def _refresh_online_data(self) -> None:
-        """Replace stale online files and re-read notices without blocking the UI."""
+        """Replace stale online files and re-read notices without blocking the UI.
+
+        With no window on screen there is no donation bar and no release feed
+        to update, so only the manifest is fetched; the donors CSV and the feed
+        snapshots wait until the window is visible again. Notice.xml keeps its
+        own frequent poll either way.
+        """
         if self._install_run_active():
             # Never compete with a running download or flash for bandwidth.
             return
+        background = (
+            self._window_hidden_in_tray()
+            or not self.isVisible()
+            or self.isMinimized()
+        )
         try:
-            from ..online_data import refresh_all_async
+            if background:
+                from ..online_data import BACKGROUND_FILES, refresh_files_async
 
-            refresh_all_async()
+                refresh_files_async(BACKGROUND_FILES)
+            else:
+                from ..online_data import refresh_all_async
+
+                refresh_all_async()
         except Exception:
             logger.debug("Online data refresh could not start", exc_info=True)
         try:
@@ -6793,9 +6816,51 @@ class MainWindow(QMainWindow):
         self._returning_to_select = True
         try:
             self._stop_running_install()
+            self._release_install_cache()
             self._reset_after_run()
         finally:
             self._returning_to_select = False
+
+    def _release_install_cache(self) -> None:
+        """Drop this journey's firmware after the user has left the install.
+
+        A failure and every retry keep the extracted working directory. This is
+        the one place that releases it, called when the journey is exited, not
+        while the failure card is still offering Retry.
+        """
+        page = getattr(self, "_select_page", None)
+        purge = getattr(page, "purge_release_cache", None)
+        if not callable(purge):
+            return
+        package_path = str(getattr(self, "_package_path", "") or "")
+        if not package_path:
+            # Nothing was opened for install, so there is no journey to release.
+            return
+        release = getattr(page, "_current_selected_rel", None)
+        package = getattr(page, "_details_package", None)
+        if release is None and package is None:
+            return
+        if isinstance(release, dict):
+            asset = Path(str(release.get("asset_name") or "")).name.casefold()
+            package_name = Path(package_path).name.casefold()
+            asset_stem = Path(asset).stem.casefold()
+            matches_archive = bool(asset) and asset in package_name
+            matches_extract = bool(asset_stem) and package_name.startswith(
+                f".{asset_stem}_"
+            )
+            if asset and not (matches_archive or matches_extract):
+                # A different release was selected after the run; its cache is
+                # not this journey's to remove.
+                return
+        try:
+            removed = purge(release, package)
+        except Exception:
+            logger.debug("Could not release the install cache", exc_info=True)
+            return
+        if removed:
+            self._append_log(
+                "Released this install's cached firmware after leaving the install."
+            )
 
     def _quit_after_bundled_run(self) -> None:
         """Stop the ROM-bundled run, clean its files up, then close the app.
@@ -7743,7 +7808,8 @@ class MainWindow(QMainWindow):
                     )
                     self._select_page._set_details_header(None, self._select_page._details_package)
 
-            if pkg.has_rockbox:
+            self._bundled_rockbox = bool(pkg.has_rockbox)
+            if self._bundled_rockbox:
                 self._is_360p_rockbox = True
 
             self._bundled_package_path = package_path
@@ -8947,14 +9013,17 @@ class MainWindow(QMainWindow):
         hold_off_automatic_termination(True)
         self._start_background_update_timer()
         self._set_window_polling(False)
+        self._arm_idle_shed()
 
     def _set_window_polling(self, running: bool) -> None:
         """Pause the window-only timers while it is hidden in the tray.
 
-        Nothing on screen reads them, so a hidden window stops polling. Only
-        the install and tray paths keep their own timers.
+        Nothing on screen reads the chrome watchdog or the SP history, so a
+        hidden window stops them. The online refresh keeps running: it is what
+        fetches new notices, and a notice that arrives while the app is in the
+        tray still has to reach the system notification channel.
         """
-        for name in ("_chrome_watchdog", "_sp_history_timer", "_online_refresh_timer"):
+        for name in ("_chrome_watchdog", "_sp_history_timer"):
             timer = getattr(self, name, None)
             if timer is None:
                 continue
@@ -8962,6 +9031,167 @@ class MainWindow(QMainWindow):
                 timer.start()
             else:
                 timer.stop()
+
+    def _arm_idle_shed(self) -> None:
+        """Schedule the window's release after a long, idle stay in the tray."""
+        if getattr(self, "_background_agent", None) is None:
+            return
+        timer = self._idle_shed_timer
+        if timer is None:
+            timer = QTimer(self)
+            timer.setSingleShot(True)
+            timer.timeout.connect(self._shed_to_background)
+            self._idle_shed_timer = timer
+        timer.start(IDLE_TRAY_SHED_MS)
+
+    def _cancel_idle_shed(self) -> None:
+        timer = getattr(self, "_idle_shed_timer", None)
+        if timer is not None:
+            timer.stop()
+
+    def _shed_to_background(self) -> None:
+        """Give the widget tree back while the app lives in the tray.
+
+        "Hidden" is not "released": a hidden window still owns every page, its
+        styles, its caches and its Python state. After the idle window this
+        hands the lot back, so the process returns to the size of a --tray
+        launch. The next open rebuilds it; nothing is lost in between, because
+        a running install (or any prompt, dialog or worker) refuses the shed.
+        """
+        agent = getattr(self, "_background_agent", None)
+        if agent is None or not self._window_hidden_in_tray():
+            return
+        if not self._shed_allowed():
+            # Something still owns the window: try again after another full
+            # idle period rather than on every timer tick.
+            self._arm_idle_shed()
+            return
+        logger.info(
+            "Releasing the window after %s s in the tray", IDLE_TRAY_SHED_SECONDS
+        )
+        self._release_for_shed(agent)
+
+    def _shed_allowed(self) -> bool:
+        """True only when nothing is using the window and no dialog is up."""
+        if not self._window_hidden_in_tray():
+            return False
+        if self._install_run_active() or getattr(self, "_download_active", False):
+            return False
+        if getattr(self, "_prep_active", False) or getattr(self, "_drop_check_active", False):
+            return False
+        if getattr(self, "_gui_handoff_prepare", False) or getattr(
+            self, "_gui_launch_in_flight", False
+        ):
+            return False
+        if getattr(self, "_closing_accepted", False) or getattr(
+            self, "_tray_quit_pending", False
+        ):
+            return False
+        if self.themes.active or self.themes.transfer_running:
+            return False
+        if getattr(self, "_portable_session", None) is not None and not getattr(
+            self, "_portable_cleanup_done", False
+        ):
+            return False
+        for worker in list(getattr(self, "_active_workers", ())):
+            if self._worker_running(worker):
+                return False
+        app = QApplication.instance()
+        if app is not None:
+            if app.activeModalWidget() is not None:
+                return False
+            from PySide6.QtWidgets import QDialog
+
+            if any(
+                isinstance(w, QDialog) and w.isVisible()
+                for w in app.topLevelWidgets()
+            ):
+                return False
+        return True
+
+    def _release_for_shed(self, agent) -> None:
+        """Drop every global reference to this window, then delete it.
+
+        A signal connection, a pending timer or the app's notification handler
+        is enough to keep the Python object -- and with it every page's state
+        -- alive after the C++ widget tree is gone. Each one is released here
+        before deleteLater(), and the allocator is then asked to return the
+        pages to the OS.
+        """
+        import gc
+
+        from PySide6.QtCore import QCoreApplication, QEvent
+
+        from ..memory_relief import release_memory_to_os
+        from ..notice_service import NoticeService
+
+        app = QApplication.instance()
+        self._cancel_idle_shed()
+        timer = getattr(self, "_background_update_timer", None)
+        if timer is not None:
+            timer.stop()
+        self._set_window_polling(False)
+        try:
+            NoticeService.instance().notices_ready.disconnect(self._notices_slot)
+        except Exception:
+            logger.debug("Notice listener was already disconnected", exc_info=True)
+        page = getattr(self, "_select_page", None)
+        monitor = getattr(page, "_monitor", None)
+        if monitor is not None and page is not None:
+            try:
+                monitor.connectivity_changed.disconnect(page._on_connectivity_changed)
+            except Exception:
+                pass
+            try:
+                monitor.stop_monitoring()
+            except Exception:
+                pass
+        runtime = getattr(self, "_runtime_i18n", None)
+        if runtime is not None:
+            try:
+                runtime.stop()
+            except Exception:
+                pass
+            try:
+                app.aboutToQuit.disconnect(runtime.stop)
+            except Exception:
+                pass
+            self._runtime_i18n = None
+        watcher = getattr(self, "_theme_watcher", None)
+        if watcher is not None:
+            try:
+                watcher.stop()
+            except Exception:
+                pass
+            if app is not None and getattr(app, "_theme_watcher", None) is watcher:
+                app._theme_watcher = None
+        self._theme_watcher = None
+        self._background_tray = None
+        self._log_lines.clear()
+        self._run_output.clear()
+        try:
+            self.cleanup_workers(sweep=False, wait=False)
+        except Exception:
+            logger.debug("Workers could not be cleaned before the shed", exc_info=True)
+        for child in self.findChildren(QTimer):
+            try:
+                child.stop()
+            except Exception:
+                pass
+        service = getattr(self, "_theme_sync_service", None)
+        if service is not None:
+            try:
+                service.stop(wait=False)
+            except Exception:
+                pass
+        # Hand the background duties back before the window stops existing.
+        agent.release_window(self)
+        self.hide()
+        self.setParent(None)
+        self.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+        gc.collect()
+        release_memory_to_os()
 
     def _hide_to_tray_at_launch(self) -> None:
         """Start-at-login: the tray is up and the window is never shown."""
@@ -8985,6 +9215,10 @@ class MainWindow(QMainWindow):
         self._update_manual_pending = False
         self._run_update_check()
         self._check_device_firmware_updates(manual=False)
+        # Notices have their own passive timer, but a copy that just came back
+        # from sleep also re-reads the feed here, so the next announcement is
+        # not left waiting for the next rotation.
+        self._refresh_online_data()
 
     def _sync_tray_update_state(self, available: bool) -> None:
         """Point the menu bar item at a waiting build, when the host has one."""
@@ -9002,6 +9236,13 @@ class MainWindow(QMainWindow):
         self._on_check_updates_clicked()
 
     def _ensure_background_tray(self):
+        agent = getattr(self, "_background_agent", None)
+        if agent is not None:
+            # The agent owns the one tray item: handing it around instead of
+            # creating a second one also keeps it up while no window exists.
+            tray = agent.ensure_tray()
+            self._background_tray = tray
+            return tray
         tray = getattr(self, "_background_tray", None)
         if tray is None:
             from PySide6.QtGui import QIcon
@@ -9027,9 +9268,36 @@ class MainWindow(QMainWindow):
         from ..notifications import bring_window_to_front
         from ..tray import hold_off_automatic_termination
 
+        self._cancel_idle_shed()
+        agent = getattr(self, "_background_agent", None)
+        if agent is not None:
+            # The window is back: it is the one thing posting checks and
+            # notices again, so the agent stops its own.
+            agent.adopt_window(self)
         hold_off_automatic_termination(False)
         bring_window_to_front(self)
         self._set_window_polling(True)
+        self._apply_host_chrome()
+
+    def _apply_host_chrome(self) -> None:
+        """Reapply the native window chrome for a window shown from the tray.
+
+        A window built by the background agent never went through the launch
+        path in app.main; every later show repeats these harmlessly.
+        """
+        try:
+            from .dark import is_dark
+            from .glass import (
+                apply_glass,
+                apply_windows_dark_titlebar,
+                configure_traffic_lights,
+            )
+
+            apply_windows_dark_titlebar(self, is_dark())
+            apply_glass(self)
+            configure_traffic_lights(self, x_offset=18)
+        except Exception:
+            logger.debug("Host chrome could not be applied", exc_info=True)
 
     def _quit_from_tray(self) -> None:
         # Not _force_quit: that skips the install prompt. Quit goes through the

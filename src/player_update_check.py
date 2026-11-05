@@ -688,6 +688,7 @@ def check_device_updates(
     releases_client: Optional[catalog.ReleasesClient] = None,
     settings: Optional[QSettings] = None,
     ignore_last_notified: bool = False,
+    force_refresh: bool = False,
 ) -> list:
     """Check whether newer releases exist for recorded Y1 or Y2 installations.
 
@@ -740,7 +741,12 @@ def check_device_updates(
             continue
 
         try:
-            releases = client.releases_for_package(matched_pkg, model, show_nightly=False)
+            releases = client.releases_for_package(
+                matched_pkg,
+                model,
+                show_nightly=False,
+                force_refresh=force_refresh,
+            )
         except Exception as e:
             logger.debug("Failed checking releases for %s on %s: %s", matched_pkg.name, model, e)
             continue

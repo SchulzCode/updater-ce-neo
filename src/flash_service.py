@@ -1912,6 +1912,57 @@ def _mark_extract_complete(extract_dir):
         pass
 
 
+#: Archive formats a downloaded firmware can arrive in. Only files inside the
+#: app's downloads directory are ever removed automatically: a package the user
+#: browsed from their own folder is their file.
+_FIRMWARE_ARCHIVE_SUFFIXES = frozenset(
+    {".zip", ".rar", ".7z", ".tar", ".gz", ".tgz", ".bz2", ".xz"}
+)
+
+
+def discard_downloaded_archive(package_path, extract_dir=None) -> bool:
+    """Remove the app's downloaded archive once its extract is flashable.
+
+    The extracted working directory is the install's source from this point
+    on, so keeping a second copy of the same firmware only doubles the space an
+    install needs. A local archive the reader browsed is never touched, and
+    nothing is removed until the extract is verified complete.
+    """
+    try:
+        source = Path(str(package_path or ""))
+        if not source.is_file() or source.suffix.lower() not in _FIRMWARE_ARCHIVE_SUFFIXES:
+            return False
+        from .downloads import downloads_dir
+
+        root = downloads_dir().resolve()
+        resolved = source.resolve()
+        if resolved != root and root not in resolved.parents:
+            # A user's own archive outside the app's download cache is theirs.
+            return False
+        cached = Path(extract_dir) if extract_dir else Path(compute_extract_dir(source))
+        if not cached.name.endswith("_extracted") or not _is_extract_complete(cached):
+            return False
+        removed = False
+        for path in (source, Path(f"{source}.part")):
+            try:
+                if path.exists():
+                    path.unlink()
+                    removed = True
+            except OSError as exc:
+                logger.debug(
+                    "Could not remove downloaded firmware archive %s: %s", path, exc
+                )
+        if removed:
+            logger.info(
+                "Removed downloaded firmware archive after extraction: %s",
+                source.name,
+            )
+        return removed
+    except Exception:
+        logger.debug("Could not dispose of downloaded firmware archive", exc_info=True)
+        return False
+
+
 def _resolve_keep_cache_names(keep_package_path: Optional[Union[str, Path]], dd: Path) -> tuple[str, str, Optional[Path]]:
     """Return ``(keep_dir_name, keep_archive_name, keep_stage_dir)`` for *keep_package_path* inside *dd*."""
     if not keep_package_path:
@@ -1981,6 +2032,16 @@ def prune_extracted_cache(keep_package_path: Optional[str] = None) -> list:
             return removed
         keep_dir_name, keep_archive, keep_stage_dir = _resolve_keep_cache_names(keep_package_path, dd)
         keep_part = f"{keep_archive}.part" if keep_archive else ""
+        # Windows filenames are case-insensitive while Python string comparison
+        # is not. Comparing the generated cache names by casefold keeps the
+        # archive and extract the run is using even when their on-disk case
+        # differs from the path the catalogue produced.
+        keep_dir_key = (keep_dir_name or "").casefold()
+        keep_archive_key = (keep_archive or "").casefold()
+        keep_part_key = (keep_part or "").casefold()
+        keep_stage_key = (
+            str(keep_stage_dir.resolve()).casefold() if keep_stage_dir else ""
+        )
         kp_resolved = Path(str(keep_package_path)).resolve() if keep_package_path else None
 
         for item in list(dd.iterdir()):
@@ -1989,21 +2050,24 @@ def prune_extracted_cache(keep_package_path: Optional[str] = None) -> list:
                 is_archive = item.suffix.lower() in (".zip", ".rar")
                 is_part = item.suffix.lower() == ".part" or low.endswith(".part")
                 is_stray_scatter = "scatter" in low and low.endswith(".txt")
-                if is_archive and item.name != keep_archive:
+                if is_archive and item.name.casefold() != keep_archive_key:
                     logger.info("Removing leftover firmware archive: %s", item.name)
                     try:
                         item.unlink()
                         removed.append(str(item))
                     except Exception as e:
                         logger.warning("Could not remove archive %s: %s", item, e)
-                elif is_part and item.name != keep_part:
+                elif is_part and item.name.casefold() != keep_part_key:
                     logger.info("Removing leftover partial download: %s", item.name)
                     try:
                         item.unlink()
                         removed.append(str(item))
                     except Exception as e:
                         logger.warning("Could not remove partial file %s: %s", item, e)
-                elif is_stray_scatter and (kp_resolved is None or item.resolve() != kp_resolved):
+                elif is_stray_scatter and (
+                    kp_resolved is None
+                    or str(item.resolve()).casefold() != str(kp_resolved).casefold()
+                ):
                     logger.info("Removing old scatter file in downloads dir: %s", item.name)
                     try:
                         item.unlink()
@@ -2011,7 +2075,7 @@ def prune_extracted_cache(keep_package_path: Optional[str] = None) -> list:
                     except Exception as e:
                         logger.warning("Could not remove stray scatter %s: %s", item, e)
             elif item.is_dir() and item.name.startswith(".") and item.name.endswith("_extracted"):
-                if item.name != keep_dir_name:
+                if item.name.casefold() != keep_dir_key:
                     logger.info("Pruning old cached firmware extraction: %s", item.name)
                     try:
                         shutil.rmtree(item, ignore_errors=True)
@@ -2020,7 +2084,7 @@ def prune_extracted_cache(keep_package_path: Optional[str] = None) -> list:
                         logger.warning("Could not remove old extract dir %s: %s", item, e)
             elif item.is_dir() and item.name == "staged_firmware":
                 for stage_item in list(item.iterdir()):
-                    if keep_stage_dir is not None and stage_item.resolve() == keep_stage_dir:
+                    if keep_stage_key and str(stage_item.resolve()).casefold() == keep_stage_key:
                         continue
                     try:
                         if stage_item.is_dir():
@@ -2171,6 +2235,9 @@ class ExtractWorker(QThread):
         if not force and _is_extract_complete(extract_dir):
             self.progress.emit(100)
             discard_firmware_history(extract_dir)
+            # Older builds kept the download as a retry copy. The extract is
+            # complete, so the archive is now a duplicate.
+            discard_downloaded_archive(p, extract_dir)
             prune_extracted_cache(keep_package_path=package_path)
             return extract_dir
         # The archive may be gone once it has been extracted, so an incomplete
@@ -2206,14 +2273,18 @@ class ExtractWorker(QThread):
             self._extract_zip(package_path, extract_dir)
         else:
             self._extract_rar(package_path, extract_dir)
+        if self._cancelled:
+            # Never write the completion marker or dispose of the source for a
+            # half-written extract: the next attempt needs the archive.
+            return extract_dir
         # A package that ships fw_package.ini keeps only its scatter and listed files.
         prune_to_firmware_package(extract_dir)
         discard_firmware_history(extract_dir)
         _mark_extract_complete(extract_dir)
-        # The archive is kept. It is the only copy of the firmware the user
-        # picked: a retry, a backend switch, or an extraction pruned later all
-        # need it, and deleting it here is what turned a retryable cache
-        # problem into CACHE_FILE_MISSING with nothing left to extract.
+        # The extracted working directory is now the install's source. Keeping
+        # the download as well used twice the space and was never needed by a
+        # retry, which reads the extract.
+        discard_downloaded_archive(p, extract_dir)
         # Cache hygiene is prune_extracted_cache's job, not extraction's.
         # Only now, with the new firmware on disk, may older extractions be replaced.
         prune_extracted_cache(keep_package_path=package_path)
@@ -2902,6 +2973,14 @@ def stage_firmware_for_flashing(
     """
     scatter_p = Path(scatter_path).resolve()
     src_folder = scatter_p.parent
+    if (
+        src_folder.parent.name == "staged_firmware"
+        and src_folder.name.startswith("stage_")
+    ):
+        # Already isolated. Restaging would delete every stage dir except the
+        # new target, including this source, and then copy from a path it had
+        # just removed.
+        return scatter_p
     if target_dir is None:
         import hashlib
         h = hashlib.sha256(str(src_folder).encode("utf-8")).hexdigest()[:12]

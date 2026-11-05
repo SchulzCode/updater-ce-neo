@@ -387,7 +387,7 @@ def test_browsing_a_package_does_not_prune_the_saved_set(tmp_path, monkeypatch):
 
 
 
-def test_cached_extract_is_never_deleted_and_is_restored_in_place(tmp_path, monkeypatch):
+def test_cached_extract_is_kept_when_the_archive_is_gone(tmp_path, monkeypatch):
     import zipfile
     from types import SimpleNamespace
     from src import downloads
@@ -396,6 +396,11 @@ def test_cached_extract_is_never_deleted_and_is_restored_in_place(tmp_path, monk
     dl = tmp_path / "app_downloads"
     dl.mkdir()
     monkeypatch.setattr(downloads, "downloads_dir", lambda: dl)
+    # flash_service imported this name at module load; patch its reference too
+    # so a stage left by another run cannot stand in for this one.
+    import src.flash_service as flash_service
+
+    monkeypatch.setattr(flash_service, "downloads_dir", lambda: dl)
 
     staging = tmp_path / "staging"
     _firmware(staging, files=("preloader.bin", "boot.img"))
@@ -411,21 +416,16 @@ def test_cached_extract_is_never_deleted_and_is_restored_in_place(tmp_path, monk
     (extract_dir / "keep.txt").write_text("cached")
     (extract_dir / "boot.img").unlink()
 
-    # The archive is kept: it is the only copy a retry can work from.
-    assert archive.exists()
-
-    # A cached folder that is missing a declared image is healed from that
-    # archive in place, without touching anything else in the folder. This is
-    # what used to surface CACHE_FILE_MISSING mid-install once extraction
-    # deleted the archive behind the cache.
-    ExtractWorker._extract(stub, str(archive))
-    assert (extract_dir / "boot.img").exists()
-
-    # A forced re-extract over the cache rewrites files in place too.
-    (extract_dir / "boot.img").unlink()
-    ExtractWorker._extract(stub, str(archive), force=True)
-    assert (extract_dir / "boot.img").exists()
-    assert archive.exists()
+    # Extraction disposes of the downloaded archive once the extract is
+    # complete. When a later cache problem leaves an image missing, there is
+    # nothing to rebuild from, but the extracted folder must not be deleted:
+    # only leaving the install journey releases it.
+    assert not archive.exists()
+    with pytest.raises(RuntimeError, match="CACHE_FILE_MISSING"):
+        ExtractWorker._extract(stub, str(archive))
+    assert extract_dir.is_dir()
+    assert (extract_dir / "keep.txt").exists()
+    assert not (extract_dir / "boot.img").exists()
 
 
 def test_prune_does_nothing_without_a_valid_package(tmp_path):

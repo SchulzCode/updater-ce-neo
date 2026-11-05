@@ -1,10 +1,9 @@
 """A retry must never find the firmware gone.
 
-Extraction used to delete the archive it came from, so a retry, the automatic
-switch to the other engine, or a pruned cache left the install with nothing to
-extract and surfaced ``CACHE_FILE_MISSING`` mid-install. These tests pin the
-new rule: the archive stays, and when it is missing the files already on disk
-are what gets flashed.
+Extraction disposes of the downloaded archive once the extracted working
+directory is complete; a retry reads that directory. A local archive the reader
+browsed is never deleted, and a missing downloaded archive still flashes the
+files already on disk.
 """
 
 import zipfile
@@ -65,18 +64,30 @@ def downloads_root(tmp_path, monkeypatch):
     return tmp_path
 
 
-def test_extraction_keeps_the_archive_for_a_retry(downloads_root):
+def test_extraction_disposes_of_the_downloaded_archive(downloads_root):
     archive = _package(downloads_root / "src")
     extracted = Path(ExtractWorker(str(archive))._extract(str(archive)))
 
     assert (extracted / "boot.img").is_file()
-    assert archive.is_file(), "the archive is the retry's only copy of the firmware"
+    assert not archive.exists(), "the extracted folder is the retained copy"
+
+
+def test_a_local_archive_is_never_deleted(tmp_path, monkeypatch):
+    downloads_root = tmp_path / "downloads"
+    downloads_root.mkdir()
+    monkeypatch.setattr(downloads, "downloads_dir", lambda: downloads_root)
+    archive = _package(tmp_path / "user")
+
+    extracted = Path(ExtractWorker(str(archive))._extract(str(archive)))
+
+    assert extracted.is_dir()
+    assert archive.is_file(), "a browsed archive belongs to the user"
 
 
 def test_a_missing_archive_uses_the_files_still_on_disk(downloads_root):
     archive = _package(downloads_root / "src")
     first = Path(ExtractWorker(str(archive))._extract(str(archive)))
-    archive.unlink()
+    assert not archive.exists()
 
     again = Path(ExtractWorker(str(archive))._extract(str(archive)))
 

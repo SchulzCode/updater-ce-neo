@@ -250,6 +250,42 @@ def _startup_presentation(start_in_tray: bool, background: bool) -> str:
     return "tray" if background else "exit"
 
 
+def _conceal_window_under_splash(window) -> bool:
+    """Show the window for layout without putting a single pixel on screen.
+
+    The main window has to be shown for Qt to lay it out, fit the first page
+    and apply the native chrome, but a launch may put exactly one thing on
+    screen: the startup card. A transparent window is still shown to Qt and to
+    the host, so the fit settles, while the user only sees the card. ``False``
+    means the host refused the opacity change, and the caller shows the window
+    the ordinary way.
+    """
+    try:
+        window.setWindowOpacity(0.0)
+    except Exception:
+        logger.debug("Window opacity unavailable during launch", exc_info=True)
+        return False
+    window.show()
+    return True
+
+
+def _reveal_launched_window(window, splash) -> None:
+    """Bring the app window in and retire the launch card in one frame.
+
+    The window is already laid out and fitted by now, so the reveal is a
+    single settled window rather than the starting geometry flashing up.
+    """
+    try:
+        window.setWindowOpacity(1.0)
+    except Exception:
+        logger.debug("Could not restore window opacity", exc_info=True)
+    try:
+        splash.finish(window)
+        splash.deleteLater()
+    except Exception:
+        logger.debug("Splash could not close", exc_info=True)
+
+
 def _prepare_linux_sp_flash_tool() -> None:
     """Prepare Linux system for SP Flash Tool USB access.
 
@@ -577,34 +613,28 @@ def main():
         if icon.exists():
             app.setWindowIcon(QIcon(str(icon)))
 
-    from .i18n import translator
-    from .ui.dark import ThemeWatcher, apply_theme, is_dark
-    from .ui.glass import (
-        apply_glass,
-        apply_windows_dark_titlebar,
-        configure_traffic_lights,
-        prepare_window_for_glass,
-    )
-    from .ui.main_window import MainWindow
+    from .i18n import initial_language, translator
 
-    # Follow the host appearance. Older macOS uses vibrant light or vibrant
-    # dark to match; Tahoe and Golden Gate stay on the Liquid Glass path.
-    _startup_step("apply_theme", apply_theme, app, force_dark=None)
+    # macOS asks once, at launch, whether the app may post notifications. Asking
+    # here means the first notice of the session can appear as a banner instead
+    # of being filed silently while the permission question is still pending.
+    try:
+        from .notifications import prepare_system_notifications
+
+        _startup_step("prepare_system_notifications", prepare_system_notifications)
+    except Exception:
+        logging.getLogger(__name__).debug(
+            "System notification setup unavailable", exc_info=True
+        )
 
     # Default language: the reader's saved choice, else the system's own
-    # language when the app ships a catalog for it, else English.
-    from .i18n import initial_language
-
+    # language when the app ships a catalog for it, else English. A menu bar
+    # notice is localized by this too, so it is restored before the tray exists.
     try:
         stored = str(QSettings("innioasis", "updater").value("language", "") or "")
     except Exception:
         stored = ""
     translator().set_language(initial_language(stored))
-    # The interface mirrors for a right-to-left language (sidebar on the right,
-    # controls aligned right), before the first widget is built.
-    from .ui.main_window import apply_interface_direction
-
-    apply_interface_direction(app)
 
     # One copy at a time. Two windows would compete for the same USB device, SP
     # Flash Tool's settings files and the shared cache, so a second launch stops
@@ -624,20 +654,184 @@ def main():
     # this one is stale, while one written during startup belongs to a second
     # launch and must still bring this window forward.
     startup_show_stamp = show_request_stamp()
-    if not ensure_single_instance(app, quiet=start_in_tray):
-        sys.exit(0)
 
+    # Decide what this launch is before any UI exists. A --tray launch must not
+    # build the window it is about to hide -- that was the whole menu bar
+    # footprint -- and a stale login entry whose opt-in was turned off leaves
+    # before the splash.
     from .tray import run_in_background_enabled
 
     background = run_in_background_enabled()
     presentation = _startup_presentation(start_in_tray, background)
     if presentation == "exit":
-        # A login entry whose opt-in was turned off: leave before the splash or
-        # the window is built, and reconciliation has already removed the entry.
         logging.getLogger("innioasis.startup").info(
             "Start-at-login launch skipped: background mode is off"
         )
         sys.exit(0)
+
+    # The window's theme is a QSS stylesheet plus a palette: roughly 10 MB of Qt
+    # style machinery the menu bar item never reads. A tray-only launch applies
+    # it when the window is actually created instead.
+    if presentation == "window":
+        from .ui.dark import apply_theme
+
+        _startup_step("apply_theme", apply_theme, app, force_dark=None)
+        app._theme_applied = True
+
+    if not ensure_single_instance(app, quiet=start_in_tray):
+        sys.exit(0)
+
+    # This copy is alive: publish what it is doing, so a launch that gets past
+    # the guard (a takeover, an older build) can see the install before it
+    # sweeps a tool or offers to end this copy.
+    try:
+        from . import instance_marker
+
+        instance_marker.start()
+        app.aboutToQuit.connect(instance_marker.clear)
+    except Exception:
+        logging.getLogger(__name__).debug(
+            "Could not publish the running-copy marker", exc_info=True
+        )
+
+    from PySide6.QtCore import QTimer
+
+    # The window lives here, not in a local: a tray launch creates it on demand
+    # and an idle stay in the tray destroys it again, so nothing may keep a
+    # reference to it after the shed. The agent clears this before deleting.
+    holder = {"window": None}
+    agent = None
+
+    def _forget_window() -> None:
+        holder["window"] = None
+
+    from . import process_guard
+
+    def _sweep_on_startup() -> None:
+        # A background-only copy has no window to report into, and does not
+        # touch the USB bus until the user asks for an install. The first
+        # window built runs this instead.
+        window = holder["window"]
+        if window is None:
+            return
+        app._startup_sweep_started = True
+
+        def _report(killed):
+            live = holder["window"]
+            if live is not None:
+                live.sweep_report.emit(killed)
+            else:
+                logging.getLogger(__name__).debug(
+                    "Startup sweep finished without a window: %s",
+                    process_guard.describe(killed),
+                )
+
+        sweep = process_guard.sweep_async(reason="startup", on_done=_report)
+        _reset_usb_after_startup(sweep)
+
+    def _create_window():
+        """Build the one window, with the host chrome it needs."""
+        from .ui.dark import apply_theme, is_dark
+        from .ui.glass import apply_windows_dark_titlebar, prepare_window_for_glass
+        from .ui.main_window import MainWindow, apply_interface_direction
+
+        apply_interface_direction(app)
+        if not getattr(app, "_theme_applied", False):
+            _startup_step("apply_theme", apply_theme, app, force_dark=None)
+            app._theme_applied = True
+        window = MainWindow()
+        holder["window"] = window
+        if agent is not None:
+            window._background_agent = agent
+            agent.adopt_window(window)
+        _startup_step("prepare_window_for_glass", prepare_window_for_glass, window)
+        _startup_step(
+            "apply_windows_dark_titlebar",
+            apply_windows_dark_titlebar,
+            window,
+            is_dark(),
+        )
+        if presentation == "tray" and not getattr(app, "_startup_sweep_started", False):
+            QTimer.singleShot(0, _sweep_on_startup)
+        return window
+
+    if background:
+        from .background_agent import BackgroundAgent
+
+        agent = BackgroundAgent(app, _create_window, _forget_window)
+        try:
+            app.aboutToQuit.connect(agent.shutdown)
+        except Exception:
+            pass
+
+    def _show_main_window(route=None) -> None:
+        """A second launch, the Dock icon or a notification asks for the window."""
+        if agent is not None:
+            agent.show_window(route)
+            return
+        window = holder["window"]
+        if window is not None:
+            window._show_from_tray()
+
+    try:
+        from .single_instance import start_focus_server
+
+        _focus_server = start_focus_server()
+        if _focus_server is not None:
+            _focus_server.focus_requested.connect(lambda: _show_main_window())
+    except Exception:
+        logging.getLogger(__name__).debug(
+            "Single-instance focus channel could not start", exc_info=True
+        )
+
+    # The file channel is the backstop: a copy started from another folder, an
+    # older build, or a host that refuses local sockets still gets its window
+    # back when the user opens the app from its shortcut. It does not depend on
+    # the socket above, so it starts even when that one could not.
+    try:
+        from .single_instance import watch_show_requests
+
+        app._show_request_watcher = watch_show_requests(
+            _show_main_window, baseline=startup_show_stamp
+        )
+    except Exception:
+        logging.getLogger(__name__).debug(
+            "Single-instance show-request watcher could not start", exc_info=True
+        )
+
+    # Reopen window when clicking Dock icon on macOS while hidden in the menu bar / tray
+    if _sys.platform == "darwin":
+        try:
+            from AppKit import NSApplication
+            import objc
+
+            ns_app = NSApplication.sharedApplication()
+            delegate = ns_app.delegate()
+            if delegate is not None:
+                orig_reopen = getattr(
+                    delegate, "applicationShouldHandleReopen_hasVisibleWindows_", None
+                )
+
+                class QCocoaApplicationDelegate(objc.Category(delegate.__class__)):
+                    def applicationShouldHandleReopen_hasVisibleWindows_(self, sender, has_visible):
+                        window = holder["window"]
+                        if not has_visible or (
+                            window is not None and not window.isVisible()
+                        ):
+                            _show_main_window()
+                        if orig_reopen is not None:
+                            try:
+                                return orig_reopen(sender, has_visible)
+                            except Exception:
+                                pass
+                        return True
+        except Exception:
+            logging.getLogger(__name__).debug(
+                "Could not hook macOS applicationShouldHandleReopen", exc_info=True
+            )
+
+    if background:
+        app.setQuitOnLastWindowClosed(False)
 
     startup_splash = None
     if _sys.platform.startswith("win") and presentation == "window":
@@ -670,155 +864,58 @@ def main():
         except Exception:
             logging.getLogger(__name__).debug("Startup splash unavailable", exc_info=True)
 
-    try:
-        window = MainWindow()
-    except Exception:
-        if startup_splash is not None:
-            try:
-                startup_splash.close()
-            except Exception:
-                pass
-        raise
-
-    # A second launch asks this copy to come forward. The channel starts as
-    # soon as the lock is held, and stays alive for the app's lifetime.
-    from .notifications import bring_window_to_front
-
-    def _show_existing_window() -> None:
-        # _show_from_tray also resumes the window-only timers; a bare raise
-        # would leave a copy restored from the menu bar polling as though it
-        # were still hidden.
-        show = getattr(window, "_show_from_tray", None)
-        if callable(show):
-            show()
-        else:
-            bring_window_to_front(window)
-
-    try:
-        from .single_instance import start_focus_server
-
-        _focus_server = start_focus_server()
-        if _focus_server is not None:
-            _focus_server.focus_requested.connect(_show_existing_window)
-    except Exception:
-        logging.getLogger(__name__).debug(
-            "Single-instance focus channel could not start", exc_info=True
-        )
-
-    # The file channel is the backstop: a copy started from another folder, an
-    # older build, or a host that refuses local sockets still gets its window
-    # back when the user opens the app from its shortcut. It does not depend on
-    # the socket above, so it starts even when that one could not.
-    try:
-        from .single_instance import watch_show_requests
-
-        app._show_request_watcher = watch_show_requests(
-            _show_existing_window, baseline=startup_show_stamp
-        )
-    except Exception:
-        logging.getLogger(__name__).debug(
-            "Single-instance show-request watcher could not start", exc_info=True
-        )
-
-    # Reopen window when clicking Dock icon on macOS while hidden in the menu bar / tray
-    if _sys.platform == "darwin":
-        try:
-            from AppKit import NSApplication
-            import objc
-
-            ns_app = NSApplication.sharedApplication()
-            delegate = ns_app.delegate()
-            if delegate is not None:
-                orig_reopen = getattr(delegate, "applicationShouldHandleReopen_hasVisibleWindows_", None)
-
-                class QCocoaApplicationDelegate(objc.Category(delegate.__class__)):
-                    def applicationShouldHandleReopen_hasVisibleWindows_(self, sender, has_visible):
-                        if not has_visible or (window is not None and not window.isVisible()):
-                            show = getattr(window, "_show_from_tray", None)
-                            if callable(show):
-                                show()
-                            else:
-                                bring_window_to_front(window)
-                        if orig_reopen is not None:
-                            try:
-                                return orig_reopen(sender, has_visible)
-                            except Exception:
-                                pass
-                        return True
-        except Exception:
-            logging.getLogger(__name__).debug("Could not hook macOS applicationShouldHandleReopen", exc_info=True)
-
-    if background:
-        app.setQuitOnLastWindowClosed(False)
-
-    # Before show(): the window must exist to be prepared for glass. After it:
-    # every other piece of host chrome, each one guarded.
-    _startup_step("prepare_window_for_glass", prepare_window_for_glass, window)
-    # Windows paints the title bar in the host's light chrome until the DWM is
-    # told otherwise, so setting the attributes here (on the native handle,
-    # before the first frame) is what keeps the launch from flashing a white
-    # strip around the dark splash. _apply_native_chrome repeats it harmlessly
-    # once the window is up, and follows later theme changes.
-    _startup_step(
-        "apply_windows_dark_titlebar",
-        apply_windows_dark_titlebar,
-        window,
-        is_dark(),
-    )
-    # --tray (start-at-login): stay in the menu bar; the window opens on click.
-    if presentation == "tray":
-        # The tray keeps the process alive with no window open.
-        app.setQuitOnLastWindowClosed(False)
     if presentation == "window":
-        window.show()
+        window = _create_window()
+        # The launch card owns the screen until the app is ready. With a card,
+        # show the window beneath it with no pixels of its own, so the first
+        # layout, fit and native chrome settle unseen; the reveal retires the
+        # card. Without one -- macOS and Linux -- the window is the launch.
+        concealed = startup_splash is not None and _conceal_window_under_splash(window)
+        if not concealed:
+            window.show()
         # The window is up: acknowledge a marker that was waiting at launch.
         # If a new request arrived meanwhile its stamp differs, so it stays for
         # the watcher to handle.
         clear_show_request(startup_show_stamp)
+        from .ui.dark import is_dark
+
         _apply_native_chrome(window, dark=is_dark())
         if startup_splash is not None:
-            # Keep the splash over the first layout and fit. Closing it as soon
-            # as show() returns exposed the main window while it was still at
-            # its starting geometry, which read as a small window flashing up
-            # before it settled. The short hold covers that hand-off; the
-            # splash still closes even if the main window never exposes.
+            # Keep the card up over the first layout and fit, then reveal the
+            # window as it retires: a settled window, never the starting
+            # geometry flashing up behind the card. The card still retires
+            # even if the main window never exposes.
             splash = startup_splash
             startup_splash = None
-
-            def _close_startup_splash() -> None:
-                try:
-                    splash.finish(window)
-                    splash.deleteLater()
-                except Exception:
-                    logging.getLogger(__name__).debug(
-                        "Splash could not close", exc_info=True
-                    )
-
-            from PySide6.QtCore import QTimer
-
-            QTimer.singleShot(220, _close_startup_splash)
+            QTimer.singleShot(220, lambda: _reveal_launched_window(window, splash))
+        QTimer.singleShot(1500, _sweep_on_startup)
     else:
-        window._hide_to_tray_at_launch()
+        # Start-at-login: the menu bar item is the whole app until it is asked
+        # for a window.
+        if agent is not None:
+            agent.start(show_tray=True)
         clear_show_request(startup_show_stamp)
 
     # Work the first screen does not need: the catalogue refresh, the donation
     # marker, shedding the redundant payload and (on Linux) the SP Flash Tool
     # system prep. None of it paints anything, and none of it may hold the
-    # window back, so it runs once the window is already up.
-    from PySide6.QtCore import QTimer
-
+    # window back, so it runs once the window is already up (or immediately in
+    # a background-only session).
     def _deferred_startup() -> None:
         _maybe_shed_redundant_payload()
-        # Only the copy that owns the app touches the shared online copies
-        # (catalogue, notices, donors, blocklist) or the donation marker.
-        try:
-            from . import online_data
+        # A windowless session has no donation bar or release feed on screen:
+        # the background agent keeps the manifest and notices current, and
+        # nothing else is fetched until a window is shown. A window launch
+        # still refreshes everything for the donations bar and feeds.
+        if presentation != "tray":
+            try:
+                from . import online_data
 
-            online_data.refresh_all_async()
-        except Exception:
-            logging.getLogger(__name__).debug(
-                "Online data refresh could not start", exc_info=True
-            )
+                online_data.refresh_all_async()
+            except Exception:
+                logging.getLogger(__name__).debug(
+                    "Online data refresh could not start", exc_info=True
+                )
         try:
             from . import player_update_check
 
@@ -830,38 +927,38 @@ def main():
 
     QTimer.singleShot(0, _deferred_startup)
 
-    # A previous run that crashed (or a tool the user started by hand) may still
-    # be holding the USB port and SP Flash Tool's own settings files. Nothing is
-    # installing at this point, so clear it once, off the GUI thread.
-    from . import process_guard
-
-    def _sweep_on_startup():
-        # The report travels back on the window's own signal: the sweep runs on
-        # a worker thread and the log is a widget.
-        sweep = process_guard.sweep_async(reason="startup", on_done=window.sweep_report.emit)
-        _reset_usb_after_startup(sweep)
-
-    QTimer.singleShot(1500, _sweep_on_startup)
-
     # Match host appearance live: light/dark switches, desktop accent colours,
-    # system font changes — the same way native apps follow the OS. The window
+    # system font changes -- the same way native apps follow the OS. The window
     # normally brings the watcher with it (and registers it on the app); one is
     # installed here only when it did not, so the host is never watched twice.
-    theme_watcher = getattr(app, "_theme_watcher", None)
-    if theme_watcher is None:
-        def _on_theme_applied():
-            apply_windows_dark_titlebar(window, is_dark())
-            apply_glass(window)
-            configure_traffic_lights(window)
+    # A tray-built window installs its own when it is created.
+    if presentation == "window":
+        from .ui.dark import ThemeWatcher, is_dark
+        from .ui.glass import (
+            apply_glass,
+            apply_windows_dark_titlebar,
+            configure_traffic_lights,
+        )
 
-        theme_watcher = ThemeWatcher(app, on_apply=_on_theme_applied)
-        theme_watcher.install()
-        # Keep a reference for the lifetime of the app; the watcher owns timers
-        # and an event filter on the QApplication itself.
-        app._theme_watcher = theme_watcher
+        theme_watcher = getattr(app, "_theme_watcher", None)
+        if theme_watcher is None:
+
+            def _on_theme_applied():
+                live = holder["window"]
+                if live is None:
+                    return
+                apply_windows_dark_titlebar(live, is_dark())
+                apply_glass(live)
+                configure_traffic_lights(live)
+
+            theme_watcher = ThemeWatcher(app, on_apply=_on_theme_applied)
+            theme_watcher.install()
+            # Keep a reference for the lifetime of the app; the watcher owns
+            # timers and an event filter on the QApplication itself.
+            app._theme_watcher = theme_watcher
 
     exit_code = app.exec()
-    _leave_cleanly(window, exit_code)
+    _leave_cleanly(holder["window"], exit_code)
     sys.exit(exit_code)
 
 

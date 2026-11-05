@@ -1927,11 +1927,11 @@ class SelectPackagePage(QWidget):
     def refresh_models(self):
         """Repopulate the device drop-down from what the catalogue offers.
 
-        Only models with a release in the live catalogue are listed — there is
-        no point offering a device with nothing to install. The wider lineup in
-        src/device_models.py exists so that firmware imported by hand still
-        gets guidance naming the right player; such a model is appended here
-        while it is selected, so the drop-down never contradicts the prompt.
+        Only models with a release in the live catalogue (``slidia_manifest.xml``)
+        are listed — there is no point offering a device with nothing to install,
+        and a package browsed by hand must never add a row here. Such a package
+        keeps its model on ``_current_package_model``, which is what the prompts
+        and the install use; the drop-down returns to its default row instead.
         """
         from .. import device_models
 
@@ -1940,30 +1940,37 @@ class SelectPackagePage(QWidget):
             fallback=DEVICE_MODELS,
         )
         current = self._model_combo.currentText().strip()
-        if current and current not in model_ids:
-            # Keep a manually imported model visible/selected.
-            model_ids.append(current)
 
         self._model_combo.blockSignals(True)
         self._model_combo.clear()
         self._model_combo.addItems(model_ids)
-        if current:
-            idx = self._model_combo.findText(current)
-            if idx >= 0:
-                self._model_combo.setCurrentIndex(idx)
+        idx = self._model_combo.findText(current) if current else -1
+        if idx >= 0:
+            self._model_combo.setCurrentIndex(idx)
+        reset = bool(current) and idx < 0 and self._model_combo.count() > 0
+        if reset:
+            # The selected model is no longer offered (the manifest changed):
+            # back to the default row, and the software list follows it below.
+            self._model_combo.setCurrentIndex(0)
         self._model_combo.blockSignals(False)
+        if reset and hasattr(self, "_software_combo"):
+            self._on_model_changed()
 
-    def _select_model_for_manual(self, model: str):
-        """Select ``model`` for a hand-imported package, adding it if needed."""
+    def _select_model_for_manual(self, model: str) -> None:
+        """Point the device drop-down at a hand-imported package's model.
+
+        The drop-down offers only catalogue-backed models, so a package for a
+        device ``slidia_manifest.xml`` does not list yet (a G5, say) returns it
+        to the default row: that package's model still reaches the prompts and
+        the install through ``_current_package_model``, not through this list.
+        """
         if not model:
             return
         idx = self._model_combo.findText(model)
         if idx < 0:
-            # Not catalogue-backed (e.g. a G5): add it so the connection
-            # prompts name the right player, and let refresh_models() drop it
-            # again once another model is chosen.
-            self._model_combo.addItem(model)
-            idx = self._model_combo.count() - 1
+            if self._model_combo.count():
+                self._model_combo.setCurrentIndex(0)
+            return
         self._model_combo.setCurrentIndex(idx)
 
     def _on_model_changed(self):
@@ -3059,10 +3066,9 @@ class SelectPackagePage(QWidget):
     def purge_release_cache(self, rel=None, package=None) -> list:
         """Delete one release's archive and extracted folder.
 
-        Used before a recovery download. A folder whose marker says extraction
-        finished can still be missing an image the scatter needs, and reusing
-        it fails the same way again — which is how one cache error turned into
-        a loop that could never recover.
+        Called only when the user leaves the install journey, never from a
+        failure or retry: the extract is the install's source once the download
+        has been disposed of, and repeated retries must keep it.
         """
         import shutil
 
@@ -3083,21 +3089,37 @@ class SelectPackagePage(QWidget):
         return removed
 
     def retry_missing_cached_firmware(self, *, prompt: bool = True):
-        """Retry the selected release after its archive or extracted cache vanished.
+        """Retry with the firmware already on disk.
 
-        The cached files are purged first: a retry that kept them would reuse
-        the same broken extract and fail again.
+        A failure never purges this journey's extract: retries are unlimited,
+        and once the downloaded archive has been disposed of the extracted
+        working directory is the install's only source. It is released only
+        when the user leaves the install journey.
         """
         rel = getattr(self, "_current_selected_rel", None)
         if rel is None:
             self._say(tr("sel_cache_retry_select_release"), 12000)
             return
-        removed = self.purge_release_cache(rel)
-        if removed:
-            logger.info("Purged cached firmware before retrying: %s", ", ".join(removed))
+        package = getattr(self, "_details_package", None) or self.current_package()
+        dest, extract_dir = self._release_cache_paths(rel, package)
+        if (
+            dest is not None
+            and extract_dir is not None
+            and _is_extract_complete(extract_dir)
+        ):
+            # The files are still good: do not download, purge or re-extract,
+            # just hand the same working directory back to the install.
+            logger.info("Reusing extracted firmware for retry at %s", extract_dir)
+            self._current_package_path = str(dest)
+            self._current_installed_release_info = (
+                getattr(self, "_current_installed_release_info", None)
+                or getattr(self, "_pending_install_release_info", None)
+            )
+            self._on_online_prep_done(True, str(extract_dir), "")
+            return
         self._trigger_release_install(
             rel,
-            package=getattr(self, "_details_package", None),
+            package=package,
             prompt=prompt,
         )
 

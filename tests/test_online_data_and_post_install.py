@@ -888,7 +888,11 @@ def test_guided_power_off_and_keep_data_flow(qapp):
         assert fp._wait_continue_btn._symbol == "check"
         assert fp._wait_cancel_btn._symbol == "cancel"
         assert fp._keep_data_choice.isHidden()
-        assert fp._wait_head_stack.currentWidget() is fp._wait_progress_bar
+        # The question takes the progress band's place in bold, so the X and
+        # the tick beside it read as its answers rather than as a bar at 0%.
+        assert fp._wait_head_stack.currentWidget() is fp._wait_question_label
+        assert "Rondo" in fp._wait_question_label.text()
+        assert fp._wait_prompt_label.isHidden()
         assert "Rondo" in fp._wait_prompt_label.text()
 
         # Cancel confirmation -> goes to erase confirmation
@@ -914,9 +918,10 @@ def test_guided_power_off_and_keep_data_flow(qapp):
         assert fp._wait_cancel_btn._symbol == "cancel"
         assert not fp._keep_data_choice.isHidden()
         assert fp._keep_data_choice.count() > 1
-        # The firmware question takes the progress band's place in the card
-        # head, beside the Next/Cancel chips, rather than a row of its own.
-        assert fp._wait_head_stack.currentWidget() is fp._keep_data_choice
+        # The question takes the progress band's place in the card head, and
+        # the firmware list it asks about is listed directly beneath it.
+        assert fp._wait_head_stack.currentWidget() is fp._wait_question_label
+        assert "Y1" in fp._wait_question_label.text()
         assert fp._keep_data_hint.isVisible()
     finally:
         win.close()
