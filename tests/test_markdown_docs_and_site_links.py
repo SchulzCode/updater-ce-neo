@@ -20,7 +20,11 @@ from PySide6.QtWidgets import QApplication
 
 from src import docs_source, player_update_check
 from src.browser import _with_donation_preference
-from src.markdown_render import render_markdown_html, strip_front_matter
+from src.markdown_render import (
+    render_markdown_html,
+    rewrite_legacy_discord_invite,
+    strip_front_matter,
+)
 from src.ui.flash_page import FlashPage
 
 RONDO = "https://github.com/jarvissax/rondo/blob/main/docs/install.md#first-start"
@@ -186,6 +190,43 @@ def test_markdown_keeps_tables_and_images_and_drops_colours():
     assert "x.png" in html
     assert "#ff0000" not in html
     assert "#123456" in html
+
+
+OLD_DISCORD = "https://discord.gg/3zbfaTNN7V"
+NEW_DISCORD = "https://discord.gg/zHrT2zrcek"
+
+
+def test_legacy_discord_invites_point_at_the_current_server():
+    body = (
+        f"[Join the Discord]({OLD_DISCORD})\n\n"
+        f"[![Community](images/community.png)]({OLD_DISCORD})\n\n"
+        f'<a href="{OLD_DISCORD}">HTML invite</a>\n'
+    )
+    rewritten = rewrite_legacy_discord_invite(body)
+    assert NEW_DISCORD in rewritten
+    assert OLD_DISCORD not in rewritten
+    # Labels and image markup are the document's; only the target moved.
+    assert "[Join the Discord](" in rewritten
+    assert "![Community](images/community.png)" in rewritten
+    assert "HTML invite" in rewritten
+    # Preparing a document twice must not double-rewrite anything.
+    assert rewrite_legacy_discord_invite(rewritten) == rewritten
+    prepared = docs_source.prepare_markdown(body)
+    assert NEW_DISCORD in prepared
+    assert OLD_DISCORD not in prepared
+
+
+def test_rendered_markdown_uses_the_current_discord_invite():
+    body = (
+        f"[Join the Discord]({OLD_DISCORD})\n\n"
+        f"[![Community](images/community.png)]({OLD_DISCORD})\n"
+    )
+    html = render_markdown_html(body)
+    assert NEW_DISCORD in html
+    assert OLD_DISCORD not in html
+    assert "Join the Discord" in html
+    assert "Community" in html
+    assert "images/community.png" in html
 
 
 # --------------------------------------------------------------------------

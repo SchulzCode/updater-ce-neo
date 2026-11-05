@@ -209,9 +209,10 @@ def rewrite_relative_urls(text: str, base_url: str) -> str:
 
 def prepare_markdown(text: str, base_url: str = "") -> str:
     """A fetched document ready to render: no front matter, absolute links."""
-    from .markdown_render import strip_front_matter
+    from .markdown_render import rewrite_legacy_discord_invite, strip_front_matter
 
     prepared = strip_front_matter(str(text or ""))
+    prepared = rewrite_legacy_discord_invite(prepared)
     return rewrite_relative_urls(prepared, base_url)
 
 

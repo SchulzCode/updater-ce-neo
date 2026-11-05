@@ -28,6 +28,25 @@ _DROPPED_DECLARATIONS = re.compile(
 
 _FRONT_MATTER = re.compile(r"\A\ufeff?---\r?\n.*?\r?\n---\r?\n", re.DOTALL)
 
+#: The Discord invite documents were written against before the server move.
+#: Parsed documents still carry it, so every Markdown body is repointed here.
+LEGACY_DISCORD_INVITE = "https://discord.gg/3zbfaTNN7V"
+DISCORD_INVITE = "https://discord.gg/zHrT2zrcek"
+_LEGACY_DISCORD_INVITE = re.compile(
+    r"https?://(?:www\.)?discord\.gg/3zbfaTNN7V/?(?![A-Za-z0-9])",
+    re.IGNORECASE,
+)
+
+
+def rewrite_legacy_discord_invite(text: str) -> str:
+    """Point old Discord invite links at the current server.
+
+    Only the target URL changes, so a Markdown link's label, an image's alt
+    text and a linked image all stay exactly as the document wrote them. The
+    rewrite is idempotent: preparing a document more than once is harmless.
+    """
+    return _LEGACY_DISCORD_INVITE.sub(DISCORD_INVITE, str(text or ""))
+
 
 def strip_front_matter(text: str) -> str:
     """Drop a leading YAML block (``---`` ... ``---``) from a Markdown file.
@@ -52,7 +71,9 @@ def render_markdown_html(
     ``allow_images`` is for the places that deliberately keep a reader on the
     words (the release-notes card); a guide keeps its screenshots.
     """
-    text = strip_front_matter(str(body or "").strip())
+    text = rewrite_legacy_discord_invite(
+        strip_front_matter(str(body or "").strip())
+    )
     if not allow_images:
         text = re.sub(r"!\[.*?\]\(.*?\)", "", text)
         text = re.sub(r"<img[^>]*>", "", text, flags=re.IGNORECASE)

@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
 
 from .. import paths
 from ..config import install_power_on_steps, device_label_for_model
+from ..markdown_render import rewrite_legacy_discord_invite
 # Lines kept in the text widget. The manager still retains the full log;
 # painting tens of thousands of blocks on the GUI thread is what froze the window.
 VISIBLE_LOG_LINES = 2000
@@ -379,7 +380,7 @@ def format_notice_markdown(body: str, *, text_color: str | None = None) -> str:
     t = T()
     fg = text_color or t.fg
     doc = QTextDocument()
-    doc.setMarkdown((body or "").strip())
+    doc.setMarkdown(rewrite_legacy_discord_invite((body or "").strip()))
     html = doc.toHtml()
 
     # Qt's export paints a solid body and writes inline default colours. Strip
@@ -2772,7 +2773,7 @@ def format_markdown_release_notes(
     cleaned_md = re.sub(r"\[\s*\]\(.*?\)", "", cleaned_md)
 
     doc = QTextDocument()
-    doc.setMarkdown(cleaned_md)
+    doc.setMarkdown(rewrite_legacy_discord_invite(cleaned_md))
     html = doc.toHtml()
 
     # 2. Re-style links with accent color & underline

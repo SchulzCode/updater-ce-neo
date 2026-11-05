@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import catalog, downloads, device_tracking
+from ..markdown_render import rewrite_legacy_discord_invite
 from ..network import get_connectivity_monitor
 from ..worker_lifecycle import retire_worker
 from ..flash_service import (
@@ -1784,10 +1785,18 @@ class SelectPackagePage(QWidget):
             self._type_combo.blockSignals(True)
             self._type_combo.setCurrentIndex(0)
             self._type_combo.blockSignals(False)
-        if hasattr(self, "_software_combo") and self._software_combo.count() > 0:
-            self._software_combo.blockSignals(True)
-            self._software_combo.setCurrentIndex(0)
-            self._software_combo.blockSignals(False)
+        if hasattr(self, "_software_combo"):
+            # Rebuild the names for the reset model instead of leaving the
+            # previous model's list in place, and start on Original Software.
+            names = catalog.software_names_for_model(
+                self.current_model(), brand=self.current_brand()
+            )
+            self._populate_software_combo(names)
+        if hasattr(self, "_software_combo") and not is_generic_mtk():
+            # The resets above rebuilt the software choice without signals.
+            # Start the matching listing now; it replaces any worker still
+            # fetching the pre-reset choice before the catalogue is shown.
+            self._on_software_changed()
         if hasattr(self, "_show_online_view"):
             self._show_online_view()
         if hasattr(self, "_check_and_load_cached_firmware"):
@@ -2035,6 +2044,9 @@ class SelectPackagePage(QWidget):
         self._model_combo.setCurrentIndex(idx)
 
     def _on_model_changed(self):
+        previous_software = (
+            self.current_software() if hasattr(self, "_software_combo") else ""
+        )
         model = self.current_model()
         # Show the type filter only for models that have Type A/B variants (Y1).
         has_types = model.upper() == "Y1"
@@ -2049,7 +2061,12 @@ class SelectPackagePage(QWidget):
         else:
             self._selected_type = self._type_combo.currentData() or "A"
         names = catalog.software_names_for_model(model, brand=self.current_brand())
-        self._populate_software_combo(names)
+        # The same software name means the equivalent firmware for the new
+        # model; anything else falls back to Original Software in the combo.
+        self._populate_software_combo(
+            names,
+            select=self._software_name_kept_across_models(previous_software, names),
+        )
         self._update_device_status_copy()
         self._on_software_changed()
         self._sync_notice_context()
@@ -2075,23 +2092,60 @@ class SelectPackagePage(QWidget):
         dlg = NoticesDialog(self, notices)
         dlg.exec()
 
+    @staticmethod
+    def _default_software_name(names) -> str:
+        """The stock/original row in a model's software list.
+
+        Every model defaults to its Original Software entry, not whatever the
+        manifest happens to list first: switching models must not silently
+        browse another firmware family. If a catalogue has no such entry, its
+        first row is the only sensible fallback.
+        """
+        cleaned = [str(name) for name in (names or []) if str(name).strip()]
+        for name in cleaned:
+            if name.strip().casefold() == "original software":
+                return name
+        for name in cleaned:
+            if "original" in name.casefold():
+                return name
+        return cleaned[0] if cleaned else ""
+
+    @staticmethod
+    def _software_name_kept_across_models(previous, names) -> str:
+        """The new model's spelling of ``previous``, when it lists that name.
+
+        Software rows are matched by canonical name: the same name on another
+        model is the equivalent choice, and the new model's package is then
+        resolved normally. An empty result means the caller should fall back
+        to :meth:`_default_software_name`.
+        """
+        wanted = (previous or "").strip().casefold()
+        if not wanted:
+            return ""
+        for name in names or []:
+            if str(name).strip().casefold() == wanted:
+                return str(name)
+        return ""
+
     def _populate_software_combo(self, names, select=None) -> None:
         """Fill the Software dropdown with localised labels.
 
         The canonical English name stays as the item's ``Qt.UserRole`` data:
         catalogue lookups and device tracking key off it, and only the label
         is translated (see :func:`display_software_name`). ``select`` is a
-        canonical name to restore after the rebuild.
+        canonical name to restore after the rebuild; when it is absent the
+        model's Original Software row is selected.
         """
         combo = self._software_combo
         combo.blockSignals(True)
         combo.clear()
         for name in names:
             combo.addItem(display_software_name(name), name)
-        if select is not None:
-            idx = self._find_software_index(select)
-            if idx >= 0:
-                combo.setCurrentIndex(idx)
+        idx = self._find_software_index(select) if select is not None else -1
+        if idx < 0:
+            idx = self._find_software_index(self._default_software_name(names))
+        if idx >= 0:
+            combo.setCurrentIndex(idx)
         combo.blockSignals(False)
 
     def _find_software_index(self, name) -> int:
@@ -2194,6 +2248,12 @@ class SelectPackagePage(QWidget):
         if force_refresh and refresh_manifest:
             self._refresh_manifest()
         package = self.current_package()
+        # A fresh listing has no selected release yet. Drop the old release
+        # details so a slow worker can never let the previous model's package
+        # reach the install card or a flash while the new list is loading.
+        self._current_selected_rel = None
+        self._details_package = None
+        self._listed_releases = []
         self._release_list.clear()
         self._install_btn.setEnabled(False)
         if package is None:
@@ -2293,10 +2353,9 @@ class SelectPackagePage(QWidget):
             str(combo.itemData(i) or combo.itemText(i)) for i in range(combo.count())
         ]
         if names != existing:
-            # Keep the user's software choice; only the list contents change.
+            # Keep the user's software choice when the new list still has it;
+            # a name that disappeared falls back to Original Software.
             self._populate_software_combo(names, select=current_sw)
-            if self._find_software_index(current_sw) < 0 and combo.count():
-                combo.setCurrentIndex(0)
         if self.current_package() is None:
             self._refresh_releases()
         elif self._can_relist_quietly():
@@ -2709,7 +2768,7 @@ class SelectPackagePage(QWidget):
             return cleaned_md
 
         doc = QTextDocument()
-        doc.setMarkdown(cleaned_md)
+        doc.setMarkdown(rewrite_legacy_discord_invite(cleaned_md))
         html = doc.toHtml()
         # Qt's markdown export paints a solid paper colour on the body. The
         # details pane sits on the card, which sits on the system material.
