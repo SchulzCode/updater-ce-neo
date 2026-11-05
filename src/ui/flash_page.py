@@ -7,7 +7,17 @@ import sys
 
 logger = logging.getLogger(__name__)
 
-from PySide6.QtCore import QEvent, QEventLoop, QRect, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import (
+    QEasingCurve,
+    QEvent,
+    QEventLoop,
+    QPropertyAnimation,
+    QRect,
+    QSize,
+    Qt,
+    QTimer,
+    Signal,
+)
 from PySide6.QtGui import QColor, QFont, QPainter, QPalette, QPen, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
@@ -20,6 +30,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QSizePolicy,
+    QSpacerItem,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -428,6 +439,12 @@ _ROUND_NEXT_ARROW_PX = 15
 _CHIP_SHADOW_ALPHA = 72
 # Where a chip row's copy starts, so the icon reads as the card's leading edge.
 _CARD_COPY_INDENT = _CARD_ICON_PX + _CARD_HEAD_GAP
+# How long the chips take to travel from the row's edge to the question they
+# answer, and back. Long enough to read as one control moving, short enough
+# that the answer never waits on the animation.
+_CHIP_INLINE_MS = 220
+# QWIDGETSIZE_MAX: a maximum width that means "let the layout decide".
+_UNLIMITED_WIDTH = 16777215
 # Round chips sit on a glass card, so their discs are translucent too. The
 # accent (the step that moves the install on) stays nearly opaque; a neutral
 # cancel/back chip reads as a wash over whatever is behind it.
@@ -466,8 +483,24 @@ class _CardHead(QWidget):
         self.title.setWordWrap(False)
         self.identity_box.addWidget(title)
         self.box.addWidget(self.identity, 1)
+        # Absorbs whatever room the identity column does not need, so a chips
+        # row that has slid in beside a question never shares that room out
+        # around the title and pushes the words off the card's leading edge.
+        self._tail_space = QSpacerItem(
+            0, 0, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum
+        )
+        self.box.addItem(self._tail_space)
         self.band = None
         self._chips: list[_RoundNextButton] = []
+        # While a yes/no question stands in the band's slot the chips belong
+        # beside its words, not at the row's far edge. The identity column's
+        # width carries them there and back (see set_band_inline).
+        self._inline_content = None
+        self._inline_target = None
+        self._inline_anim = QPropertyAnimation(self.identity, b"maximumWidth", self)
+        self._inline_anim.setDuration(_CHIP_INLINE_MS)
+        self._inline_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._inline_anim.finished.connect(self._finish_inline_travel)
 
     def set_band(self, band: QWidget) -> None:
         """The progress band, directly under the title it reports on."""
@@ -480,11 +513,67 @@ class _CardHead(QWidget):
         Centred on the progress band so the release icon, progress bar and
         round action buttons share one horizontal axis.
         """
-        self.box.addWidget(chip, 0, Qt.AlignVCenter)
+        self.box.insertWidget(max(0, self.box.count() - 1), chip, 0, Qt.AlignVCenter)
         if isinstance(chip, _RoundNextButton):
             self._chips.append(chip)
             chip.installEventFilter(self)
         self._sync_chips_pairing()
+
+    def set_band_inline(self, inline: bool, content: QWidget | None = None) -> None:
+        """Slide the chips from the row's edge to just past the band's words.
+
+        A single yes/no question and its two chips are one control, so while
+        the card only asks something the chips sit immediately after the
+        question instead of at the far edge of a wide card. The identity
+        column's width is animated rather than swapped, so the pair travels
+        there and back instead of jumping, and the band gets its room again
+        once the question has been answered.
+        """
+        content = content if inline else None
+        target = self._inline_band_width(content) if content is not None else None
+        if target == self._inline_target and content is self._inline_content:
+            return
+        self._inline_content = content
+        self._inline_target = target
+        if target is None:
+            self._travel_chips_to(self.width(), restore_unlimited=True)
+        else:
+            self._travel_chips_to(target, restore_unlimited=False)
+
+    def _inline_band_width(self, content: QWidget) -> int:
+        """Room the identity column needs for the chips to sit past its words."""
+        text = content.text() if hasattr(content, "text") else ""
+        wanted = int(content.fontMetrics().horizontalAdvance(text)) if text else 0
+        title = int(self.title.minimumSizeHint().width()) if self.title is not None else 0
+        visible_chips = sum(1 for chip in self._chips if not chip.isHidden())
+        available = (
+            int(self.width())
+            - _CARD_ICON_PX
+            - _CARD_HEAD_GAP * 2
+            - visible_chips * ROUND_NEXT_BUTTON_PX
+        )
+        target = max(wanted, title)
+        if available > 0:
+            target = min(target, available)
+        return max(1, int(target))
+
+    def _travel_chips_to(self, maximum: int, restore_unlimited: bool) -> None:
+        """Animate the identity column's ceiling, and with it the chips' place."""
+        maximum = max(1, int(maximum))
+        start = int(self.identity.width())
+        self._inline_anim.stop()
+        if start <= 0 or abs(start - maximum) <= 2 or not self.isVisible():
+            self.identity.setMaximumWidth(_UNLIMITED_WIDTH if restore_unlimited else maximum)
+            self.identity.updateGeometry()
+            return
+        self._inline_anim.setStartValue(start)
+        self._inline_anim.setEndValue(maximum)
+        self._inline_anim.start()
+
+    def _finish_inline_travel(self) -> None:
+        if self._inline_target is None:
+            self.identity.setMaximumWidth(_UNLIMITED_WIDTH)
+            self.identity.updateGeometry()
 
     def eventFilter(self, watched, event):  # noqa: N802 (Qt naming)
         if event.type() in (
@@ -569,6 +658,15 @@ class _CardHead(QWidget):
             QEvent.Type.Paint,
         ):
             self._sync_to_band()
+        if ev.type() == QEvent.Type.Resize and self._inline_content is not None:
+            # A narrower card may no longer have room for the chips beside the
+            # question, so re-measure the ceiling instead of leaving a stale one.
+            target = self._inline_band_width(self._inline_content)
+            if target != self._inline_target:
+                self._inline_target = target
+                self._inline_anim.stop()
+                self.identity.setMaximumWidth(target)
+                self.identity.updateGeometry()
         return res
 
     def band_span(self) -> tuple[int, int]:
@@ -1754,11 +1852,21 @@ class FlashPage(QWidget):
         # The firmware list sits directly under the question that asks for it,
         # where the single-firmware question used to be: the card asks "Which
         # software is currently running on your Y1?" in the band's slot, then
-        # lists the software to choose from beneath that line.
+        # lists the software to choose from beneath that line. It stops at the
+        # chips' leading edge — the progress band's own right edge — so it
+        # never reads as a wider second row under the card head.
+        self._keep_data_choice_holder = QWidget()
+        choice_row = QHBoxLayout(self._keep_data_choice_holder)
+        choice_row.setContentsMargins(
+            0, 0, _CARD_HEAD_GAP * 2 + 2 * ROUND_NEXT_BUTTON_PX, 0
+        )
+        choice_row.setSpacing(0)
+        choice_row.addWidget(self._keep_data_choice)
         copy.insertWidget(
-            copy.indexOf(self._wait_prompt_label) + 1, self._keep_data_choice
+            copy.indexOf(self._wait_prompt_label) + 1, self._keep_data_choice_holder
         )
         self._keep_data_choice.setVisible(False)
+        self._keep_data_choice_holder.setVisible(False)
         self._wait_head_stack.setCurrentWidget(self._wait_progress_bar)
         self._keep_data_hint = QLabel("")
         self._keep_data_hint.setWordWrap(True)
@@ -3921,6 +4029,9 @@ class FlashPage(QWidget):
         if choice is None:
             return
         choice.setVisible(bool(active))
+        holder = getattr(self, "_keep_data_choice_holder", None)
+        if holder is not None:
+            holder.setVisible(bool(active))
 
     def _show_wait_question(self, text: str) -> None:
         """Ask a one-line question in the band's slot, in bold.
@@ -3959,6 +4070,16 @@ class FlashPage(QWidget):
         question_visible = wanted is question
         if question is not None and question.isVisible() != question_visible:
             question.setVisible(question_visible)
+        # A single yes/no question keeps its two answers beside its words: the
+        # chips slide in to the question and back out when it is answered. The
+        # dropdown screen has no chips to move — it widens into the band's
+        # column instead — so the pair stays on the row's edge there.
+        head = getattr(self, "_wait_head", None)
+        choice = getattr(self, "_keep_data_choice", None)
+        dropdown = choice is not None and not choice.isHidden()
+        if head is not None:
+            inline = bool(asking and question is not None and not dropdown)
+            head.set_band_inline(inline, question)
 
     def keep_data_confirm_choice(self) -> str:
         return self._keep_data_choice.currentText() if hasattr(self, "_keep_data_choice") else ""
