@@ -167,7 +167,7 @@
     <notes>MediaTek MT6572 legacy Innioasis player.</notes>
   </model>
 
-  <model id="SR1" brand="Innioasis" product="Innioasis SR1" flashable="true">
+  <model id="SR1" brand="Timmkoo" product="Timmkoo SR1" flashable="true">
     <platform>MT6582</platform>
     <tokens>
       <token>rom_sr1</token>

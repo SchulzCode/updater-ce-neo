@@ -72,14 +72,17 @@ class _ManifestRefreshWorker(QThread):
         try:
             if self.isInterruptionRequested():
                 return
-            from . import manifest, online_data
+            from . import catalog, manifest, online_data
 
             # Force the fetch: the point of the background timer is to find a
             # newly published manifest promptly, not wait out the 5 min TTL.
-            online_data.refresh("slidia_manifest.xml", force=True)
-            text = online_data.cached_text("slidia_manifest.xml")
-            if text.strip():
-                entries = manifest.parse_manifest_xml(text) or []
+            updated = online_data.refresh("slidia_manifest.xml", force=True)
+            # A failed download must not reinstate the older cached copy (or
+            # the build's two-model snapshot) over a live catalogue.
+            if updated or not catalog.LIVE_CATALOG:
+                text = online_data.cached_text("slidia_manifest.xml")
+                if text.strip():
+                    entries = manifest.parse_manifest_xml(text) or []
             if self.isInterruptionRequested():
                 return
         except Exception:

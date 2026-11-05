@@ -28,7 +28,6 @@ from PySide6.QtWidgets import (
 from .. import paths
 from ..themes_journey import ThemesJourney
 from .tab_focus import TabFocusManager
-from .markdown_doc import MarkdownDocView
 from ..flash_service import (
     METHOD_MTK,
     METHOD_SP,
@@ -1520,10 +1519,8 @@ class _SvgVectorWidget(QWidget):
 
 class FlashPage(QWidget):
     # Bumped whenever the card changes stage or structure; MainWindow fits the
-    # window to it. A guide that appears or disappears counts as a change.
+    # window to it.
     view_generation = 0
-    # Emitted from the download thread with (raw Markdown URL, document text).
-    post_install_doc_ready = Signal(str, str)
     # The portable run's completion card offers to install this app properly.
     install_app_requested = Signal()
 
@@ -2137,29 +2134,6 @@ class FlashPage(QWidget):
         self._appeal_callback = None
         w_layout.addWidget(self._appeal)
 
-        # The firmware's own setup steps. Many projects write them as a
-        # Markdown file in their repository (Rondo's docs/install.md, say);
-        # where that file can be read we show it here, under the completion
-        # note or the donations appeal, so finishing an install never sends
-        # the reader out to a bare GitHub blob page.
-        self._post_install_doc_status = QLabel("")
-        self._post_install_doc_status.setWordWrap(True)
-        self._post_install_doc_status.setAlignment(Qt.AlignCenter)
-        self._post_install_doc_status.setProperty("cssClass", "dimmed")
-        self._post_install_doc_status.setVisible(False)
-        w_layout.addWidget(self._post_install_doc_status)
-
-        self._post_install_doc = MarkdownDocView()
-        self._post_install_doc.setObjectName("postInstallDoc")
-        self._post_install_doc.setMinimumHeight(200)
-        self._post_install_doc.setMaximumHeight(460)
-        self._post_install_doc.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
-        )
-        self._post_install_doc.setVisible(False)
-        w_layout.addWidget(self._post_install_doc)
-        self.post_install_doc_ready.connect(self._on_post_install_doc_ready)
-
         # Dummy attributes for backward compatibility
         self._flash_img = QLabel()
         self._flash_img.setVisible(False)
@@ -2430,7 +2404,6 @@ class FlashPage(QWidget):
         self._post_install_url = ""
         self._post_install_url_2 = ""
         self._post_install_url_2_source = ""
-        self._clear_post_install_doc()
 
     def show_preparing(self):
         self._complete = False
@@ -4142,7 +4115,6 @@ class FlashPage(QWidget):
         self._update_paperclip_hint()
         if hasattr(self, "_post_install_hint"):
             self._post_install_hint.setText(self._post_install_hint_html())
-        self._render_post_install_doc()
         if hasattr(self, "_appeal_dont"):
             self._appeal_dont.setText(self._dont_ask_html())
             self._appeal_dont.setToolTip(
@@ -4183,7 +4155,6 @@ class FlashPage(QWidget):
         self._post_install_url_2 = (
             "" if fx.donation_route() else self._post_install_url_2_source
         )
-        self._load_post_install_doc(self._post_install_url)
         self._apply_post_install_state()
 
     def _post_install_hint_html(self) -> str:
@@ -4203,27 +4174,14 @@ class FlashPage(QWidget):
         post_install = getattr(self, "_post_install_url", "")
         post_install_2 = getattr(self, "_post_install_url_2", "")
         is_complete = getattr(self, "_complete", False)
-        # A guide we can read as Markdown is shown in the card itself; the
-        # globe sentence only exists for guides that open elsewhere.
-        doc_ready = bool(getattr(self, "_doc_text", ""))
-        doc_pending = bool(getattr(self, "_doc_source", "")) and not doc_ready
         if hasattr(self, "_done_mark"):
             globe = bool(post_install) and not donations_shown
             self._done_mark.set_symbol("www" if globe else "complete")
             self._done_mark.setToolTip(tr("post_install_globe_tooltip") if globe else "")
         if hasattr(self, "_post_install_hint"):
             self._post_install_hint.setVisible(
-                bool(post_install) and not donations_shown and is_complete and not doc_ready
+                bool(post_install) and not donations_shown and is_complete
             )
-        if hasattr(self, "_post_install_doc"):
-            self._post_install_doc.setVisible(is_complete and doc_ready)
-        if hasattr(self, "_post_install_doc_status"):
-            if doc_pending and is_complete:
-                fetching = bool(getattr(self, "_doc_fetching", ""))
-                self._post_install_doc_status.setText(
-                    tr("post_install_doc_loading") if fetching else tr("post_install_doc_unavailable")
-                )
-            self._post_install_doc_status.setVisible(is_complete and doc_pending)
         if hasattr(self, "_view_guide_btn"):
             if post_install and (not post_install_2 or post_install != post_install_2):
                 self._view_guide_btn.setText(tr("post_install_view_guide_btn"))
@@ -4249,122 +4207,6 @@ class FlashPage(QWidget):
             self._bmc_btn.setVisible(not route)
 
     # -- post-install guide -------------------------------------------------
-
-    def _clear_post_install_doc(self) -> None:
-        """Forget the guide shown for the previous firmware."""
-        self._doc_source = ""
-        self._doc_anchor = ""
-        self._doc_base = ""
-        self._doc_text = ""
-        self._doc_fetching = ""
-        if hasattr(self, "_post_install_doc"):
-            self._post_install_doc.clear_document()
-            self._post_install_doc.setVisible(False)
-        if hasattr(self, "_post_install_doc_status"):
-            self._post_install_doc_status.setText("")
-            self._post_install_doc_status.setVisible(False)
-
-    def _load_post_install_doc(self, url: str) -> None:
-        """Read the firmware's post-install guide when it is a Markdown file.
-
-        A cached copy paints immediately; anything else is fetched off the UI
-        thread so a completion screen never waits on a download. A link to any
-        other kind of page is left to the browser, as before.
-        """
-        from .. import docs_source
-
-        self._clear_post_install_doc()
-        source = docs_source.markdown_source(url)
-        if not source:
-            return
-        self._doc_source = source
-        self._doc_anchor = docs_source.markdown_anchor(url)
-        self._doc_base = docs_source.base_url_for(source)
-        cached = docs_source.cached_markdown(source)
-        if cached:
-            self._show_post_install_doc(source, cached)
-        else:
-            self._fetch_post_install_doc(source)
-
-    def _fetch_post_install_doc(self, source: str) -> None:
-        if getattr(self, "_doc_fetching", "") == source:
-            return
-        self._doc_fetching = source
-        import threading
-
-        from .. import docs_source
-
-        def work():
-            try:
-                text = docs_source.fetch_markdown(source)
-            except Exception:
-                logger.debug("Could not read the post-install guide", exc_info=True)
-                text = ""
-            try:
-                self.post_install_doc_ready.emit(source, text or "")
-            except RuntimeError:
-                # The page was closed while the download was in flight.
-                pass
-
-        threading.Thread(target=work, daemon=True).start()
-
-    def _on_post_install_doc_ready(self, source: str, text: str) -> None:
-        # A different firmware was selected while this one was downloading.
-        if source != getattr(self, "_doc_source", ""):
-            return
-        self._doc_fetching = ""
-        if text:
-            self._show_post_install_doc(source, text)
-        else:
-            self._apply_post_install_state()
-            self._notify_geometry_change()
-
-    def _size_post_install_doc(self) -> None:
-        """Give the guide a readable window: enough lines to follow, never the page.
-
-        The height comes from the screen, not the window. The window is fitted to
-        this screen's content, so measuring against the window would make the two
-        chase each other on every relayout.
-        """
-        view = getattr(self, "_post_install_doc", None)
-        if view is None:
-            return
-        available = 0
-        try:
-            screen = self.screen()
-            if screen is not None:
-                available = int(screen.availableGeometry().height())
-        except Exception:
-            available = 0
-        if available <= 0:
-            available = 900
-        height = max(240, min(460, int(available * 0.42)))
-        view.setMinimumHeight(height)
-        view.setMaximumHeight(height)
-
-    def _show_post_install_doc(self, source: str, text: str) -> None:
-        if source != getattr(self, "_doc_source", ""):
-            return
-        self._doc_text = text
-        self._size_post_install_doc()
-        self._render_post_install_doc()
-        self._apply_post_install_state()
-        self._relayout_for_text()
-
-    def _render_post_install_doc(self) -> None:
-        view = getattr(self, "_post_install_doc", None)
-        if view is None or not getattr(self, "_doc_text", ""):
-            return
-        t = T()
-        view.set_markdown(
-            self._doc_text,
-            text_color=t.fg,
-            code_background=t.bg_input,
-            muted_color=t.fg_muted,
-            border_color=t.border,
-            base_url=getattr(self, "_doc_base", ""),
-            anchor=getattr(self, "_doc_anchor", ""),
-        )
 
     def _post_install_open_url(self, url: str) -> str:
         """Where a guide link should open in a browser.
@@ -4611,8 +4453,6 @@ class FlashPage(QWidget):
             "_theme_trouble_recover_btn",
             "_driver_action_row",
             "_post_install_hint",
-            "_post_install_doc",
-            "_post_install_doc_status",
         ):
             widget = getattr(self, attr, None)
             if widget is not None:
@@ -5410,21 +5250,7 @@ class FlashPage(QWidget):
                     self._complete_note.sizeHint().height(),
                     self._complete_note.heightForWidth(max(1, note_w)),
                 ) + 8
-            # The guide is a scrollable view of its own, so only the height it
-            # is actually given belongs in the page's measurement — never the
-            # length of the document inside it.
-            doc_h = 0
-            doc_view = getattr(self, "_post_install_doc", None)
-            if doc_view is not None and doc_view.isVisible():
-                doc_h = max(240, int(doc_view.height())) + 8
-            status_h = 0
-            doc_status = getattr(self, "_post_install_doc_status", None)
-            if doc_status is not None and doc_status.isVisible():
-                status_h = max(
-                    doc_status.sizeHint().height(),
-                    doc_status.heightForWidth(max(1, page_measure_w)),
-                ) + 8
-            h = card_h + warn_h + appeal_h + complete_note_h + doc_h + status_h
+            h = card_h + warn_h + appeal_h + complete_note_h
         elif cur_view is self._waiting_view:
             card_h = self._wait_card.sizeHint().height()
             head_h = self._wait_head.sizeHint().height() if hasattr(self, "_wait_head") else 48

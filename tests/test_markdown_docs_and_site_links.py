@@ -1,12 +1,12 @@
-"""Post-install guides and release notes shown by the app, not by GitHub.
+"""Post-install guides and release notes, opened on the site, not on GitHub.
 
 A firmware's ``post_install`` is often a Markdown file in the project's own
-repository (Rondo: ``docs/install.md#first-start``). The app reads that file and
-shows it in the completion screen under the donations appeal, so the reader
-stays in the app. A link to any other kind of page keeps opening in the
-browser. "See More" for a release goes to the site's own ``release_notes.html``,
-which renders the release title and notes with our styling and our own
-download buttons.
+repository (Rondo: ``docs/install.md#first-start``). The completion screen links
+to the site's reader page for that file, so the reader gets the same guide with
+our styling instead of a bare GitHub blob page; any other kind of page keeps
+its own link. "See More" for a release goes to the site's own
+``release_notes.html``, which renders the release title and notes with our
+styling and our own download buttons.
 """
 
 import os
@@ -238,116 +238,19 @@ def test_site_links_carry_the_donations_preference(monkeypatch):
 # The completion screen
 # --------------------------------------------------------------------------
 
-def test_completion_screen_shows_markdown_steps_in_the_app(qapp, monkeypatch):
-    monkeypatch.setattr(docs_source, "cached_markdown", lambda url: GUIDE)
-    page = FlashPage()
-    page.set_post_install_urls(RONDO, "")
-    page.set_device_done(donations_shown=False)
+def test_completion_screen_links_the_guide_instead_of_embedding_it(qapp):
+    """The completion screen sends the reader to the guide, not a pane of it."""
+    for url in (RONDO, "https://innioasis.app/y2reborn_wifibt.html"):
+        page = FlashPage()
+        try:
+            page.set_post_install_urls(url, "")
+            page.set_device_done(donations_shown=False)
 
-    assert not page._post_install_doc.isHidden()
-    assert page._post_install_hint.isHidden()
-    text = page._post_install_doc.toPlainText()
-    assert "Rondo" in text and "First start" in text
-    assert "Copy the themes" in text
-    # The guide opens at the section the manifest links to.
-    assert page._post_install_doc.scroll_to_anchor("first-start")
-
-
-LONG_GUIDE = (
-    "# Rondo install guide\n\nIntro. "
-    + ("Words. " * 60)
-    + "\n\n## Before you start\n\n- one\n- two\n"
-    + ("filler\n\n" * 40)
-    + "\n## First start\n\n1. Copy the themes.\n2. Reboot.\n\n## Later\n\nMore.\n"
-)
-
-
-def _shown_completion_page(qapp, monkeypatch, document):
-    """A real, shown completion screen with ``document`` as its guide."""
-    from PySide6.QtWidgets import QVBoxLayout, QWidget
-
-    monkeypatch.setattr(docs_source, "cached_markdown", lambda url: document)
-    host = QWidget()
-    host.resize(780, 640)
-    box = QVBoxLayout(host)
-    box.setContentsMargins(0, 0, 0, 0)
-    page = FlashPage()
-    box.addWidget(page)
-    host.show()
-    qapp.processEvents()
-    page.set_post_install_urls(RONDO, "")
-    page.set_device_done(donations_shown=False)
-    page.show_flashing()
-    for _ in range(3):
-        qapp.processEvents()
-    # The host owns the page: a collected host deletes the view these
-    # assertions read, so it is kept alive for as long as the page is.
-    page._test_host = host
-    return page, page._post_install_doc
-
-
-def _line_is_on_screen(view, text):
-    cursor = view.document().find(text)
-    assert not cursor.isNull()
-    top = view.cursorRect(cursor).top()
-    return 0 <= top < view.viewport().height()
-
-
-def _line_is_at_top(view, text):
-    from PySide6.QtCore import QPoint
-
-    return text in view.cursorForPosition(QPoint(4, 4)).block().text()
-
-
-def test_the_guide_arrives_at_the_linked_section(qapp, monkeypatch):
-    """A link to ``#first-start`` opens on that section, not on the intro.
-
-    Rondo's manifest points at its final install steps, which sit at the end of
-    its guide: the pane scrolls to the last screenful, and the heading the link
-    names is on it.
-    """
-    page, view = _shown_completion_page(qapp, monkeypatch, LONG_GUIDE)
-    assert _line_is_on_screen(view, "First start")
-
-
-def test_a_section_with_content_after_it_is_pinned_to_the_top(qapp, monkeypatch):
-    """With document left below it, the linked heading is the top line."""
-    middle = (
-        "# Guide\n\nIntro. "
-        + ("Words. " * 60)
-        + "\n\n## First start\n\n1. Copy the themes.\n2. Reboot.\n"
-        + ("more notes\n\n" * 60)
-    )
-    page, view = _shown_completion_page(qapp, monkeypatch, middle)
-    assert _line_is_at_top(view, "First start")
-
-
-def test_completion_screen_keeps_the_browser_link_for_other_pages(qapp, monkeypatch):
-    monkeypatch.setattr(docs_source, "cached_markdown", lambda url: GUIDE)
-    page = FlashPage()
-    page.set_post_install_urls("https://innioasis.app/y2reborn_wifibt.html", "")
-    page.set_device_done(donations_shown=False)
-
-    assert page._post_install_doc.isHidden()
-    assert not page._post_install_hint.isHidden()
-
-
-def test_an_unreadable_guide_says_so_instead_of_showing_a_blank_pane(qapp, monkeypatch):
-    from src.i18n import tr
-
-    monkeypatch.setattr(docs_source, "cached_markdown", lambda url: "")
-    monkeypatch.setattr(docs_source, "fetch_markdown", lambda url, **kw: "")
-    monkeypatch.setattr(
-        docs_source, "cache_dir", lambda: __import__("pathlib").Path("/nonexistent-docs")
-    )
-    page = FlashPage()
-    page.set_post_install_urls(RONDO, "")
-    page.set_device_done(donations_shown=False)
-    page._on_post_install_doc_ready(docs_source.markdown_source(RONDO), "")
-
-    assert page._post_install_doc.isHidden()
-    assert not page._post_install_doc_status.isHidden()
-    assert page._post_install_doc_status.text() == tr("post_install_doc_unavailable")
+            assert not page._post_install_hint.isHidden()
+            assert page._done_mark._symbol == "www"
+            assert not hasattr(page, "_post_install_doc")
+        finally:
+            page.deleteLater()
 
 
 def test_the_globe_opens_the_site_reader_for_a_markdown_guide(qapp, monkeypatch):
@@ -356,7 +259,6 @@ def test_the_globe_opens_the_site_reader_for_a_markdown_guide(qapp, monkeypatch)
 
     monkeypatch.setattr(browser, "open_browser", lambda url, *a, **k: opened.append(url) or True)
     monkeypatch.setattr(player_update_check, "is_donation_ui_disabled", lambda: True)
-    monkeypatch.setattr(docs_source, "cached_markdown", lambda url: GUIDE)
 
     page = FlashPage()
     page.set_post_install_urls(RONDO, "")

@@ -187,6 +187,7 @@ MANIFEST_XML = """\
 def test_manifest_falls_back_to_the_bundled_snapshot(monkeypatch):
     monkeypatch.setattr(manifest, "load_cached_manifest", lambda: None)
     monkeypatch.setattr(manifest, "fetch_manifest", lambda: None)
+    monkeypatch.setattr(catalog, "LIVE_CATALOG", [])
     monkeypatch.setattr(online_data, "read_text", lambda name: MANIFEST_XML)
     installed = {}
     monkeypatch.setattr(catalog, "set_live_catalog", lambda entries: installed.setdefault("entries", entries))
@@ -197,6 +198,45 @@ def test_manifest_falls_back_to_the_bundled_snapshot(monkeypatch):
     assert entries[0].post_install == "https://example.test/after"
     assert entries[0].post_install_2 == "https://example.test/after-support"
     assert installed["entries"] == entries
+
+
+def test_window_periodic_refresh_reloads_the_parsed_catalogue(monkeypatch):
+    """Re-downloading the manifest is not enough: the window must re-parse it."""
+    from src import notice_service
+    from src import release_blocklist
+    from src.ui.main_window import MainWindow
+
+    reloaded = []
+    monkeypatch.setattr(online_data, "refresh_all_async", lambda *a, **k: True)
+    monkeypatch.setattr(release_blocklist, "refresh_blocklist_async", lambda: None)
+
+    class _Notices:
+        def fetch_async(self, *a, **k):
+            return None
+
+    monkeypatch.setattr(
+        notice_service.NoticeService, "instance", staticmethod(lambda: _Notices())
+    )
+
+    class _Host:
+        def _install_run_active(self):
+            return False
+
+        def _window_hidden_in_tray(self):
+            return False
+
+        def isVisible(self):
+            return True
+
+        def isMinimized(self):
+            return False
+
+        def _start_manifest_worker(self, force_refresh=False):
+            reloaded.append(force_refresh)
+
+    MainWindow._refresh_online_data(_Host())
+
+    assert reloaded == [True]
 
 
 def test_manifest_accepts_post_install2_spelling():
@@ -730,6 +770,36 @@ def test_post_install_completion_uses_a_globe_and_view_guide(qapp, monkeypatch):
         assert opened == ["https://example.test/steps", DONATION_LINKS["kofi"]]
     finally:
         page.deleteLater()
+
+
+def test_non_donations_completion_with_a_guide_stays_compact(qapp):
+    """A guide link must not grow the completion window back to a tall card."""
+    from src.ui.main_window import MainWindow, _PAGE_FLASH
+
+    window = MainWindow()
+    window.show()
+    qapp.processEvents()
+    try:
+        window._install_complete = True
+        page = window._flash_page
+        page.show_flashing()
+        page.set_post_install_urls(
+            "https://github.com/jarvissax/rondo/blob/main/docs/install.md#first-start", ""
+        )
+        page.set_device_done(donations_shown=False)
+        page.show_completion_note(True, software="Rondo", model="Y1")
+        window._nav_to_page(_PAGE_FLASH)
+        window._adjust_window_geometry()
+        for _ in range(3):
+            qapp.processEvents()
+
+        assert page._post_install_hint.isVisible()
+        assert page._done_mark._symbol == "www"
+        assert not hasattr(page, "_post_install_doc")
+        assert window.height() < 400
+    finally:
+        window.close()
+        qapp.processEvents()
 
 
 def test_sp_flash_tool_console_arguments_are_always_download_only():

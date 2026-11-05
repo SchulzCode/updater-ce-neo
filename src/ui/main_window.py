@@ -1101,10 +1101,10 @@ class MainWindow(QMainWindow):
         self._sync_sp_gui_button_visibility()
         self._sync_settings_sp_gui_visibility()
 
-    def _start_manifest_worker(self):
+    def _start_manifest_worker(self, force_refresh: bool = False):
         if getattr(self, "_manifest_worker", None) is not None:
             return
-        worker = ManifestWorker(self)
+        worker = ManifestWorker(self, force_refresh=force_refresh)
         self._manifest_worker = worker
         self._active_workers.add(worker)
         worker.finished.connect(
@@ -1115,6 +1115,9 @@ class MainWindow(QMainWindow):
     def _on_manifest_worker_finished(self, worker, entries):
         self._active_workers.discard(worker)
         if worker is getattr(self, "_manifest_worker", None):
+            # The window lives for days: a finished worker must not latch this
+            # slot shut, or the catalogue could only ever be fetched once.
+            self._manifest_worker = None
             self._on_manifest_loaded(entries)
 
     def _check_remote_flags_startup(self):
@@ -5962,6 +5965,21 @@ class MainWindow(QMainWindow):
                 refresh_all_async()
         except Exception:
             logger.debug("Online data refresh could not start", exc_info=True)
+        # Downloading slidia_manifest.xml changes nothing by itself: the
+        # catalogue is the parsed list in memory. Fetch and install it here so
+        # brands, models and software added since launch appear without a click.
+        try:
+            self._start_manifest_worker(force_refresh=True)
+        except Exception:
+            logger.debug("Catalogue refresh could not start", exc_info=True)
+        try:
+            from ..release_blocklist import refresh_blocklist_async
+
+            # The blocklist keeps its own cache and rules, so the copy that
+            # online_data downloads never reaches it; refresh it here as well.
+            refresh_blocklist_async()
+        except Exception:
+            logger.debug("Release blocklist refresh could not start", exc_info=True)
         try:
             from ..notice_service import NoticeService
 

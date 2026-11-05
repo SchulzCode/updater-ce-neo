@@ -416,6 +416,17 @@ def refresh_catalog(force_refresh=False, check_releases=True, allow_release_netw
         cache_manifest(fetched)
         entries = fetched
     else:
+        # A failed fetch says nothing about the catalogue that is already
+        # installed. Falling back over it is how a transient GitHub or CDN
+        # failure shrank a live multi-model catalogue back to whatever stale
+        # two-model snapshot the build happened to ship.
+        existing = list(catalog.LIVE_CATALOG)
+        if existing:
+            logger.info(
+                "Manifest fetch failed; keeping the %d-entry live catalogue",
+                len(existing),
+            )
+            return existing
         entries = load_cached_manifest()
     if not entries:
         # Baked in at build time: no connection, no cache, still a catalogue.

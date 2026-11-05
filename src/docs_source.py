@@ -6,9 +6,9 @@ project that made the firmware, not by us:
 * **Post-install steps.** A firmware's ``post_install`` in
   ``slidia_manifest.xml`` often points at a Markdown file in its own
   repository — Rondo's ``docs/install.md#first-start``, for example. The
-  website renders those in ``post_install.html``; the app renders the same
-  file in its completion screen, so finishing an install never sends anyone to
-  a bare GitHub blob page.
+  website renders those in ``post_install.html``; the app links to that page
+  from its completion screen, so finishing an install never sends anyone to a
+  bare GitHub blob page.
 * **Release notes.** A release's notes and title live on its GitHub release.
   The website renders them in ``release_notes.html``, which is where the
   "See More" link goes instead of GitHub.
@@ -53,8 +53,8 @@ SITE = "https://innioasis.app"
 RAW_HOST = "https://raw.githubusercontent.com"
 
 #: How long a downloaded document is trusted before it is looked up again.
-#: Project guides change rarely; the cached copy is what the completion screen
-#: paints, so a stale one is better than a blank panel offline.
+#: Project guides change rarely, so a stale copy is better than a failed read
+#: offline.
 CACHE_TTL_SECONDS = 6 * 60 * 60
 REQUEST_TIMEOUT = 10
 USER_AGENT = "InnioasisUpdater/3.0 (+https://innioasis.app)"

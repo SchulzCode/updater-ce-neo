@@ -555,6 +555,10 @@ class SelectPackagePage(QWidget):
                 online_data.refresh_all_async()
             except Exception:
                 pass
+            # The catalogue is the parsed manifest, not the downloaded file:
+            # a returning connection must re-read it, or new models keep
+            # waiting for the next launch.
+            self._refresh_manifest()
             try:
                 from ..notice_service import NoticeService
 
@@ -2183,7 +2187,12 @@ class SelectPackagePage(QWidget):
         except Exception:
             logger.debug("Could not report the notice context", exc_info=True)
 
-    def _refresh_releases(self, force_refresh=False):
+    def _refresh_releases(self, force_refresh=False, *, refresh_manifest=True):
+        # The manifest defines which models and software exist, so a refresh
+        # fetches it before anything below can bail out on an empty or stale
+        # selection: that is exactly the state this button must repair.
+        if force_refresh and refresh_manifest:
+            self._refresh_manifest()
         package = self.current_package()
         self._release_list.clear()
         self._install_btn.setEnabled(False)
@@ -2227,8 +2236,6 @@ class SelectPackagePage(QWidget):
         self._active_workers.add(worker)
         worker.finished.connect(lambda rels, err: self._on_releases_worker_finished(worker, rels, err))
         worker.start()
-        if force_refresh:
-            self._refresh_manifest()
 
     def _on_releases_worker_finished(self, worker, releases, error):
         self._active_workers.discard(worker)
@@ -2259,32 +2266,60 @@ class SelectPackagePage(QWidget):
     def _on_manifest_worker_finished(self, worker, entries):
         self._active_workers.discard(worker)
         if worker is getattr(self, "_manifest_worker", None):
+            self._manifest_worker = None
             self._manifest_throbber.setVisible(False)
             self._on_manifest_refreshed(entries)
 
     def _on_manifest_refreshed(self, entries):
-        if entries:
-            # A refreshed manifest can add, retire or newly brand a model, so
-            # rebuild the drop-downs before relisting the current model's
-            # software. A retired model resets the list to its default row.
-            self.refresh_models()
-            current_sw = self.current_software()
-            names = catalog.software_names_for_model(
-                self.current_model(), brand=self.current_brand()
-            )
-            combo = self._software_combo
-            existing = [
-                str(combo.itemData(i) or combo.itemText(i)) for i in range(combo.count())
-            ]
-            if names != existing:
-                # Keep the user's software choice; only the list contents change.
-                self._populate_software_combo(names, select=current_sw)
-                if self._find_software_index(current_sw) < 0 and combo.count():
-                    combo.setCurrentIndex(0)
-                self._refresh_releases_keep_selection()
+        """Adopt a refreshed manifest into the drop-downs and the listing.
 
-    def _refresh_releases_keep_selection(self):
-        """Re-list releases after a background refresh, keeping the chosen release and scroll."""
+        A new manifest can add, retire or newly brand a model, and a release
+        published under software that was already listed changes nothing in
+        the manifest at all. So the drop-downs are always rebuilt and the
+        visible listing is re-fetched (selection and scroll preserved), which
+        is what makes a new firmware appear without the reader pressing
+        Refresh.
+        """
+        if not entries:
+            return
+        # A retired model resets the drop-down to its default row.
+        self.refresh_models()
+        current_sw = self.current_software()
+        names = catalog.software_names_for_model(
+            self.current_model(), brand=self.current_brand()
+        )
+        combo = self._software_combo
+        existing = [
+            str(combo.itemData(i) or combo.itemText(i)) for i in range(combo.count())
+        ]
+        if names != existing:
+            # Keep the user's software choice; only the list contents change.
+            self._populate_software_combo(names, select=current_sw)
+            if self._find_software_index(current_sw) < 0 and combo.count():
+                combo.setCurrentIndex(0)
+        if self.current_package() is None:
+            self._refresh_releases()
+        elif self._can_relist_quietly():
+            self._refresh_releases_keep_selection(
+                force_refresh=bool(self._online_available)
+            )
+
+    def _can_relist_quietly(self) -> bool:
+        """True when a passive refresh may replace the release list on screen."""
+        if not self.isVisible():
+            return False
+        win = self.window()
+        if hasattr(win, "_install_run_active") and win._install_run_active():
+            return False
+        if getattr(self, "_prep_worker", None) is not None:
+            return False
+        if getattr(self, "_download_worker", None) is not None:
+            return False
+        worker = getattr(self, "_releases_worker", None)
+        return worker is None or not worker.isRunning()
+
+    def _refresh_releases_keep_selection(self, force_refresh=False):
+        """Re-list releases after a refresh, keeping the chosen release and scroll."""
         package = self.current_package()
         if package is None:
             return
@@ -2296,7 +2331,9 @@ class SelectPackagePage(QWidget):
         scroll = self._release_list.verticalScrollBar().value()
         self._target_tag_to_select = selected_tag or None
         self._scroll_to_restore = scroll
-        self._refresh_releases(force_refresh=False)
+        # The caller already refreshed the manifest; re-fetching it here would
+        # start another catalogue worker from every catalogue result.
+        self._refresh_releases(force_refresh=force_refresh, refresh_manifest=False)
 
     def _release_row_height(self) -> int:
         """Height of one release row, from a real row or the list font."""

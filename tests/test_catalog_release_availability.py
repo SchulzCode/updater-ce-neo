@@ -209,3 +209,17 @@ def test_refresh_catalog_installs_only_listable_entries(monkeypatch):
 
     assert [p.model for p in installed] == ["G1"]
     assert [p.model for p in catalog.LIVE_CATALOG] == ["G1"]
+
+
+def test_a_failed_manifest_fetch_keeps_the_installed_catalogue(monkeypatch):
+    """A transient fetch failure must not shrink the catalogue to the snapshot."""
+    catalog.set_live_catalog([_package("G1", "acme/g1-stock")])
+    stale = [_package("G3", "acme/g3-stock")]
+    monkeypatch.setattr(manifest, "fetch_manifest", lambda: None)
+    monkeypatch.setattr(manifest, "load_cached_manifest", lambda: stale)
+    monkeypatch.setattr(manifest, "load_snapshot_manifest", lambda: stale)
+
+    entries = manifest.refresh_catalog(force_refresh=True)
+
+    assert [p.model for p in entries] == ["G1"]
+    assert [p.model for p in catalog.LIVE_CATALOG] == ["G1"]

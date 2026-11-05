@@ -239,6 +239,9 @@ def brand_names() -> list:
         brand = package_brand(package)
         if not any(brand.casefold() == known.casefold() for known in names):
             names.append(brand)
+    # A brand whose every model is unlisted (no release to install) is not a
+    # useful filter row: picking it would leave the model drop-down empty.
+    names = [name for name in names if available_models(brand=name)]
     # Innioasis is the default pick, so it leads regardless of document order.
     names.sort(key=lambda name: name.casefold() != DEFAULT_BRAND.casefold())
     return names
@@ -277,9 +280,26 @@ def available_models(brand: str = ""):
 
 
 def software_names_for_model(model: str, brand: str = ""):
+    """Software names that model can actually list a release for.
+
+    While a live manifest is loaded it is the whole list. Merging the static
+    table in would offer a hand-written name no repository publishes any more
+    beside the manifest's current name for the same software ("Android 4.2"
+    next to "Android 4.2 (Dev)"), which is a drop-down row that can never
+    produce a release. The static table remains the offline fallback.
+    """
+    if LIVE_CATALOG:
+        packages = [
+            p for p in LIVE_CATALOG
+            if p.model == model
+            and _brand_matches(p, brand)
+            and (not p.info_repo or p.post_install or p.post_install_2)
+        ]
+    else:
+        packages = packages_for_model(model, brand=brand)
     seen_lower = set()
     seen = []
-    for p in packages_for_model(model, brand=brand):
+    for p in packages:
         norm = p.name.strip().lower()
         if norm not in seen_lower:
             seen_lower.add(norm)

@@ -160,3 +160,29 @@ def test_a_model_without_a_tag_keeps_its_registry_brand():
             page.deleteLater()
     finally:
         catalog.set_live_catalog(saved)
+
+
+def test_a_brand_with_no_releases_is_not_offered():
+    """A brand row that cannot lead to a model is noise in the filter.
+
+    The manifest may keep a branded entry for a project whose releases have
+    gone, but the point of the Brand drop-down is to narrow a listing that
+    exists. A brand with no models left must disappear with its models.
+    """
+    saved = list(catalog.LIVE_CATALOG)
+    try:
+        xml = (
+            "<slidia>"
+            '<package name="Original Software" repo="y1-community/y1-stock-rom"'
+            ' device="Y1" brand="Innioasis" type="img" handler="Custom Firmware" />'
+            "</slidia>"
+        )
+        catalog.set_live_catalog(manifest.parse_manifest_xml(xml))
+        assert catalog.brand_names() == ["Innioasis"]
+
+        catalog.set_live_catalog([])
+        # Without a manifest the static table is the offline fallback; it has
+        # no brand attributes, so there is still no Brand row.
+        assert catalog.brand_names() == []
+    finally:
+        catalog.set_live_catalog(saved)
