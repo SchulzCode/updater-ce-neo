@@ -186,17 +186,21 @@ def get_monthly_goal_stats(donations, now=None):
     return raised, remaining, percent, target
 
 
-GOAL_MONTHLY_OPENING_DAYS = 5
-GOAL_MONTHLY_CLOSING_DAYS = 7
+# The monthly figure is a summary, not the everyday ask: it leads only on the
+# first and last three days of a month, and otherwise appears once the smaller
+# rungs are covered. Tuesday to Thursday climb daily -> weekly -> monthly and
+# the rest of the week climbs weekly -> monthly, so a supporter is always shown
+# the smallest goal still short of its target rather than a whole month's.
+GOAL_MONTHLY_OPENING_DAYS = 3
+GOAL_MONTHLY_CLOSING_DAYS = 3
 
-GOAL_DAILY_WEEKDAYS = (0, 1, 2, 5)
+# The quiet weekdays open on a single day's costs.
+GOAL_DAILY_WEEKDAYS = (1, 2, 3)  # Tuesday, Wednesday, Thursday
 
 WEEKLY_GOAL_USD = MONTHLY_GOAL_USD / 4.0
 DAILY_GOAL_USD = MONTHLY_GOAL_USD / 20.0
 
 GOAL_SETTLED_USD = 1.0
-
-GOAL_WIDE_MAX_PERCENT = 25.0
 
 GOAL_COPY_KEYS = {
     "daily": "donate_goal_day_fmt",
@@ -219,6 +223,13 @@ def days_in_month(now=None) -> int:
 
 
 def goal_scope(now=None) -> str:
+    """The rung a day opens on.
+
+    The first and last three days of a month summarise the month so far.
+    Tuesday to Thursday open on the day's own costs; the rest of the week
+    opens on the week, so a fresh day with nothing raised yet does not replace
+    the line with a "$0 today".
+    """
     now = now or datetime.now()
     if now.day <= GOAL_MONTHLY_OPENING_DAYS:
         return "monthly"
@@ -230,13 +241,14 @@ def goal_scope(now=None) -> str:
 
 
 def goal_ladder(now=None) -> tuple:
+    """Rungs in the order they are shown: the smallest unmet goal first."""
     now = now or datetime.now()
     base = goal_scope(now)
     if base == "daily":
-        return ("daily",)
+        return ("daily", "weekly", "monthly")
     if base == "weekly":
-        return ("weekly", "daily")
-    return ("monthly", "weekly", "daily")
+        return ("weekly", "monthly")
+    return ("monthly",)
 
 
 def goal_period_start(now=None, scope=None) -> datetime:
@@ -306,11 +318,7 @@ def get_goal_stats(donations, now=None):
     scope = None
     if not month_reached:
         for candidate in goal_ladder(now):
-            rung_target = targets[candidate]
-            rung_raised = raised_by[candidate]
-            if rung_target - rung_raised < GOAL_SETTLED_USD:
-                continue
-            if candidate != "daily" and (rung_raised / rung_target) * 100.0 > GOAL_WIDE_MAX_PERCENT:
+            if targets[candidate] - raised_by[candidate] < GOAL_SETTLED_USD:
                 continue
             scope = candidate
             break

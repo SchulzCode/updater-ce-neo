@@ -26,6 +26,18 @@ SF_UPDATE_SYMBOL = "arrow.down.circle.fill"
 _AUTOMATIC_TERMINATION_HELD = False
 
 
+def run_in_background_setting(settings: Optional[QSettings] = None) -> bool:
+    """The user's saved opt-in alone, ignoring remote debug overrides.
+
+    The start-at-login entry follows this value: a remote flag may force the
+    background mode for a session, but it must not add or remove something in
+    the user's login items behind their back.
+    """
+    settings = settings or QSettings("innioasis", "updater")
+    value = settings.value(RUN_IN_BACKGROUND_KEY, False)
+    return str(value).lower() in ("1", "true", "yes")
+
+
 def run_in_background_enabled(settings: Optional[QSettings] = None) -> bool:
     """The opt-in switch. Off unless the user turned it on."""
     try:
@@ -36,9 +48,7 @@ def run_in_background_enabled(settings: Optional[QSettings] = None) -> bool:
             return True
     except Exception:
         pass
-    settings = settings or QSettings("innioasis", "updater")
-    value = settings.value(RUN_IN_BACKGROUND_KEY, False)
-    return str(value).lower() in ("1", "true", "yes")
+    return run_in_background_setting(settings)
 
 
 def hold_off_automatic_termination(hold: bool) -> None:

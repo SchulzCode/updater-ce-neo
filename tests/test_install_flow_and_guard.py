@@ -76,7 +76,8 @@ def test_an_ordinary_failure_still_offers_retry(app):
 # -- Keep Data copy ---------------------------------------------------------
 
 
-def test_keep_data_tick_never_carries_a_firmware_name(app):
+def test_keep_data_option_never_names_compatible_software(app):
+    """The prep card offers the tick; it does not list releases it works from."""
     from src.ui.flash_page import FlashPage
 
     page = FlashPage()
@@ -84,15 +85,18 @@ def test_keep_data_tick_never_carries_a_firmware_name(app):
         page.set_model("Y2")
         page.set_has_userdata(True)
         page.show_power_off_prompt()
-        page.set_keep_data_available(
-            True, tr("flash_keep_data_option"), ["Reborn (Y2Linux)", "Original Software"]
-        )
+        page.set_keep_data_available(True, tr("flash_keep_data_option"))
         assert page._keep_data_cb.text() == tr("flash_keep_data_option")
         assert "(" not in page._keep_data_cb.text()
-        caption = page._keep_data_software.text()
-        assert "Reborn (Y2Linux)" in caption
-        assert "Original Software" in caption
-        assert not page._keep_data_software.isHidden()
+        # No caption carrying release names was built at all.
+        assert not hasattr(page, "_keep_data_software")
+        captions = [
+            label.text()
+            for label in page.findChildren(type(page._keep_data_microsd_note))
+            if label.text()
+        ]
+        assert not any("Keep Data works from" in text for text in captions)
+        assert not any("inniclassic" in text for text in captions)
     finally:
         page.close()
 

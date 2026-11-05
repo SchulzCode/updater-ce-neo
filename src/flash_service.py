@@ -806,6 +806,16 @@ def _format_error_token(raw: str, default: str = "") -> str:
     return name or code or default
 
 
+def _install_method_label(method: str) -> str:
+    """A backend's display name, from the table the install cards use.
+
+    Imported at call time: ``src.ui.main_window`` imports this module.
+    """
+    from .ui.main_window import _method_label
+
+    return _method_label(method)
+
+
 def parse_flash_error(value, model: str = "") -> tuple[str, str]:
     """Parse a flash failure message or error code into a (title, explanation) pair.
 
@@ -872,8 +882,8 @@ def parse_flash_error(value, model: str = "") -> tuple[str, str]:
         return (
             tr("err_checksum_stall_title"),
             tr("err_checksum_stall_sp_failover").format(
-                failed=_method_label("mtk"),
-                next=_method_label("sp"),
+                failed=_install_method_label("mtk"),
+                next=_install_method_label("sp"),
                 model=model or "player",
             ),
         )
@@ -2547,35 +2557,7 @@ def _is_sp_bootloader_header_mismatch(error_detail="", err_code=None) -> bool:
 #: (``MULTIPLE_SCATTERS``) on the next run.
 KEEP_DATA_SCATTER_NAME = ".updater_keepdata.txt"
 
-# Download Agents a portable firmware package carries beside its scatter.
-PACKAGE_DA_NAMES = ("MTK_AllInOne_DA.bin", "DA_SWSEC.bin", "DA_PL.bin")
 _PRESERVE_SCATTER_TAGS = ("preserve", "keep_data", "keepdata", "nodata")
-
-
-def _package_download_agent(scatter_path):
-    """A Download Agent shipped beside the package's own scatter, or None.
-
-    Portable firmware packages carry the DA the release was authored against
-    (SP Flash Tool's own history points at the file beside the scatter). That
-    agent is the one whose image types match this layout, so it outranks the
-    app's bundled DA; a missing or empty file is ignored.
-    """
-    if not scatter_path:
-        return None
-    try:
-        files = {
-            p.name.lower(): p for p in Path(scatter_path).parent.iterdir() if p.is_file()
-        }
-    except OSError:
-        return None
-    for name in PACKAGE_DA_NAMES:
-        candidate = files.get(name.lower())
-        try:
-            if candidate is not None and candidate.stat().st_size > 0:
-                return candidate
-        except OSError:
-            continue
-    return None
 
 
 def downloaded_partition_names(scatter_path) -> list:
@@ -4728,24 +4710,20 @@ class FlashWorker(QThread):
 
     # -- SP Flash Tool backend (Windows + staged Linux) ----------------------
     def _resolve_da_file(self, sp_dir, scatter_file=None):
-        """Download agent for this run.
+        """Download agent for this run: always ``MTK_AllInOne_DA.bin`` beside flash_tool.
 
-        The MediaTek Installer lets the user point at any vendor's DA, so that
-        file wins when it is present. Otherwise a package that ships its own
-        agent beside the scatter uses it: that is the agent whose image types
-        match this layout (Y2Linux-style releases are authored against a
-        specific SP Flash Tool). Only then does the bundled payload's DA apply,
-        which remains the reference behaviour for ordinary stock packages.
+        Every SP Flash Tool install uses the tool's own DA. The agent and the
+        tool that loads it are a matched pair, and a firmware package's copy was
+        built with whatever tool version its ROM was made with — the bundled
+        console tool refuses such an agent outright ("lib DA NOT match!").
+        The MediaTek Installer is the one exception: a DA the user points at
+        wins when it is present.
         """
         chosen = self.da_file
         if chosen:
             if Path(chosen).is_file():
                 return Path(chosen)
             self._log(f"Download agent not found, using the bundled DA: {chosen}")
-        package_da = _package_download_agent(scatter_file)
-        if package_da is not None:
-            self._log(f"Download agent: {package_da.name} (from the firmware package)")
-            return package_da
         return Path(sp_dir) / "MTK_AllInOne_DA.bin"
 
     def _resolve_auth_file(self):
@@ -4776,7 +4754,6 @@ class FlashWorker(QThread):
             env = None
             creationflags = _SUBPROCESS_NO_WINDOW
             scatter_arg = _to_short_path(scatter_file)
-            da_arg = _to_short_path(da_file)
             if not str(scatter_arg).isascii():
                 self._log(
                     "Warning: scatter path contains non-ASCII characters and 8.3 short "
@@ -4793,7 +4770,6 @@ class FlashWorker(QThread):
             env = linux_sp_flash.process_env(sp_dir)
             creationflags = 0
             scatter_arg = str(scatter_file)
-            da_arg = str(da_file)
 
         align_scatter_disk_images(scatter_file, log=self._log)
         if getattr(self, "keep_data", False):
@@ -4843,6 +4819,12 @@ class FlashWorker(QThread):
             self._log(f"Download agent: {Path(da_file).name}")
 
         self._announce_please_wait()
+        # One DA for every SP Flash Tool install: the MTK_AllInOne_DA.bin that
+        # ships beside flash_tool.exe. The agent and the tool that loads it are
+        # a matched pair; a firmware package's own copy was built with whatever
+        # tool version its ROM was made with, and the bundled console tool
+        # refuses such an agent outright ("lib DA NOT match!").
+        da_arg = _to_short_path(da_file) if IS_WINDOWS else str(da_file)
         try:
             sp_args = sp_flash_tool_console_args(scatter_arg, da_arg, auth_file, self._log)
         except SpAuthFileError as e:
@@ -5790,16 +5772,20 @@ class FlashWorker(QThread):
     def _other_backend_available_for(self, method):
         resolved = backend_method(method)
         if is_mtk_method(method):
-            return _sp_backend_available()
-        return _mtk_backend_available()
+            return self._sp_backend_available()
+        return self._mtk_backend_available()
 
     def _mtk_backend_available(self):
+        from .terminal_install import mtkclient_command
+
         return mtkclient_command() is not None
 
     def _sp_backend_available(self):
         if paths.IS_MAC:
             return False
         if paths.IS_WINDOWS:
+            from .paths import find_sp_flash_tool
+
             return find_sp_flash_tool() is not None
         try:
             from . import linux_sp_flash
@@ -5840,8 +5826,8 @@ class FlashWorker(QThread):
             else:
                 title = tr("err_checksum_stall_title")
                 desc = tr("err_checksum_stall_sp_failover").format(
-                    failed=_method_label("mtk"),
-                    next=_method_label("sp"),
+                    failed=_install_method_label("mtk"),
+                    next=_install_method_label("sp"),
                     model=getattr(self, "model", "") or "player",
                 )
         elif context["mtk_only"]:

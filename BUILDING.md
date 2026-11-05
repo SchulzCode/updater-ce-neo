@@ -98,12 +98,14 @@ Or in PowerShell:
 ```
 
 > **Auto-detection**: When running on an ARM64 Windows system (or VM) with native ARM64 Python, `build_windows.bat` and `build_windows.ps1` automatically detect the architecture without needing `--arch arm64`.
+>
+> **No cross-compiling**: PyInstaller freezes for the interpreter that runs it, so an Intel/AMD machine cannot produce an ARM64 package. The scripts check the interpreter and stop with an explanation instead of labelling an x64 build as ARM64. Build ARM64 on Windows on ARM — a Snapdragon PC/VM, or a `windows-11-arm` CI runner — where the bootstrap creates a native `.venv-build` (or point it at `.venv-arm64`).
 
-**ARM64 Output** (`-Brand both` also produces the same three as MediaTek Installer):
-- `dist\windows\InnioasisUpdater\InnioasisUpdater.exe` (native ARM64 portable folder)
-- `dist\windows\UpdaterCE-Portable-2.5.2-arm64.zip` (portable archive)
-- `dist\windows\UpdaterCE-Setup-2.5.2-arm64.exe` (Inno Setup 6 installer compiled with `ArchitecturesAllowed=arm64` and `ArchitecturesInstallIn64BitMode=arm64`)
-- `dist\windows\InnioasisUpdater-2.5.2.0-arm64.msix` (when building with `-Msix`)
+**ARM64 Output** (into `dist\windows-arm64`, so an x64 build in `dist\windows` is left alone; `-Brand both` also produces the same three as MediaTek Installer):
+- `dist\windows-arm64\InnioasisUpdater\InnioasisUpdater.exe` (native ARM64 portable folder)
+- `dist\windows-arm64\UpdaterCE-Portable-2.5.2-arm64.zip` (portable archive)
+- `dist\windows-arm64\UpdaterCE-Setup-2.5.2-arm64.exe` (Inno Setup 6 installer compiled with `ArchitecturesAllowed=arm64` and `ArchitecturesInstallIn64BitMode=arm64`)
+- `dist\windows-arm64\InnioasisUpdater-2.5.2.0-arm64.msix` (when building with `-Msix`)
 
 **Flashing Backend on Windows ARM64**:
 On Windows ARM64, the app uses **MTKClient** as its flash engine (just like macOS and Linux ARM64). SP Flash Tool is an x86/x64-only binary and is deliberately not bundled on ARM64 builds, saving space and avoiding driver emulation issues. MTKClient communicates directly over USB with MediaTek BROM / Preloader devices without requiring legacy x86 VCOM kernel drivers.
@@ -121,7 +123,8 @@ build_windows.bat updater_ce -Msix
 
 That produces `dist\windows\InnioasisUpdater-<version>.msix` (and, for the other
 front end, `MediaTekInstaller-<version>.msix`) next to the portable folder and
-the Inno Setup wizard. Requirements and one-time setup:
+the Inno Setup wizard; an ARM64 build writes the same names into
+`dist\windows-arm64` with an `-arm64` suffix. Requirements and one-time setup:
 
 1. **Windows 10/11 SDK** with `MakeAppx.exe` (and `signtool.exe`, only needed to
    test-sign locally). The build script finds it under

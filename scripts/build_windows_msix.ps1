@@ -2,8 +2,9 @@
 #
 #   .\scripts\build_windows_msix.ps1 -AppDir dist\windows\InnioasisUpdater -Version 2.5.0
 #
-# Produces dist\windows\UpdaterCE-<version>.msix, unsigned unless -SignCert is
-# passed (a local test certificate; the Store signs the uploaded package).
+# Produces dist\windows\UpdaterCE-<version>.msix (dist\windows-arm64 for an ARM64
+# build), unsigned unless -SignCert is passed (a local test certificate; the
+# Store signs the uploaded package).
 #
 # Identity values come from scripts\msix\msix_identity.json, copied from
 # msix_identity.example.json and filled in from Partner Center -> App identity.

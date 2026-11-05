@@ -1,9 +1,10 @@
 @echo off
 rem Build script for Updater CE / MediaTek Installer on Windows.
 rem Usage:
-rem   build_windows.bat                     :: build both Updater CE and MediaTek Installer into dist\windows
-rem   build_windows.bat updater_ce          :: build Updater CE only into dist\windows
-rem   build_windows.bat mediatek_installer  :: build MediaTek Installer only into dist\windows
+rem   build_windows.bat                     :: Updater CE into dist\windows (x64)
+rem   build_windows.bat updater_ce          :: Updater CE only into dist\windows (x64)
+rem   build_windows.bat mediatek_installer  :: MediaTek Installer only into dist\windows (x64)
+rem   build_windows.bat --arch arm64        :: ARM64 build into dist\windows-arm64 (needs ARM64 Windows + Python)
 rem   build_windows.bat updater_ce -Msix     :: also pack the Microsoft Store (MSIX) package
 
 setlocal enabledelayedexpansion
@@ -17,8 +18,8 @@ set "MSIX=0"
 set "MSIXONLY=0"
 set "SKIT_PYI=0"
 set "VERSION=2.5.2"
-set "DIST_DIR=dist\windows"
-set "BUILD_DIR=build\windows"
+rem Output roots are chosen by build_windows.ps1 from the target architecture:
+rem x64 -> dist\windows, ARM64 -> dist\windows-arm64.
 
 :parse_args
 if "%~1"=="" goto :args_done
@@ -204,7 +205,9 @@ exit /b %ERRORLEVEL%
 :help
 echo Usage: build_windows.bat [updater_ce^|mediatek_installer] [--arch arm64^|x64] [-Clean] [-NoInstaller] [-Installer] [-Msix] [-MsixOnly] [-SkipPyInstaller]
 echo.
-echo Builds Updater CE and/or MediaTek Installer on Windows into dist\windows\.
+echo Builds Updater CE and/or MediaTek Installer on Windows into dist\windows\ (x64)
+echo or dist\windows-arm64\ (--arch arm64). ARM64 needs Windows on ARM: PyInstaller
+echo cannot cross-compile from an x64 host.
 echo Options:
 echo   updater_ce         Build Updater CE only.
 echo   mediatek_installer Build MediaTek Installer only.

@@ -553,15 +553,6 @@ def can_inline_title_with_window_controls() -> bool:
 COMPACT_INSTALL_MIN_HEIGHT = 188
 COMPACT_INSTALL_MIN_HEIGHT_NO_DONATIONS = 168
 
-# The flashing screen is a wizard pane, not a document or a horizontal strip.
-# Its card is short, so a pure content fit can leave a 760px-wide window only
-# ~230px tall. Keep a compact, width-derived frame around the card and let a
-# genuinely taller card (a prompt, a failure, the completion appeal) win.
-INSTALL_WIZARD_MIN_HEIGHT = 380
-INSTALL_WIZARD_FRAME_MAX_HEIGHT = 520
-INSTALL_WIZARD_FRAME_RATIO = 0.52
-
-
 def compact_install_height(
     page_h: int,
     prompt_h: int,
@@ -581,52 +572,6 @@ def compact_install_height(
     if donations_disabled:
         return max(COMPACT_INSTALL_MIN_HEIGHT_NO_DONATIONS, page_h + prompt_h + header_h)
     return max(COMPACT_INSTALL_MIN_HEIGHT, page_h + prompt_h + status_h + header_h)
-
-
-def waiting_for_device_card(page) -> bool:
-    """True while the install card is only asking for the player.
-
-    The connect prompt and the power-off step draw one short card; a card that
-    is showing install progress keeps the wizard's tall preferred frame. The
-    window uses this to hug the prompt instead of leaving an empty band below
-    it (see ``_adjust_window_geometry``).
-    """
-    try:
-        remaining = int(getattr(page, "_attempt_remaining", 0) or 0)
-    except (TypeError, ValueError):
-        remaining = 0
-    return bool(getattr(page, "_prompt_only", False) or remaining > 0)
-
-
-def install_wizard_height(content_height: int, width: int) -> int:
-    """Give a running progress card a compact wizard pane instead of a thin strip.
-
-    The card's own height remains the floor. At a typical installer width the
-    preferred frame is roughly 1.9:1 (about 395px at 760px wide, 416px at
-    800px); long prompts and completion copy still make the window taller.
-    """
-    preferred = int(round(max(1, int(width)) * INSTALL_WIZARD_FRAME_RATIO))
-    preferred = max(
-        INSTALL_WIZARD_MIN_HEIGHT,
-        min(INSTALL_WIZARD_FRAME_MAX_HEIGHT, preferred),
-    )
-    return max(int(content_height), preferred)
-
-
-def install_card_keeps_wizard_frame(
-    page, *, finished: bool, waiting_for_device: bool
-) -> bool:
-    """Whether the install card still wants the tall wizard frame.
-
-    A run that is flashing does: its progress card should look like a compact
-    installer, not a thin strip. A finished card hugs the copy it actually
-    shows — with donations disabled there is no appeal below it, so padding to
-    the wizard frame left an empty band under the completion note.
-    """
-    stack = getattr(page, "_stack", None)
-    if stack is None or stack.currentWidget() is not getattr(page, "_flashing_view", None):
-        return False
-    return not finished and not waiting_for_device
 
 
 def page_title_alignment() -> Qt.AlignmentFlag:
@@ -3786,23 +3731,12 @@ class MainWindow(QMainWindow):
                     inline_header=getattr(self, "_title_bar", None) is not None,
                     donations_disabled=donations_disabled,
                 )
-                # Downloading and extraction keep their deliberately short
-                # cards. A flashing run keeps the wizard size while it is
-                # still working, but a finished card hugs the copy it shows:
-                # once the donation appeal is gone there is nothing below the
-                # completion note, and the wizard frame left an empty band.
-                # A card only asking for the player (connect prompt, power-off
-                # step) has always hugged its one card for the same reason.
-                waiting_for_device = waiting_for_device_card(page)
-                if install_card_keeps_wizard_frame(
-                    page,
-                    finished=bool(
-                        getattr(self, "_install_complete", False)
-                        or getattr(self, "_install_failed", False)
-                    ),
-                    waiting_for_device=waiting_for_device,
-                ):
-                    content_h = install_wizard_height(content_h, target_w)
+                # Every install stage hugs its card. A running card used to be
+                # padded out to a width-derived "wizard" frame (52% of the
+                # window width, 380-520px), so a short progress card sat above
+                # a band of empty window. The card plus the small fit slack is
+                # the whole height now; the rail's visible rows are the only
+                # content that can need more.
                 target_h = max(
                     content_h,
                     page_h + prompt_h + actual_chrome + 8,
@@ -4984,14 +4918,9 @@ class MainWindow(QMainWindow):
                         pkg = candidate
                         break
             self._keep_data_pkg = pkg
-            # The tick says only what it does. Naming one compatible release in
-            # brackets beside it read as though Keep Data belonged to that
-            # release; the compatible software gets its own caption instead.
-            names = keep_data.compatible_software_names(pkg, model) if pkg is not None else []
             self._flash_page.set_keep_data_available(
                 keep_data.keep_data_available(model, pkg, self.settings),
                 keep_data.keep_data_label(model),
-                names,
             )
         except Exception:
             logger.debug("Could not evaluate Keep Data compatibility", exc_info=True)
@@ -8493,7 +8422,7 @@ class MainWindow(QMainWindow):
 
     def _check_legacy_installations(self):
         try:
-            if paths.IS_WINDOWS or config.is_mediatek_installer():
+            if paths.IS_WINDOWS or is_mediatek_installer():
                 # The removal offer is a macOS/Linux Settings card. On these
                 # hosts it can never be shown, so launch neither walks the old
                 # folders nor risks focusing a card that is not there.

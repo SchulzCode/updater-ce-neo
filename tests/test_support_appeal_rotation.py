@@ -18,8 +18,8 @@ from src.ui import support_appeal as sa
 
 #: A daily-scope day: mid-month, one of the quiet weekdays.
 SHORT_GOAL_DAY = dt.datetime(2026, 11, 17, 12, 0)
-#: A monthly-scope day: mid-month, not a quiet weekday.
-MONTHLY_DAY = dt.datetime(2026, 11, 25, 12, 0)
+#: A monthly-scope day: the closing three days, when the month summarises.
+MONTHLY_DAY = dt.datetime(2026, 11, 29, 12, 0)
 
 
 def _store(tmp_path, cohort):

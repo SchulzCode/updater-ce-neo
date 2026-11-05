@@ -78,6 +78,67 @@ def test_month_goal_line_uses_the_month_rung(monkeypatch):
     )
 
 
+def test_quiet_weekdays_open_on_the_day_and_other_days_on_the_week():
+    from src.donors import goal_ladder
+
+    assert goal_ladder(datetime(2026, 11, 10, 12)) == ("daily", "weekly", "monthly")
+    assert goal_ladder(datetime(2026, 11, 11, 12)) == ("daily", "weekly", "monthly")
+    assert goal_ladder(datetime(2026, 11, 12, 12)) == ("daily", "weekly", "monthly")
+    assert goal_ladder(datetime(2026, 11, 13, 12)) == ("weekly", "monthly")
+
+
+def test_the_month_summary_owns_only_the_first_and_last_three_days():
+    from src.donors import days_in_month, goal_ladder
+
+    # November 2026 has 30 days, so the closing window is the 28th to the 30th.
+    assert days_in_month(datetime(2026, 11, 12, 12)) == 30
+    assert goal_ladder(datetime(2026, 11, 1, 12)) == ("monthly",)
+    assert goal_ladder(datetime(2026, 11, 3, 12)) == ("monthly",)
+    assert goal_ladder(datetime(2026, 11, 4, 12)) == ("daily", "weekly", "monthly")
+    assert goal_ladder(datetime(2026, 11, 27, 12)) == ("weekly", "monthly")
+    assert goal_ladder(datetime(2026, 11, 28, 12)) == ("monthly",)
+    assert goal_ladder(datetime(2026, 11, 30, 12)) == ("monthly",)
+
+
+def test_a_quiet_weekday_asks_for_today_not_the_month(monkeypatch):
+    from src.donors import get_goal_stats
+
+    _pin_gbp(monkeypatch)
+    # Thursday 5 November 2026: the 5th is outside the closing/opening window.
+    now = datetime(2026, 11, 5, 12)
+    donations = [
+        {"amount": 30, "dt": datetime(2026, 11, 2, 9)},
+        {"amount": 5, "dt": now},
+    ]
+    assert get_goal_stats(donations, now=now)["scope"] == "daily"
+
+
+def test_today_hands_over_to_the_week_once_it_is_covered(monkeypatch):
+    from src.donors import format_goal_line, get_goal_stats
+
+    _pin_gbp(monkeypatch)
+    now = datetime(2026, 11, 17, 12)
+    stats = get_goal_stats([{"amount": 12, "dt": now}], now=now)
+
+    assert stats["scope"] == "weekly"
+    assert format_goal_line(stats) == (
+        "<b>You've helped us raise £6 of our £25 costs for this week</b>"
+    )
+
+
+def test_the_week_hands_over_to_the_month_once_it_is_covered(monkeypatch):
+    from src.donors import format_goal_line, get_goal_stats
+
+    _pin_gbp(monkeypatch)
+    now = datetime(2026, 11, 17, 12)
+    stats = get_goal_stats([{"amount": 50, "dt": now}], now=now)
+
+    assert stats["scope"] == "monthly"
+    assert format_goal_line(stats) == (
+        "<b>You've helped us raise £25 of our £100 costs for this month</b>"
+    )
+
+
 def test_zero_and_covered_goals_do_not_render_a_cold_dollar_line(monkeypatch):
     from src.donors import format_goal_line, get_goal_stats
 

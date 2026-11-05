@@ -827,7 +827,9 @@ def _hold_lock(app, lock: InstanceLock) -> None:
         pass
 
 
-def ensure_single_instance(app, lock: Optional["InstanceLock"] = None) -> bool:
+def ensure_single_instance(
+    app, lock: Optional["InstanceLock"] = None, quiet: bool = False
+) -> bool:
     """Take the guard, or send this launch to the copy already running.
 
     True means "carry on". A copy that answers the focus request is never
@@ -835,9 +837,13 @@ def ensure_single_instance(app, lock: Optional["InstanceLock"] = None) -> bool:
     progress; only a copy that fails to answer may be ended, and only after the
     user chooses that. Any failure inside the guard itself starts the app: the
     user is never locked out by the guard's own machinery.
+
+    ``quiet`` marks a start-at-login launch: if another copy is already running
+    it leaves without asking for the window, because a login must never raise
+    one by itself.
     """
     try:
-        return _guarded(app, lock)
+        return _guarded(app, lock, quiet=quiet)
     except Exception:
         logger.warning("Single-instance guard failed; starting normally", exc_info=True)
         return True
@@ -863,10 +869,13 @@ def _ask_running_copy_to_show(pid: int = 0, wait_s: Optional[float] = None) -> b
     return bool(stamp) and wait_for_show_request(stamp, timeout_s=timeout)
 
 
-def _guarded(app, lock: Optional["InstanceLock"]) -> bool:
+def _guarded(app, lock: Optional["InstanceLock"], quiet: bool = False) -> bool:
     if _take_over_requested():
         _wait_for_previous_copy()
     if not acquire_windows_mutex():
+        if quiet:
+            logger.info("Another copy holds the mutex; start-at-login launch leaves")
+            return False
         logger.info("Another copy holds the single-instance mutex; asking it to show")
         diagnosis = InstanceLock()
         pid = diagnosis.holder_pid()
@@ -893,6 +902,13 @@ def _guarded(app, lock: Optional["InstanceLock"]) -> bool:
         # launch must ask it to show rather than open a second window beside it.
         pids = find_running_copy_pids()
         if pids:
+            if quiet:
+                logger.info(
+                    "Another copy is running (pid %s); start-at-login launch leaves",
+                    pids[0],
+                )
+                lock.release()
+                return False
             logger.info("Another copy is running (pid %s); asking it to show", pids[0])
             if _ask_running_copy_to_show(pids[0]):
                 lock.release()
@@ -930,7 +946,13 @@ def _guarded(app, lock: Optional["InstanceLock"]) -> bool:
         return True
 
     # A live copy of this app holds the lock. Show its window; only a copy that
-    # does not answer may be ended, and only if the user says so.
+    # does not answer may be ended, and only if the user says so. A start-at-
+    # login launch leaves instead: it must never raise a window by itself.
+    if quiet:
+        logger.info(
+            "Another copy is running (pid %s); start-at-login launch leaves", pid
+        )
+        return False
     logger.info("Another copy is running (pid %s); asking it to show", pid)
     if _ask_running_copy_to_show(pid):
         return False

@@ -148,10 +148,19 @@ def _mtkclient_runtime_imports():
 
 binaries = []
 if sys.platform.startswith("win"):
-    for dll_name in ("libusb-1.0.dll", "libusb32-1.0.dll"):
-        dll_path = VENDOR_MTK / "mtkclient" / "Windows" / dll_name
+    # libusb is loaded into this process, so it must match the interpreter's
+    # architecture: an ARM64 build cannot use the x64 helper that mirrors the
+    # shipped Chinese build. The arm64 copy is this repo's own addition
+    # (vendor/mtkclient/mtkclient/Windows/arm64/README.md).
+    libusb_dir = VENDOR_MTK / "mtkclient" / "Windows" / ("" if HOST_IS_X86 else "arm64")
+    libusb_names = ("libusb-1.0.dll", "libusb32-1.0.dll") if HOST_IS_X86 else ("libusb-1.0.dll",)
+    for dll_name in libusb_names:
+        dll_path = libusb_dir / dll_name
+        if not dll_path.exists() and not HOST_IS_X86:
+            print(f"[spec] WARNING: ARM64 libusb payload missing: {dll_path}")
         if dll_path.exists():
             binaries.append((str(dll_path), "."))
+            print(f"[spec] bundling libusb payload: {dll_path}")
 
 hiddenimports = (
     collect_submodules("Cryptodome")

@@ -41,11 +41,16 @@ The codebase ships two brand targets from a single shared engine:
 
 ## 3. Windows Build Process
 
-The Windows packaging pipeline produces:
-1. **Portable Application Directory** (`dist\windows\<BrandSlug>\`)
-2. **Portable ZIP Archive** (`dist\windows\<BrandSlug>-Portable-<Version>.zip`)
-3. **Inno Setup Standard Windows Installer** (`dist\windows\<BrandSlug>-Setup-<Version>.exe`)
+The Windows packaging pipeline produces, under the folder for the target
+architecture (`dist\windows` for x64, `dist\windows-arm64` for ARM64, so one
+never overwrites the other):
+1. **Portable Application Directory** (`dist\windows[-arm64]\<BrandSlug>\`)
+2. **Portable ZIP Archive** (`dist\windows[-arm64]\<BrandSlug>-Portable-<Version>[-arm64].zip`)
+3. **Inno Setup Standard Windows Installer** (`dist\windows[-arm64]\<BrandSlug>-Setup-<Version>[-arm64].exe`)
 4. **Microsoft Store MSIX Package** (optional via `-Msix`)
+
+ARM64 packages must be built on Windows on ARM: PyInstaller cannot
+cross-compile, and `build_windows.ps1` refuses to label an x64 bundle as ARM64.
 
 ### Build Scripts
 - **PowerShell (Primary)**: `build_windows.ps1`
@@ -216,3 +221,20 @@ $env:QT_QPA_PLATFORM="offscreen"
 $env:INNIOASIS_HEADLESS="1"
 python -m pytest tests/test_sp_flash_usb_search.py tests/test_rar_extraction.py tests/test_shed_mtkclient.py tests/test_donations_and_release_labels.py tests/test_theme_segmented_and_settings.py tests/test_battery_toast_theme.py tests/test_quiet_subprocess.py
 ```
+
+### Linting (ruff)
+
+`ruff` is the only linter. Its configuration lives in `pyproject.toml` (`[tool.ruff]` /
+`[tool.ruff.lint]`) and gates syntax errors, undefined or misused names and broken `assert` /
+`format` usage — the mistakes that would otherwise only surface on an error path. Install it with
+`pip install -r requirements-dev.txt` (it is already present in `.venv-build`), then:
+
+```bash
+python -m ruff check          # whole tree
+python -m ruff check src/ui   # one area while working
+```
+
+The rule set is deliberately narrow so the existing tree is green. Widen `select` in `pyproject.toml`
+one rule family at a time — `I` (import order) and `E501` (line length) would currently flag most of
+the legacy app, and reformatting it in one sweep is not a change anyone can review. `vendor/mtkclient`
+is excluded because it mirrors the shipped Chinese build (see `AGENTS.md`).

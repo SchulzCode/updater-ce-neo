@@ -23,6 +23,7 @@ must execute before any mtkclient code runs.
 import io
 import logging
 import os
+import platform
 import sys
 import threading
 import time
@@ -47,12 +48,23 @@ def find_cross_platform_libusb() -> str | None:
     if sys.platform.startswith("darwin"):
         return paths.find_libusb_dylib() or "libusb-1.0.dylib"
     elif sys.platform.startswith("win") or os.name == "nt":
+        # libusb is loaded into this process, so its architecture must match the
+        # interpreter's. Windows on ARM therefore prefers the arm64/ copy this
+        # repo adds over the x64 helper that mirrors the shipped build.
+        is_arm64 = platform.machine().lower() in ("arm64", "aarch64")
         candidates = [
             Path("libusb-1.0.dll"),
-            Path(paths.MTKCLIENT_DIR) / "mtkclient" / "Windows" / "libusb-1.0.dll",
             Path(paths.BUNDLE_DIR) / "libusb-1.0.dll",
-            Path(paths.BUNDLE_DIR) / "mtkclient" / "Windows" / "libusb-1.0.dll",
         ]
+        if is_arm64:
+            candidates.extend([
+                Path(paths.BUNDLE_DIR) / "mtkclient" / "Windows" / "arm64" / "libusb-1.0.dll",
+                Path(paths.MTKCLIENT_DIR) / "mtkclient" / "Windows" / "arm64" / "libusb-1.0.dll",
+            ])
+        candidates.extend([
+            Path(paths.MTKCLIENT_DIR) / "mtkclient" / "Windows" / "libusb-1.0.dll",
+            Path(paths.BUNDLE_DIR) / "mtkclient" / "Windows" / "libusb-1.0.dll",
+        ])
         for c in candidates:
             if c.is_file():
                 return str(c.resolve())

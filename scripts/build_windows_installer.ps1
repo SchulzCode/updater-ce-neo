@@ -3,6 +3,7 @@
 #   .\scripts\build_windows_installer.ps1 -AppDir dist\windows\InnioasisUpdater -Version 2.5.0
 #
 # Produces dist\windows\UpdaterCE-Setup-<version>.exe (or MediaTekInstaller-Setup-<version>.exe)
+# in the same architecture folder as the app it packages: dist\windows-arm64 for ARM64.
 
 param(
     [Parameter(Mandatory = $false)]
@@ -19,10 +20,11 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 
 if (-not $AppDir) {
+    $distRoot = if ($Arch -eq "arm64" -or $env:TARGET_ARCH -eq "arm64") { "dist\windows-arm64" } else { "dist\windows" }
     if ($Brand -eq "mediatek_installer") {
-        $AppDir = Join-Path $ProjectRoot "dist\windows\MediaTekInstaller"
+        $AppDir = Join-Path $ProjectRoot "$distRoot\MediaTekInstaller"
     } else {
-        $AppDir = Join-Path $ProjectRoot "dist\windows\InnioasisUpdater"
+        $AppDir = Join-Path $ProjectRoot "$distRoot\InnioasisUpdater"
     }
 }
 

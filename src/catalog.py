@@ -1360,6 +1360,10 @@ def parse_clean_release_tag_label(rel, prefer_240p=False, version_only=False) ->
 
     version_part = semver_str or date_str
     title_semver = detect_title_start_or_end_semver(name)
+    # A tag that carries both a version and a build date shows both, the date
+    # beside the version (``2.0.4 (January 3 2026)``). A date-only tag still
+    # shows the date as its version, as before.
+    tag_date = date_str if (semver_str and date_str) else None
     if title_semver:
         version_part = title_semver
     elif not version_part:
@@ -1427,6 +1431,10 @@ def parse_clean_release_tag_label(rel, prefer_240p=False, version_only=False) ->
     if rc_m:
         val = rc_m.group(1)
         verbs.append(val.upper() if "rc" in val else val.title())
+
+    # The tag's own date reads next to the version, ahead of the other verbs.
+    if tag_date and not version_only and tag_date not in verbs:
+        verbs.insert(0, tag_date)
 
     verb_suffix = " ".join(f"({v})" for v in verbs)
     label = f"{version_part} {verb_suffix}".strip()

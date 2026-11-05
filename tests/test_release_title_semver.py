@@ -82,3 +82,37 @@ def test_release_sort_key_prioritizes_title_semver():
     ordered = sorted([rel_old, rel_new], key=catalog.release_sort_key, reverse=True)
     assert ordered[0] == rel_new
     assert ordered[1] == rel_old
+
+
+def test_a_tag_with_a_version_and_a_date_shows_both():
+    # The date follows the version in parentheses; verbs still come after it.
+    assert (
+        catalog.parse_clean_release_tag_label({"tag_name": "v2.0.4-20260103"})
+        == "2.0.4 (January 3 2026)"
+    )
+    assert (
+        catalog.parse_clean_release_tag_label({"tag_name": "2.0.4_2026-06-07-adb"})
+        == "2.0.4 (June 7 2026) (ADB)"
+    )
+    assert (
+        catalog.parse_clean_release_tag_label({"tag_name": "3.1.2-240126-wifi"})
+        == "3.1.2 (January 26 2024) (Wi-Fi)"
+    )
+    # A release title's version still replaces a build-identifier tag, and a
+    # date-only tag keeps the date as its version.
+    assert (
+        catalog.parse_clean_release_tag_label(
+            {"tag_name": "2.0.4-20260103", "name": "Rockbox 0.6"}
+        )
+        == "0.6 (January 3 2026)"
+    )
+    assert catalog.parse_clean_release_tag_label({"tag_name": "2026-02-01"}) == (
+        "February 1 2026"
+    )
+    # The version-only helper that Settings uses never gains the date.
+    assert (
+        catalog.parse_clean_release_tag_label(
+            {"tag_name": "v2.0.4-20260103"}, version_only=True
+        )
+        == "2.0.4"
+    )

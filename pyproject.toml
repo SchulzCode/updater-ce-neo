@@ -33,3 +33,27 @@ packages = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+# The oldest interpreter the app ships on.
+target-version = "py310"
+# The tree was never formatted to a narrow width, so line length is not a gate.
+line-length = 120
+# ``vendor/mtkclient`` mirrors the shipped Chinese build byte for byte (see
+# AGENTS.md) and must never be "cleaned up"; the rest are build output and
+# one-off patch scripts rather than source.
+extend-exclude = [
+    "vendor",
+    "build",
+    "dist",
+    "analysis_cn",
+    "debug",
+    "_patch_*.py",
+]
+
+[tool.ruff.lint]
+# Start as a bug gate: syntax errors, broken format/assert usage and undefined
+# or misused names, which is what catches a typo that only fires on an error
+# path. The tree is green with this set; widen it one rule family at a time
+# instead of restyling the whole legacy app in one sweep.
+select = ["E9", "F63", "F7", "F82"]

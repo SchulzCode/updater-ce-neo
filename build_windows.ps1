@@ -34,8 +34,6 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ProjectRoot
 
-$DistDir = Join-Path $ProjectRoot "dist\windows"
-$BuildDir = Join-Path $ProjectRoot "build\windows"
 $Version = "2.5.2"
 $ConfigFile = Join-Path $ProjectRoot "src\config.py"
 if (Test-Path $ConfigFile) {
@@ -133,6 +131,40 @@ $targetArch = if ($Arch) {
 $isArm64 = ($targetArch -eq "arm64")
 $env:TARGET_ARCH = $targetArch
 $env:BUILD_ARCH = $targetArch
+
+# One output root per architecture: an ARM64 build must never robocopy /MIR
+# over the x64 portable folder that a release was cut from.
+$DistDir = Join-Path $ProjectRoot $(if ($isArm64) { "dist\windows-arm64" } else { "dist\windows" })
+$BuildDir = Join-Path $ProjectRoot $(if ($isArm64) { "build\windows-arm64" } else { "build\windows" })
+
+# PyInstaller freezes for the interpreter that runs it and cannot cross-compile,
+# so an x64 Python can only ever produce an x64 bundle. Refuse to continue
+# rather than shipping something labelled ARM64 that is really x64.
+$pyIsArm64 = ($pyArch -match "arm64|aarch64|armv8")
+$pyBits = (& $PythonExe -c "import struct; print(struct.calcsize('P') * 8)").Trim()
+if ($pyBits -ne "64") {
+    Write-Error "The Python at $PythonExe is $pyBits-bit; this app requires a 64-bit interpreter."
+    exit 1
+}
+if ($pyIsArm64 -ne $isArm64) {
+    if ($isArm64) {
+        $wanted = "ARM64"
+        $guidance = @"
+Build it on Windows on ARM (a Snapdragon PC/VM, or a windows-11-arm CI runner) with an ARM64 Python:
+  py -3.12-arm64 -m venv .venv-arm64
+  .venv-arm64\Scripts\python.exe -m pip install -r requirements.txt -r requirements-build.txt
+  .\build_windows.ps1 -Arch arm64        :: -> dist\windows-arm64
+"@
+    } else {
+        $wanted = "x64"
+        $guidance = "Build it on an Intel/AMD Windows host with an x64 Python (omit -Arch on that machine)."
+    }
+    Write-Error @"
+Cannot build $wanted from $PythonExe ($pyArch): PyInstaller cannot cross-compile, it only builds for the interpreter running it.
+$guidance
+"@
+    exit 1
+}
 
 # PySide6 6.12.0 on Python < 3.12 leaks a None reference per paint call and the
 # frozen app aborts ("none_dealloc: deallocating None") within a minute.

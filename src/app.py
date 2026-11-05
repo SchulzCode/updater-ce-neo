@@ -202,6 +202,54 @@ def _linux_sp_selected() -> bool:
     return backend_method(normalise_method(stored)) == METHOD_SP
 
 
+def _portable_package_ini():
+    """The bundled ``fw_package.ini`` this launch runs from, if any.
+
+    A portable package is recognised before the window exists: the launch card
+    and the start-at-login reconciliation both need to know. Only the three
+    locations a packaged run puts the manifest in are checked.
+    """
+    for candidate in (
+        paths.SP_FLASH_TOOL_DIR / "fw_package.ini",
+        paths.BUNDLE_DIR / "fw_package.ini",
+        paths.INSTALL_DIR / "fw_package.ini",
+    ):
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _reconcile_login_item(portable_ini) -> None:
+    """Keep the start-at-login entry in step with the saved background mode.
+
+    The entry is a projection of the preference, so every launch rewrites it:
+    a moved install, a restored preference or a manually deleted entry all heal
+    without the user visiting Settings again. A portable run must not replace
+    the installed app's entry with its own temporary executable.
+    """
+    if portable_ini is not None:
+        return
+    try:
+        from . import login_item, tray
+
+        login_item.set_login_item(tray.run_in_background_setting())
+    except Exception:
+        logger.debug("Could not reconcile the start-at-login item", exc_info=True)
+
+
+def _startup_presentation(start_in_tray: bool, background: bool) -> str:
+    """What a launch puts on screen: ``window``, only the ``tray``, or nothing.
+
+    A ``--tray`` launch is the start-at-login entry. It never shows the splash
+    or the window; it only keeps running when the background opt-in is on. A
+    stale entry whose opt-in was turned off exits instead of flashing a window
+    at every login.
+    """
+    if not start_in_tray:
+        return "window"
+    return "tray" if background else "exit"
+
+
 def _prepare_linux_sp_flash_tool() -> None:
     """Prepare Linux system for SP Flash Tool USB access.
 
@@ -353,6 +401,15 @@ def main():
             config.APP_VERSION,
             config.build_brand() or "updater_ce",
         )
+
+    # The start-at-login entry is a projection of the saved background
+    # preference: reconcile it on every launch so a moved install, a restored
+    # preference or a manually deleted entry heals without another visit to
+    # Settings. A portable run must not replace the installed app's entry with
+    # its own temporary executable.
+    portable_ini = _portable_package_ini()
+    if not is_cli:
+        _reconcile_login_item(portable_ini)
 
     if len(sys.argv) >= 2 and sys.argv[1] in ("--reset", "--mtk-reset"):
         from . import mtk_api
@@ -559,28 +616,33 @@ def main():
         show_request_stamp,
     )
 
+    # A start-at-login launch must never raise a window: if another copy is
+    # already running, this one leaves quietly instead of asking for the window.
+    start_in_tray = "--tray" in sys.argv[1:]
+
     # Capture the marker before the guard: one left by the launch that started
     # this one is stale, while one written during startup belongs to a second
     # launch and must still bring this window forward.
     startup_show_stamp = show_request_stamp()
-    if not ensure_single_instance(app):
+    if not ensure_single_instance(app, quiet=start_in_tray):
         sys.exit(0)
 
-    start_in_tray = "--tray" in sys.argv[1:]
+    from .tray import run_in_background_enabled
+
+    background = run_in_background_enabled()
+    presentation = _startup_presentation(start_in_tray, background)
+    if presentation == "exit":
+        # A login entry whose opt-in was turned off: leave before the splash or
+        # the window is built, and reconciliation has already removed the entry.
+        logging.getLogger("innioasis.startup").info(
+            "Start-at-login launch skipped: background mode is off"
+        )
+        sys.exit(0)
+
     startup_splash = None
-    if _sys.platform.startswith("win") and not start_in_tray:
+    if _sys.platform.startswith("win") and presentation == "window":
         try:
             from .ui.splash import show_startup_splash
-
-            portable_ini = None
-            for candidate in (
-                paths.SP_FLASH_TOOL_DIR / "fw_package.ini",
-                paths.BUNDLE_DIR / "fw_package.ini",
-                paths.INSTALL_DIR / "fw_package.ini",
-            ):
-                if candidate.is_file():
-                    portable_ini = candidate
-                    break
 
             # The card names the software the run will install, so read the
             # package manifest before the window exists. A manifest that cannot
@@ -686,8 +748,7 @@ def main():
         except Exception:
             logging.getLogger(__name__).debug("Could not hook macOS applicationShouldHandleReopen", exc_info=True)
 
-    from .tray import run_in_background_enabled
-    if run_in_background_enabled():
+    if background:
         app.setQuitOnLastWindowClosed(False)
 
     # Before show(): the window must exist to be prepared for glass. After it:
@@ -705,10 +766,10 @@ def main():
         is_dark(),
     )
     # --tray (start-at-login): stay in the menu bar; the window opens on click.
-    if start_in_tray:
+    if presentation == "tray":
         # The tray keeps the process alive with no window open.
         app.setQuitOnLastWindowClosed(False)
-    if not start_in_tray:
+    if presentation == "window":
         window.show()
         # The window is up: acknowledge a marker that was waiting at launch.
         # If a new request arrived meanwhile its stamp differs, so it stays for
@@ -737,13 +798,7 @@ def main():
 
             QTimer.singleShot(220, _close_startup_splash)
     else:
-        if run_in_background_enabled():
-            window._hide_to_tray_at_launch()
-        else:
-            # Opt-in is off: a login launch with nothing to keep alive exits.
-            app.setQuitOnLastWindowClosed(True)
-            window.show()
-            _apply_native_chrome(window, dark=is_dark())
+        window._hide_to_tray_at_launch()
         clear_show_request(startup_show_stamp)
 
     # Work the first screen does not need: the catalogue refresh, the donation

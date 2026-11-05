@@ -18,6 +18,10 @@
   `python3` has no `requests`/`PySide6`, so tests silently fail on import if you use it.
 - Run one test without the whole suite: `/tmp/run_one.py <tests/file.py> <test_name>`
   (offscreen Qt, sets `QT_QPA_PLATFORM=offscreen`, prints `PASS <name>`). Recreate it if `/tmp` was cleared.
+- **Lint with ruff**: `.venv-build/bin/python -m ruff check` (`…\Scripts\python.exe` on Windows;
+  `requirements-dev.txt`). `pyproject.toml` gates `E9,F63,F7,F82` — syntax errors, undefined/misused
+  names, bad `assert`/`format` — so the tree is green. Widen the rule set one family at a time;
+  `vendor/mtkclient` is excluded because it mirrors the shipped build and must never be "fixed".
 - `scripts/build_universal_app.py` **deletes and rebuilds `dist/*.app` in place**: a rebuild wipes any
   already-running app's bundle, so never build while the user is testing from `dist/`.
 - Build entry points are `./build_macos.sh [--arch arm64|x86_64|universal2] [--dmg] [--brand …]`,

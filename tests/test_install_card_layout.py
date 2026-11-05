@@ -91,24 +91,43 @@ def test_eta_uses_measured_install_time_and_optional_prep_time():
         page.close()
 
 
-def test_install_progress_frame_keeps_a_wizard_shape():
-    """A short progress card gets a pane, not a full-height or strip window."""
-    from src.ui.main_window import (
-        INSTALL_WIZARD_FRAME_MAX_HEIGHT,
-        INSTALL_WIZARD_MIN_HEIGHT,
-        install_wizard_height,
-    )
+def test_a_running_install_window_hugs_the_progress_card():
+    """The window stops at the card: no width-derived wizard frame.
 
-    assert install_wizard_height(220, 640) == INSTALL_WIZARD_MIN_HEIGHT
-    assert install_wizard_height(220, 760) == 395
-    assert install_wizard_height(220, 800) == 416
-    assert install_wizard_height(220, 920) == 478
-    assert install_wizard_height(560, 760) == 560
-    assert (
-        INSTALL_WIZARD_MIN_HEIGHT
-        <= install_wizard_height(220, 760)
-        <= INSTALL_WIZARD_FRAME_MAX_HEIGHT
-    )
+    A running progress card used to pad the frame out to 52% of the window
+    width (380-520px), which left a band of empty window under a 135px card.
+    The height now follows the card itself, with the rail's visible rows as the
+    only content that can ask for more.
+    """
+    import time
+
+    from PySide6.QtWidgets import QApplication
+
+    from src.ui.main_window import _PAGE_FLASH, MainWindow
+
+    app = QApplication.instance() or QApplication(["--platform", "offscreen"])
+    window = MainWindow()
+    window.show()
+    app.processEvents()
+    try:
+        window._stack.setCurrentIndex(_PAGE_FLASH)
+        window._install_run_active = lambda: True
+        window._adjust_window_geometry()
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline:
+            app.processEvents()
+            if not getattr(window, "_size_animating", False):
+                break
+            time.sleep(0.01)
+        page = window._flash_page
+        card_h = page.content_height_hint(page.text_column_width())
+        assert window.height() < 380, (
+            f"install window is {window.height()}px tall for a {card_h}px card; "
+            "the width-derived wizard frame is back"
+        )
+    finally:
+        window.close()
+        app.processEvents()
 
 
 def test_stop_prompt_keeps_the_status_line_wrapping():
@@ -428,29 +447,3 @@ def test_icon_progress_band_and_round_wizard_buttons_are_vertically_centered():
         assert all(isinstance(b, _RoundNextButton) for b in observed_buttons)
     finally:
         card.close()
-
-
-
-
-
-
-
-def test_a_connect_prompt_card_does_not_ask_for_the_wizard_height():
-    """The card that only asks for the player hugs its own height.
-
-    The wizard's tall preferred frame is for a card showing progress; using it
-    while the connect countdown is up left a band of empty window under the
-    card.
-    """
-    from types import SimpleNamespace
-
-    from src.ui.main_window import waiting_for_device_card
-
-    assert waiting_for_device_card(SimpleNamespace(_attempt_remaining=178)) is True
-    assert waiting_for_device_card(SimpleNamespace(_prompt_only=True)) is True
-    assert (
-        waiting_for_device_card(
-            SimpleNamespace(_attempt_remaining=0, _prompt_only=False)
-        )
-        is False
-    )

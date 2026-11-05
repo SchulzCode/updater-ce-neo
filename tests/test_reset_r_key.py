@@ -1,6 +1,6 @@
 import os
 
-from PySide6.QtCore import Qt, QSettings
+from PySide6.QtCore import QEvent, QSettings, Qt
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import QApplication
 

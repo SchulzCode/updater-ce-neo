@@ -563,35 +563,49 @@ class SettingsPage(QWidget):
         # are offered only when there is a catalogue to filter. The card is
         # built here but added to the layout below Firmware Storage & Cache.
         self._rockbox_card = Card("settings_rockbox_group")
+        # The title line is the disclosure switch: the filter rows stay out of
+        # the column until it is on, so the card reads as one quiet option.
+        self._cb_rockbox_filters = self._add_title_row_switch(
+            self._rockbox_card, "settings_rockbox_group"
+        )
+        self._cb_rockbox_filters.setStyleSheet("")
+        self._cb_rockbox_filters.toggled.connect(self._on_rockbox_filters_toggled)
+
         rock_layout = QVBoxLayout()
         rock_layout.setSpacing(8)
+        self._rockbox_options = QWidget()
+        options_layout = QVBoxLayout(self._rockbox_options)
+        options_layout.setContentsMargins(0, 0, 0, 0)
+        options_layout.setSpacing(8)
 
         self._rockbox_desc = QLabel(tr("settings_rockbox_desc"))
         self._rockbox_desc.setWordWrap(True)
         self._rockbox_desc.setProperty("cssClass", "subtitle")
-        rock_layout.addWidget(self._rockbox_desc)
+        options_layout.addWidget(self._rockbox_desc)
 
-        self._cb_old_rockbox = self._add_switch(rock_layout, tr("settings_filter_old_rockbox"))
+        self._cb_old_rockbox = self._add_switch(options_layout, tr("settings_filter_old_rockbox"))
         self._cb_old_rockbox.setStyleSheet("")  # no host style override
         self._cb_old_rockbox.setToolTip(tr("settings_old_rockbox_warn_body"))
         self._cb_old_rockbox.toggled.connect(self._on_old_rockbox_toggled)
 
-        self._cb_nightly = self._add_switch(rock_layout, tr("settings_filter_nightly"))
+        self._cb_nightly = self._add_switch(options_layout, tr("settings_filter_nightly"))
         self._cb_nightly.setStyleSheet("")  # no host style override
         self._cb_nightly.toggled.connect(self._on_nightly_toggled)
 
-        self._cb_240p = self._add_switch(rock_layout, tr("settings_filter_240p"))
+        self._cb_240p = self._add_switch(options_layout, tr("settings_filter_240p"))
         self._cb_240p.setStyleSheet("")  # no host style override
         self._cb_240p.setToolTip(tr("settings_240p_tip"))
         self._cb_240p.toggled.connect(self._on_240p_toggled)
 
         self._cb_original_pre307 = self._add_switch(
-            rock_layout, tr("settings_filter_original_pre307")
+            options_layout, tr("settings_filter_original_pre307")
         )
         self._cb_original_pre307.setStyleSheet("")  # no host style override
         self._cb_original_pre307.setToolTip(tr("settings_original_pre307_warn_body"))
         self._cb_original_pre307.toggled.connect(self._on_original_pre307_toggled)
 
+        self._rockbox_options.setVisible(False)
+        rock_layout.addWidget(self._rockbox_options)
         self._rockbox_card.set_layout(rock_layout)
 
         # --- Card 3: Show App Supporter Credits and Donations ---
@@ -926,14 +940,18 @@ class SettingsPage(QWidget):
         self.refresh_shortcut_state()
 
         # --- Card: Advanced Settings ---
-        self._advanced_card = Card("settings_advanced_group")
+        # The card's title is the switch's label: the words are printed once,
+        # with the switch on the title line, as on the donations card.
+        self._advanced_card = Card("settings_advanced_toggle")
         layout.addWidget(self._advanced_card)
         adv_layout = QVBoxLayout()
         adv_layout.setSpacing(8)
 
-        self._cb_advanced_settings = self._add_switch(adv_layout, tr("settings_advanced_toggle"))
-        self._cb_advanced_settings.setStyleSheet("")  # no host style override
-        self._cb_advanced_settings.setToolTip(tr("settings_advanced_desc"))
+        self._cb_advanced_settings = self._add_title_row_switch(
+            self._advanced_card, "settings_advanced_toggle",
+            tooltip=tr("settings_advanced_desc"),
+        )
+        self._cb_advanced_settings.setStyleSheet("")
         self._cb_advanced_settings.toggled.connect(self._on_advanced_settings_toggled)
 
         self._advanced_desc = QLabel(tr("settings_advanced_desc"))
@@ -941,21 +959,35 @@ class SettingsPage(QWidget):
         self._advanced_desc.setProperty("cssClass", "dimmed")
         adv_layout.addWidget(self._advanced_desc)
 
+        self._advanced_card.set_layout(adv_layout)
+
+        # --- Card: Settings and media (revealed by Show Advanced Settings) ---
+        # Skipping the compatibility question changes every install, so it is a
+        # card of its own rather than a row inside the Advanced Settings card,
+        # and it only appears while Show Advanced Settings is on.
         from ..keep_data import allow_keep_data_any, set_allow_keep_data_any
 
-        self._cb_allow_keep_data_any = self._add_switch(
-            adv_layout, tr("settings_allow_keep_data_any")
+        # The title line is the option itself: the switch sits on it, so the
+        # same words are not printed twice.
+        self._keep_data_card = Card("settings_allow_keep_data_any")
+        keep_layout = QVBoxLayout()
+        keep_layout.setSpacing(8)
+        self._keep_data_desc = QLabel(tr("settings_allow_keep_data_any_desc"))
+        self._keep_data_desc.setWordWrap(True)
+        self._keep_data_desc.setProperty("cssClass", "dimmed")
+        keep_layout.addWidget(self._keep_data_desc)
+        self._cb_allow_keep_data_any = self._add_title_row_switch(
+            self._keep_data_card,
+            "settings_allow_keep_data_any",
+            tooltip=tr("settings_allow_keep_data_any_desc"),
         )
         self._cb_allow_keep_data_any.setStyleSheet("")
-        self._cb_allow_keep_data_any.setToolTip(
-            tr("settings_allow_keep_data_any_desc")
-        )
         self._cb_allow_keep_data_any.setChecked(allow_keep_data_any())
         self._cb_allow_keep_data_any.toggled.connect(
             lambda checked: set_allow_keep_data_any(bool(checked))
         )
-
-        self._advanced_card.set_layout(adv_layout)
+        self._keep_data_card.set_layout(keep_layout)
+        layout.addWidget(self._keep_data_card)
 
         # The Advanced Settings card is a detail switch, not a headline: it
         # sits below the everyday cards (below Offline Mode), after the
@@ -1197,6 +1229,8 @@ class SettingsPage(QWidget):
         is_win_x86 = bool(paths.IS_WINDOWS and windows_only_method() == METHOD_SP and not show_adv)
         if hasattr(self, "_terminal_card"):
             self._terminal_card.setVisible(show_adv and self._may_show_card(self._terminal_card))
+        if hasattr(self, "_keep_data_card"):
+            self._keep_data_card.setVisible(show_adv and self._may_show_card(self._keep_data_card))
         if hasattr(self, "_method_card"):
             self._method_card.setVisible(
                 show_adv and not paths.IS_MAC and not is_win_x86 and self._may_show_card(self._method_card)
@@ -1273,8 +1307,9 @@ class SettingsPage(QWidget):
         first-run user: the guided in-app install, the platform's own flash
         method (Windows gets its CPU's engine — MTKClient on ARM64, SP Flash
         Tool on Intel/AMD), no terminal or SP Flash Tool GUI handoff, no
-        superuser restart, and no release filters, so old builds, nightlies,
-        240p and pre-3.0.7 releases stay hidden.
+        superuser restart, no release filters, so old builds, nightlies,
+        240p and pre-3.0.7 releases stay hidden, and the compatibility question
+        asked again before every install.
         """
         # Installation mode: guided in-app install wins over terminal / GUI.
         device_tracking.set_terminal_install_enabled(False)
@@ -1287,6 +1322,15 @@ class SettingsPage(QWidget):
         if switch is not None and switch.isChecked():
             switch.setChecked(False)  # persists through its own handler
 
+        # "Always offer to keep my settings and media": off again, so a switch
+        # hidden with this card can never skip the compatibility question.
+        from ..keep_data import set_allow_keep_data_any
+
+        set_allow_keep_data_any(False)
+        keep_switch = getattr(self, "_cb_allow_keep_data_any", None)
+        if keep_switch is not None and keep_switch.isChecked():
+            keep_switch.setChecked(False)  # persists through its own handler
+
         # Release filters: all off (no old builds, nightlies, 240p, pre-3.0.7).
         for flag in (
             device_tracking.FILTER_OLD_ROCKBOX,
@@ -1297,6 +1341,10 @@ class SettingsPage(QWidget):
             device_tracking.set_rockbox_release_filter(flag, False)
         self._apply_filter_flags()
         self.release_filters_changed.emit()
+
+        # The filter rows go back behind the card's own title switch.
+        if hasattr(self, "_cb_rockbox_filters") and self._cb_rockbox_filters.isChecked():
+            self._cb_rockbox_filters.setChecked(False)  # hides the rows via its handler
 
         # Flash method: the platform default, through the same path a user's
         # own choice takes, so the main window persists and applies it.
@@ -1383,6 +1431,13 @@ class SettingsPage(QWidget):
     # ------------------------------------------------------------------
     # SP Flash Tool authentication file
     # ------------------------------------------------------------------
+    def _on_rockbox_filters_toggled(self, checked: bool) -> None:
+        """Reveal the release filter rows under the card's title switch."""
+        self._rockbox_options.setVisible(bool(checked))
+        win = self.window()
+        if win is not None and hasattr(win, "_adjust_window_geometry"):
+            win._adjust_window_geometry()
+
     def _update_rockbox_visibility(self):
         """Offer the Rockbox release filters only behind Show Advanced Settings.
 
@@ -2657,6 +2712,9 @@ class SettingsPage(QWidget):
             self._set_switch_caption(self._cb_advanced_settings, tr("settings_advanced_toggle"))
             self._cb_advanced_settings.setToolTip(tr("settings_advanced_desc"))
             self._advanced_desc.setText(tr("settings_advanced_desc"))
+        if hasattr(self, "_keep_data_card"):
+            self._keep_data_card.retranslate()
+            self._keep_data_desc.setText(tr("settings_allow_keep_data_any_desc"))
             self._set_switch_caption(
                 self._cb_allow_keep_data_any, tr("settings_allow_keep_data_any")
             )
@@ -2669,6 +2727,7 @@ class SettingsPage(QWidget):
             self._add_device_button.setText(tr("settings_add_device"))
         self._update_reminders_copy()
         self._rockbox_card.retranslate()
+        self._set_switch_caption(self._cb_rockbox_filters, tr("settings_rockbox_group"))
         self._rockbox_desc.setText(tr("settings_rockbox_desc"))
         self._set_switch_caption(self._cb_old_rockbox, tr("settings_filter_old_rockbox"))
         self._cb_old_rockbox.setToolTip(tr("settings_old_rockbox_warn_body"))

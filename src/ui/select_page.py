@@ -38,12 +38,14 @@ from ..network import get_connectivity_monitor
 from ..worker_lifecycle import retire_worker
 from ..flash_service import (
     ExtractWorker,
+    ScatterDiscoveryError,
     compute_extract_dir,
     _is_extract_complete,
     _find_scatter,
 )
 from ..sp_flash_gui import update_sp_history_ini
 from ..fw_package import (
+    infer_release_name,
     locate_package as locate_fw_package,
     read_package as read_fw_package,
     release_install_heading,

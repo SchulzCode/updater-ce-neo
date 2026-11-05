@@ -5,9 +5,12 @@
 # window is up, and this is the other module that imports them.
 __lazy_modules__ = ["src.updates"]
 
+import logging
 import re
 import sys
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 
 from PySide6.QtCore import QDate, QDateTime, QSettings, QSize, QTime, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPalette, QTextCursor, QTextDocument

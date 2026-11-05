@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 from PySide6.QtCore import QEvent, QEventLoop, QRect, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPalette, QPen, QPixmap
 from PySide6.QtWidgets import (
+    QApplication,
     QBoxLayout,
     QCheckBox,
     QComboBox,
@@ -1752,12 +1753,6 @@ class FlashPage(QWidget):
         self._keep_data_hint.linkActivated.connect(self._on_keep_data_hint_link)
         self._keep_data_hint.setVisible(False)
         copy.addWidget(self._keep_data_hint)
-        # The releases Keep Data can carry data from, as a list below the tick.
-        self._keep_data_software = QLabel("")
-        self._keep_data_software.setWordWrap(True)
-        self._keep_data_software.setProperty("cssClass", "hint")
-        self._keep_data_software.setVisible(False)
-        copy.addWidget(self._keep_data_software)
         self._keep_data_warning = QLabel("")
         self._keep_data_warning.setWordWrap(True)
         self._keep_data_warning.setProperty("cssClass", "hint")
@@ -2744,8 +2739,6 @@ class FlashPage(QWidget):
             self._keep_data_cb.setVisible(False)
         if hasattr(self, "_keep_data_warning"):
             self._keep_data_warning.setVisible(False)
-        if hasattr(self, "_keep_data_software"):
-            self._keep_data_software.setVisible(False)
         self.show_flashing()
         self._warning.setVisible(False)
         if hasattr(self, "_appeal"):
@@ -2986,8 +2979,6 @@ class FlashPage(QWidget):
             self._keep_data_cb.setVisible(False)
         if hasattr(self, "_keep_data_warning"):
             self._keep_data_warning.setVisible(False)
-        if hasattr(self, "_keep_data_software"):
-            self._keep_data_software.setVisible(False)
         msg = self._power_off_prompt_text()
         self._wait_prompt_label.setText(msg)
         if hasattr(self._wait_progress_bar, "set_failed"):
@@ -3769,9 +3760,6 @@ class FlashPage(QWidget):
             return
         visible = self._keep_data_visible()
         cb.setVisible(visible)
-        software = getattr(self, "_keep_data_software", None)
-        if software is not None:
-            software.setVisible(visible and bool(software.text()))
         if hasattr(self, "_keep_data_microsd_note"):
             self._keep_data_microsd_note.setVisible(visible)
         if not visible:
@@ -3785,24 +3773,18 @@ class FlashPage(QWidget):
             self._keep_data_cb.setChecked(self._has_userdata and bool(preserve_data_default))
         self._sync_keep_data_visibility()
 
-    def set_keep_data_available(self, available: bool, label: str = "", compatible=()) -> None:
-        """Gate the tick, and name the software it can carry data from.
+    def set_keep_data_available(self, available: bool, label: str = "") -> None:
+        """Gate the tick on the connect / power-off card.
 
-        The tick itself stays one short phrase: a firmware name in brackets
-        beside it read like a property of the option. The compatible releases
-        belong on the line below, where a list reads as a list.
+        The tick says only what it does. Which releases Keep Data can carry
+        settings and media from is not part of the prep screen: it belongs to
+        the confirmation that asks about it, not to the option itself.
         """
         self._keep_data_allowed = bool(available)
         if hasattr(self, "_keep_data_cb"):
             text = label or tr("flash_keep_data_option")
             self._keep_data_cb.setText(text)
             self._keep_data_cb.setAccessibleName(text)
-        software = getattr(self, "_keep_data_software", None)
-        if software is not None:
-            names = ", ".join(str(n).strip() for n in (compatible or ()) if str(n).strip())
-            software.setText(
-                tr("keep_data_compatible_list_fmt").format(software=names) if names else ""
-            )
         self._sync_keep_data_visibility()
 
     def _update_keep_data_warning(self) -> None:
@@ -3854,8 +3836,6 @@ class FlashPage(QWidget):
         self._keep_data_cb.setVisible(False)
         if hasattr(self, "_keep_data_warning"):
             self._keep_data_warning.setVisible(False)
-        if hasattr(self, "_keep_data_software"):
-            self._keep_data_software.setVisible(False)
         names = [str(c) for c in (choices or ()) if str(c).strip()]
         self._keep_data_choice.clear()
         self._keep_data_choice.addItems(names)

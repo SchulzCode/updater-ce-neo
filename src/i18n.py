@@ -1975,11 +1975,12 @@ _STRINGS: dict = {
         "ja": "プレーヤーですでにこのソフトウェアまたは互換バージョンが動作している場合にのみ、設定とメディアを保持できます。",
     },
     "settings_allow_keep_data_any": {
-        "en": "Always offer to keep my settings and media",
-        "zh-CN": "始终提供保留我的设置和媒体选项",
-        "de": "Immer anbieten, Einstellungen und Medien zu behalten",
-        "fr": "Toujours proposer de conserver mes réglages et médias",
-        "es": "Ofrecer siempre conservar mis ajustes y archivos",
+        "en": "Allow Keep Settings and Media on any firmware install",
+        "zh-CN": "允许在任何固件安装中保留设置和媒体",
+        "de": "Einstellungen und Medien bei jeder Firmware-Installation behalten",
+        "fr": "Conserver réglages et médias lors de toute installation de firmware",
+        "es": "Conservar ajustes y archivos en cualquier instalación de firmware",
+        "ja": "どのファームウェアのインストールでも設定とメディアを保持する",
     },
     "settings_allow_keep_data_any_desc": {
         "en": "Skips the compatibility question. Only use this when you are sure the player will keep working with its current settings and media.",
@@ -2035,14 +2036,6 @@ _STRINGS: dict = {
         "es": "Tus archivos en la tarjeta microSD siempre permanecen intactos",
         "de": "Deine Medien auf der microSD-Karte bleiben immer erhalten",
         "ja": "microSDのメディアは常にそのまま保持されます",
-    },
-    "keep_data_compatible_list_fmt": {
-        "en": "Keep Data works from: {software}",
-        "zh-CN": "可从以下软件保留数据：{software}",
-        "fr": "Conserver les données fonctionne depuis : {software}",
-        "es": "Conservar datos funciona desde: {software}",
-        "de": "Daten behalten funktioniert ab: {software}",
-        "ja": "データ保持は次のソフトウェアから利用できます: {software}",
     },
     "keep_data_erase_prompt_y1": {
         "en": "Install and erase settings on your {model}?",

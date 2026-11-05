@@ -1,8 +1,9 @@
 """Packages whose layout differs from a stock release.
 
-Y2Linux-style releases ship more than one scatter and, in portable form, their
-own Download Agent. The install flow must follow the package's files rather than
-a fixed partition list, and must say what a 6104 rejection means.
+Y2Linux-style releases ship more than one scatter, and portable packages also
+carry their own Download Agent (the tool's ``MTK_AllInOne_DA.bin`` stays the one
+every install uses). The install flow must follow the package's files rather
+than a fixed partition list, and must say what a 6104 rejection means.
 """
 
 from pathlib import Path
@@ -93,16 +94,18 @@ def test_preserve_scatter_that_adds_a_partition_is_ignored(tmp_path):
     assert fs.find_preserve_data_scatter(scatter) is None
 
 
-def test_package_download_agent_is_used_only_when_real(tmp_path):
+def test_the_tools_own_download_agent_is_always_the_one_used(tmp_path):
     scatter = _package(tmp_path, (BOOTIMG, ANDROID))
-    assert fs._package_download_agent(scatter) is None
+    (tmp_path / "MTK_AllInOne_DA.bin").write_bytes(b"\x00" * 32)
 
-    empty = tmp_path / "MTK_AllInOne_DA.bin"
-    empty.write_bytes(b"")
-    assert fs._package_download_agent(scatter) is None
+    tool = tmp_path / "SP_Flash_Tool"
+    tool.mkdir()
+    tool_da = tool / "MTK_AllInOne_DA.bin"
+    tool_da.write_bytes(b"\x01" * 32)
 
-    empty.write_bytes(b"\x00" * 32)
-    assert fs._package_download_agent(scatter) == empty
+    worker = fs.FlashWorker("pkg.zip", method="sp")
+    assert worker._resolve_da_file(tool, scatter) == tool_da
+    assert not hasattr(fs, "_package_download_agent")
 
 
 def test_6104_is_reported_as_a_secure_da_rejection():

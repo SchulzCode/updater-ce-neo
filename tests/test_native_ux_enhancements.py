@@ -1019,40 +1019,6 @@ def test_compact_install_height_counts_the_header_on_every_desktop():
     ) == COMPACT_INSTALL_MIN_HEIGHT_NO_DONATIONS
 
 
-def test_a_finished_install_card_gives_back_the_wizard_frame():
-    """Only a flashing run keeps the tall frame; a finished card hugs its copy."""
-    from src.ui.main_window import install_card_keeps_wizard_frame
-
-    class _Stack:
-        def __init__(self, widget):
-            self._widget = widget
-
-        def currentWidget(self):
-            return self._widget
-
-    class _Page:
-        def __init__(self, current):
-            self._flashing_view = object()
-            self._stack = _Stack(self._flashing_view if current is None else current)
-
-    flashing = _Page(None)
-    assert install_card_keeps_wizard_frame(
-        flashing, finished=False, waiting_for_device=False
-    )
-    assert not install_card_keeps_wizard_frame(
-        flashing, finished=True, waiting_for_device=False
-    )
-    assert not install_card_keeps_wizard_frame(
-        flashing, finished=False, waiting_for_device=True
-    )
-
-    # A card on any other view never takes the flashing frame.
-    other = _Page(object())
-    assert not install_card_keeps_wizard_frame(
-        other, finished=False, waiting_for_device=False
-    )
-
-
 def test_da_payload_is_staged_from_this_desktops_tool_tree(tmp_path, monkeypatch):
     """The DA written into history.ini comes from our own tree for this desktop.
 
@@ -3076,7 +3042,6 @@ if __name__ == "__main__":
     test_history_ini_absolute_paths_before_gui_launch()
     test_dark_to_light_leaves_combos_and_notes_readable()
     test_sidebar_selection_is_not_an_accent_plate()
-    test_combo_popup_uses_translucent_material()
     test_caption_drag_leaves_controls_alone()
     test_unified_caption_client_rect()
     test_completion_check_mark_and_opt_out()
