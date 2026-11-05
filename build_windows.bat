@@ -213,7 +213,7 @@ echo   updater_ce         Build Updater CE only.
 echo   mediatek_installer Build MediaTek Installer only.
 echo   --arch arm64^|x64   Target CPU architecture (defaults to Python's machine architecture).
 echo   -Clean             Remove previous Windows build artifacts before compiling.
-echo   -NoInstaller       Skip Inno Setup and build the portable folders and .zip archives only.
+echo   -NoInstaller       Skip Inno Setup and build the portable folder only.
 echo   -Installer         Ensure Inno Setup installer is compiled.
 echo   -Msix              Pack the Microsoft Store (MSIX) package.
 echo   -MsixOnly          Build/pack MSIX only (skips Inno Setup without requiring ISCC.exe).

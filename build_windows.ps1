@@ -204,7 +204,7 @@ if (-not $IsccExe) {
         Write-Host "ISCC.exe (Inno Setup 6) not found. Skipping Inno Setup installer; proceeding with MSIX packaging." -ForegroundColor Yellow
         $NoInstaller = $true
     } elseif (-not $NoInstaller) {
-        Write-Host "ISCC.exe (Inno Setup 6) not found. Skipping Inno Setup installer (portable folder and zip will be generated)." -ForegroundColor Yellow
+        Write-Host "ISCC.exe (Inno Setup 6) not found. Skipping Inno Setup installer (the portable folder will still be generated)." -ForegroundColor Yellow
         $NoInstaller = $true
     }
 }
@@ -265,7 +265,6 @@ try {
         $appSlug = if ($isMtk) { "MediaTekInstaller" } else { "InnioasisUpdater" }
         $brandDisplay = if ($isMtk) { "MediaTek Installer" } else { "Innioasis Updater CE" }
         $archSuffix = if ($isArm64) { "-arm64" } else { "" }
-        $portableZipName = if ($isMtk) { "MediaTekInstaller-Portable-$Version$archSuffix.zip" } else { "UpdaterCE-Portable-$Version$archSuffix.zip" }
         $setupBaseName = if ($isMtk) { "MediaTekInstaller-Setup-$Version$archSuffix" } else { "UpdaterCE-Setup-$Version$archSuffix" }
 
         Write-Host ""
@@ -276,7 +275,10 @@ try {
         Set-BuildBrand $b
         $env:BUILD_BRAND = $b
 
-        $totalSteps = 4
+        # Compile, validate, stage the portable folder, then build the setup
+        # wizard. A portable ZIP is deliberately not part of this script:
+        # anyone who wants one can archive the finished folder themselves.
+        $totalSteps = 3
         if (-not $NoInstaller -and $IsccExe) { $totalSteps++ }
         if ($Msix) { $totalSteps++ }
 
@@ -365,23 +367,15 @@ try {
             $roboExit = $LASTEXITCODE
             $deferredSync = $false
             if ($roboExit -ge 8) {
-                Write-Warning "Some files in $targetAppDir are currently in use (robocopy exit $roboExit). Continuing to package portable zip and installer; portable folder will finish syncing as soon as $appSlug.exe closes."
+                Write-Warning "Some files in $targetAppDir are currently in use (robocopy exit $roboExit). Continuing to package the installer; the portable folder will finish syncing as soon as $appSlug.exe closes."
                 $deferredSync = $true
             } else {
                 Write-Host "  -> Portable folder synced to $targetAppDir" -ForegroundColor Green
             }
-
-            Write-StepBanner 4 $totalSteps "Creating Portable ZIP Archive" "Compressing portable folder into $DistDir\$portableZipName..."
-            $zipPath = Join-Path $DistDir $portableZipName
-            $tempZipPath = Join-Path $tempDistDir $portableZipName
-            Compress-Archive -Path $stagedAppDir -DestinationPath $tempZipPath -Force
-            Copy-Item -Path $tempZipPath -Destination $zipPath -Force
-            $zipSizeMb = [math]::Round((Get-Item $zipPath).Length / 1MB, 2)
-            Write-Host "  -> Portable archive created: $portableZipName ($zipSizeMb MB)" -ForegroundColor Green
         }
 
         if (-not $NoInstaller -and $IsccExe) {
-            Write-StepBanner 5 $totalSteps "Building Windows Setup Wizard" "Compiling Inno Setup wizard ($setupBaseName.exe)..."
+            Write-StepBanner 4 $totalSteps "Building Windows Setup Wizard" "Compiling Inno Setup wizard ($setupBaseName.exe)..."
             $installerScript = Join-Path $ProjectRoot "scripts\build_windows_installer.ps1"
             & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installerScript -AppDir $stagedAppDir -Version $Version -OutDir $DistDir -Brand $b -Arch $targetArch
             if ($LASTEXITCODE -ne 0) {
@@ -390,7 +384,7 @@ try {
         }
 
         if ($Msix) {
-            $msixStep = 4 + $(if (-not $NoInstaller -and $IsccExe) { 1 } else { 0 }) + 1
+            $msixStep = 3 + $(if (-not $NoInstaller -and $IsccExe) { 1 } else { 0 }) + 1
             Write-StepBanner $msixStep $totalSteps "Building Microsoft Store Package" "Packing the app folder as an MSIX (MakeAppx) for Store submission..."
             # Per-brand identity from Partner Center; the generic file is the
             # fallback for a single-product layout.
