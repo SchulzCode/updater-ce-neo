@@ -519,6 +519,10 @@ _CARD_COPY_INDENT = _CARD_ICON_PX + _CARD_HEAD_GAP
 _CHIP_INLINE_MS = 220
 # QWIDGETSIZE_MAX: a maximum width that means "let the layout decide".
 _UNLIMITED_WIDTH = 16777215
+# Digits the no-progress countdown reserves in the connect sentence. Meeting a
+# ticking number at its widest means the line is measured once, not every
+# second, so the chips beside it settle instead of sliding on every tick.
+_BAND_COUNTDOWN_DIGITS = 3
 # Round chips sit on a glass card, so their discs are translucent too. The
 # accent (the step that moves the install on) stays nearly opaque; a neutral
 # cancel/back chip reads as a wash over whatever is behind it.
@@ -571,6 +575,9 @@ class _CardHead(QWidget):
         # width carries them there and back (see set_band_inline).
         self._inline_content = None
         self._inline_target = None
+        # The one-line width the card measured for the inline copy, kept so a
+        # resize re-measures the same sentence instead of its live countdown.
+        self._inline_line_width = None
         self._inline_anim = QPropertyAnimation(self.identity, b"maximumWidth", self)
         self._inline_anim.setDuration(_CHIP_INLINE_MS)
         self._inline_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
@@ -593,7 +600,13 @@ class _CardHead(QWidget):
             chip.installEventFilter(self)
         self._sync_chips_pairing()
 
-    def set_band_inline(self, inline: bool, content: QWidget | None = None) -> None:
+    def set_band_inline(
+        self,
+        inline: bool,
+        content: QWidget | None = None,
+        *,
+        line_width: int | None = None,
+    ) -> None:
         """Slide the chips from the row's edge to just past the band's words.
 
         A single yes/no question and its two chips are one control, so while
@@ -602,9 +615,19 @@ class _CardHead(QWidget):
         column's width is animated rather than swapped, so the pair travels
         there and back instead of jumping, and the band gets its room again
         once the question has been answered.
+
+        ``line_width`` lets the card supply the one-line width it wants the
+        chips held at, instead of the head measuring ``content``'s own text:
+        a sentence with a ticking countdown is measured at the countdown's
+        widest so the number can change inside a slot that never moves.
         """
         content = content if inline else None
-        target = self._inline_band_width(content) if content is not None else None
+        self._inline_line_width = line_width if content is not None else None
+        target = (
+            self._inline_band_width(content, line_width=self._inline_line_width)
+            if content is not None
+            else None
+        )
         if target == self._inline_target and content is self._inline_content:
             return
         self._inline_content = content
@@ -614,10 +637,13 @@ class _CardHead(QWidget):
         else:
             self._travel_chips_to(target, restore_unlimited=False)
 
-    def _inline_band_width(self, content: QWidget) -> int:
+    def _inline_band_width(self, content: QWidget, *, line_width: int | None = None) -> int:
         """Room the identity column needs for the chips to sit past its words."""
         text = content.text() if hasattr(content, "text") else ""
-        wanted = int(content.fontMetrics().horizontalAdvance(text)) if text else 0
+        if line_width:
+            wanted = int(line_width)
+        else:
+            wanted = int(content.fontMetrics().horizontalAdvance(text)) if text else 0
         title = int(self.title.minimumSizeHint().width()) if self.title is not None else 0
         visible_chips = sum(1 for chip in self._chips if not chip.isHidden())
         available = (
@@ -636,7 +662,11 @@ class _CardHead(QWidget):
         maximum = max(1, int(maximum))
         start = int(self.identity.width())
         self._inline_anim.stop()
-        if start <= 0 or abs(start - maximum) <= 2 or not self.isVisible():
+        # A column narrower than its words wraps them, so an inline column that
+        # has to grow steps over instead of sliding: the sentence the chips are
+        # moving aside for is never re-wrapped on the way.
+        growing = maximum > start and not restore_unlimited
+        if start <= 0 or growing or abs(start - maximum) <= 2 or not self.isVisible():
             self.identity.setMaximumWidth(_UNLIMITED_WIDTH if restore_unlimited else maximum)
             self.identity.updateGeometry()
             return
@@ -735,7 +765,9 @@ class _CardHead(QWidget):
         if ev.type() == QEvent.Type.Resize and self._inline_content is not None:
             # A narrower card may no longer have room for the chips beside the
             # question, so re-measure the ceiling instead of leaving a stale one.
-            target = self._inline_band_width(self._inline_content)
+            target = self._inline_band_width(
+                self._inline_content, line_width=self._inline_line_width
+            )
             if target != self._inline_target:
                 self._inline_target = target
                 self._inline_anim.stop()
@@ -2884,6 +2916,35 @@ class FlashPage(QWidget):
             return f"{prompt} ({remaining}s)"
         return prompt
 
+    def _band_line_width(self) -> int:
+        """One-line width of the band's copy, with the countdown at its widest.
+
+        The connect countdown loses a digit every second. Measuring the live
+        sentence on every tick slid the chips beside it and, whenever the card
+        was tight, left the label narrower than its words — so the countdown
+        wrapped onto a line of its own and the card changed height. Counting
+        the digits at their widest lets the chips move over once for the whole
+        slot; only the numbers change inside it afterwards.
+        """
+        label = getattr(self, "_wait_question_label", None)
+        if label is None:
+            return 0
+        metrics = label.fontMetrics()
+        # The label may carry markup (the paperclip tip's link), so measure the
+        # words it draws rather than the tags around them.
+        text = re.sub(r"<[^>]+>", "", label.text() or "")
+        countdown = re.search(r"\((\d+)s\)", text)
+        if countdown is None:
+            return int(metrics.horizontalAdvance(text)) + 2
+        widest_digit = max(metrics.horizontalAdvance(ch) for ch in "0123456789")
+        prefix = text[: countdown.start()]
+        suffix = text[countdown.end() :]
+        return int(
+            metrics.horizontalAdvance(f"{prefix}(")
+            + widest_digit * _BAND_COUNTDOWN_DIGITS
+            + metrics.horizontalAdvance(f"s){suffix}")
+        ) + 2
+
     def set_attempt_timeout(self, seconds) -> None:
         """Show the app's own no-progress countdown alongside the connect prompt.
 
@@ -2911,6 +2972,12 @@ class FlashPage(QWidget):
                         text = self._connect_device_prompt_text()
                     else:
                         text = ""
+                if remaining > 0:
+                    # A countdown belongs to the connect prompt: the card that
+                    # asks for the player, not one titled by the software. A
+                    # tick that arrives before the tool's own search line must
+                    # not put the software name back above the sentence.
+                    self._prompt_only = True
                 if text:
                     if getattr(self, "_stop_open", False):
                         saved = getattr(self, "_stop_saved", None)
@@ -4677,7 +4744,11 @@ class FlashPage(QWidget):
         head = getattr(self, "_wait_head", None)
         if head is not None:
             inline = bool(band_text and question is not None and not dropdown)
-            head.set_band_inline(inline, question)
+            head.set_band_inline(
+                inline,
+                question,
+                line_width=self._band_line_width() if inline else None,
+            )
 
     def keep_data_confirm_choice(self) -> str:
         return self._keep_data_choice.currentText() if hasattr(self, "_keep_data_choice") else ""
@@ -5309,6 +5380,12 @@ class FlashPage(QWidget):
 
     def set_waiting_device(self):
         self._wait_copy = "connect"
+        # Every connect prompt is the same card, whichever path reached it: the
+        # sentence takes the band's line and the software name steps aside.
+        # Leaving this to the callers made a reconnect from the retry page, or
+        # a countdown that arrived before the tool's search line, put the old
+        # title-above-the-prompt card back.
+        self._prompt_only = True
         self._wait_status.set_status("idle")
         # The connect prompt is not the power-off prompt: no Keep Data tick.
         self._sync_keep_data_visibility()
@@ -6341,5 +6418,9 @@ class FlashPage(QWidget):
         loop = getattr(self, "_stop_loop", None)
         if loop is not None and loop.isRunning():
             loop.quit()
+        # The card goes back to the line it was showing before the check, so a
+        # dismissed check on the connect screen cannot leave the stop sentence
+        # (or the software title with it) on screen until the next tick.
+        self._sync_wait_band_page()
         if card is not None:
             fade_in(card)

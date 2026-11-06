@@ -134,6 +134,36 @@ chmod +x build_appimage.sh
 - The arch also selects `appimagetool-<arch>.AppImage`; both `x86_64` and `aarch64` are fully supported.
 - Linux builds on x86-64 use SP Flash Tool by default (with MTKClient as alternate backend); ARM64 builds use native MTKClient.
 
+### Building both from macOS or Windows (Docker)
+
+`build_appimage.sh` assembles the AppImage with Linux binaries (`appimagetool`,
+`sha256sum`, `tar`), so its `--container` mode only containerises PyInstaller and
+the packaging steps still need a Linux host. To build from a Mac or Windows PC,
+run the whole pipeline in Docker instead:
+
+```bash
+./build_appimage_docker.sh                  # x86_64 and aarch64
+./build_appimage_docker.sh --arch aarch64   # one architecture
+./build_appimage_docker.sh --no-test        # build only
+./build_appimage_docker.sh --clean          # drop the per-arch build trees first
+./build_appimage_docker.sh --rebuild-image  # rebuild the builder image
+```
+
+It builds `updater-linux-builder:<arch>` from `Dockerfile.linux_build` (Debian
+Bookworm, so the x86-64 payload keeps a plain x86-64 baseline), runs
+`build_appimage.sh --no-container` inside that image, and writes the same
+`dist/linux/` artifacts a native run does. Each architecture gets its own
+`build/linux-<arch>/` tree, because the cached `appimagetool` in it belongs to
+one CPU architecture.
+
+After each build the result is tested inside the same container: the SHA256
+file is verified, the AppDir is extracted and its ELF architecture, bundled
+`adb`, `unrar`, `libusb-1.0` and (x86-64 only) SP Flash Tool payloads are
+checked, `--diagnostics` must pass (mtkclient import, libusb backend,
+`mtk_api.init`), and the AppImage must stay up for ten seconds headless. Pass
+`--no-test` to skip this. A cross-architecture build relies on the host's
+emulation, so it is correct but slow on an Apple Silicon Mac.
+
 ---
 
 ## Building everything from one machine

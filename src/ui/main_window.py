@@ -6985,7 +6985,10 @@ class MainWindow(QMainWindow):
 
     def _on_reconnect(self):
         self._set_state(FlashState.S2_WAIT_CONNECTION)
-        self._flash_page.set_waiting_device()
+        # The same connect card as every other path into the wait: the retry
+        # page used to raise only the sentence, leaving whatever card the
+        # failed run ended on (or the software-titled one) on screen.
+        self._flash_page.show_connect_search()
         self._nav_to_page(_PAGE_FLASH)
 
     def _on_cancel_wait(self):
