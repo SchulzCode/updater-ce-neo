@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "المتابعة إلى المحدث",
  "linux_setup_view_log": "عرض التفاصيل الفنية",
  "linux_setup_hide_log": "إخفاء التفاصيل الفنية",
+ "sel_keep_data_incompatible": "لا يمكننا الاحتفاظ ببياناتك لهذا التثبيت لأن برنامجك الثابت الحالي غير متوافق مع Keep Data.",
  "single_instance_open_anyway": "افتح التطبيق على أي حال",
  "system_checker_title": "أداة SP Flash لفحص وتشخيص النظام",
  "system_checker_desc": "التحقق الشامل من برامج التشغيل ووحدات kernel والأذونات ومكتبات وقت التشغيل لضمان الوميض الموثوق به.",

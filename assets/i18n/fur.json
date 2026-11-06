@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Continuâ a gjornâ",
  "linux_setup_view_log": "Mostrâ detais tecnics",
  "linux_setup_hide_log": "Scuindi detais tecnics",
+ "sel_keep_data_incompatible": "No podìn mantignî i tôs dâts par cheste instalazion parcè che il to firmware corint nol è compatibil cun Mantignî i dâts.",
  "single_instance_open_anyway": "Viert la aplicazion in ogni câs",
  "system_checker_title": "Control e diagnosi dal sisteme dai struments flash SP",
  "system_checker_desc": "Verificazion comprensive dai driver, dai modui dal kernel, dai permès e des bibliotechis di esecuzion par sigurâ un lampegjâ afidabil.",

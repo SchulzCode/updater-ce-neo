@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Haltu áfram í Updater",
  "linux_setup_view_log": "Sýna tæknilegar upplýsingar",
  "linux_setup_hide_log": "Fela tæknilegar upplýsingar",
+ "sel_keep_data_incompatible": "Við getum ekki geymt gögnin þín fyrir þessa uppsetningu vegna þess að núverandi fastbúnaður þinn er ekki samhæfur við Keep Data.",
  "single_instance_open_anyway": "Opnaðu app samt",
  "system_checker_title": "SP Flash Tool Kerfisskoðun og greining",
  "system_checker_desc": "Alhliða sannprófun á reklum, kjarnaeiningum, heimildum og keyrslusöfnum til að tryggja áreiðanlega blikkandi.",

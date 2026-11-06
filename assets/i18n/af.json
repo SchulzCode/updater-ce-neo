@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Gaan voort na Updater",
  "linux_setup_view_log": "Wys Tegniese Besonderhede",
  "linux_setup_hide_log": "Versteek Tegniese Besonderhede",
+ "sel_keep_data_incompatible": "Ons kan nie jou data vir hierdie installasie hou nie, want jou huidige firmware is nie versoenbaar met Keep Data nie.",
  "single_instance_open_anyway": "Maak App in elk geval oop",
  "system_checker_title": "SP Flash Tool System Checker & Diagnostics",
  "system_checker_desc": "Omvattende verifikasie van drywers, kernmodules, toestemmings en runtime-biblioteke om betroubare flits te verseker.",

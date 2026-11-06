@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Nastavite do programa za ažuriranje",
  "linux_setup_view_log": "Prikaži tehničke pojedinosti",
  "linux_setup_hide_log": "Sakrij tehničke pojedinosti",
+ "sel_keep_data_incompatible": "Ne možemo zadržati vaše podatke za ovu instalaciju jer vaš trenutni firmver nije kompatibilan s Keep Data.",
  "single_instance_open_anyway": "Svejedno otvori aplikaciju",
  "system_checker_title": "SP Flash Alat za provjeru i dijagnostiku sustava",
  "system_checker_desc": "Sveobuhvatna provjera upravljačkih programa, kernel modula, dopuštenja i runtime biblioteka kako bi se osiguralo pouzdano bljeskanje.",

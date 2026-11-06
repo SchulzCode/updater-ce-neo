@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Txuas mus rau Updater",
  "linux_setup_view_log": "Qhia kom paub meej",
  "linux_setup_hide_log": "Hide Technical Details",
+ "sel_keep_data_incompatible": "Peb tsis tuaj yeem khaws koj cov ntaub ntawv rau qhov kev teeb tsa no vim tias koj lub firmware tam sim no tsis sib xws nrog Keep Data.",
  "single_instance_open_anyway": "Qhib App Txawm li cas los xij",
  "system_checker_title": "SP Flash Tool System Checker & Diagnostics",
  "system_checker_desc": "Kev txheeb xyuas zoo ntawm cov tsav tsheb, kernel modules, kev tso cai, thiab cov tsev qiv ntawv runtime kom ntseeg tau tias flashing txhim khu kev qha.",

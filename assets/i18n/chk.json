@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Sopweno ne fori .",
  "linux_setup_view_log": "Pwarata ekkewe poraus mi titchik .",
  "linux_setup_hide_log": "Kopwe opano ekkewe pisekin pwarata .",
+ "sel_keep_data_incompatible": "Sise tongeni tumunu omw kewe pisekin angang ren ei install pokiten omw ewe pisekin angang ikenai ese tipeew ngeni Keep Data.",
  "single_instance_open_anyway": "Kopwe suki ewe App Ese nifinifin .",
  "system_checker_title": "SP ewe pisekin angang mi fiti ewe system ren cheki me diagnosis",
  "system_checker_desc": "A unusen pwungupwung won ekkewe chon uwei, ekkewe modulein kernel, ekkewe mumuta, me ekkewe puken fansoun fitikoko pwe epwe wor flash mi nukuchar.",

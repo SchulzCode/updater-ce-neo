@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Lean ar aghaidh chuig Updater",
  "linux_setup_view_log": "Taispeáin Sonraí Teicniúla",
  "linux_setup_hide_log": "Folaigh Sonraí Teicniúla",
+ "sel_keep_data_incompatible": "Ní féidir linn do shonraí a choinneáil don suiteáil seo toisc nach bhfuil do firmware reatha comhoiriúnach le Coinnigh Sonraí.",
  "single_instance_open_anyway": "Oscail App Ar aon nós",
  "system_checker_title": "SP Flash Tool System Checker & Diagnostics",
  "system_checker_desc": "Fíorú cuimsitheach ar thiománaithe, modúil eithne, ceadanna, agus leabharlanna ama rite chun splancadh iontaofa a chinntiú.",

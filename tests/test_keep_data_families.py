@@ -89,3 +89,31 @@ def test_two_declared_families_that_differ_are_incompatible():
     compatible, available, _ = _check([KOENSAYR, OTHER_FAMILY], "Solar", KOENSAYR)
     assert compatible is False
     assert available is False
+
+
+def test_the_select_page_reason_is_the_incompatible_installed_firmware():
+    # Koensayr over Rockbox: both families are declared and differ, so the
+    # select page can say why Keep Data will be withheld before any install.
+    with patch("src.keep_data._packages", return_value=[KOENSAYR, ROCKBOX]), patch(
+        "src.keep_data.get_device_install", return_value=_recorded("Rockbox")
+    ):
+        assert keep_data.incompatible_with_current("Y2", KOENSAYR) is True
+        assert keep_data.incompatible_with_current("Y2", ROCKBOX) is False
+
+
+def test_an_unknown_current_firmware_gets_no_keep_data_note():
+    with patch("src.keep_data._packages", return_value=[REBORN, STOCK]), patch(
+        "src.keep_data.get_device_install", return_value={}
+    ):
+        assert keep_data.incompatible_with_current("Y2", REBORN) is False
+
+
+def test_other_refusals_do_not_get_the_current_firmware_reason(monkeypatch):
+    from dataclasses import replace
+
+    pkg = replace(_pkg("Locked", "y1-community/locked"), do_not_keep_data=True)
+    assert keep_data.incompatible_with_current("Y2", pkg) is False
+
+    plain = _pkg("Plain", "y1-community/plain")
+    monkeypatch.setattr(keep_data, "allow_keep_data_any", lambda settings=None: True)
+    assert keep_data.incompatible_with_current("Y2", plain) is False

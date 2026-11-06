@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Medo ki medo jami manyen",
  "linux_setup_view_log": "Nyut jami ma mako tic",
  "linux_setup_hide_log": "Kano jami ma mako jami ma mako tic",
+ "sel_keep_data_incompatible": "Pe watwero gwoko ngec ni pi keto ne pien jami ma itye kwede i kare ni pe rwate ki Keep Data.",
  "single_instance_open_anyway": "Yab app kit mo keken",
  "system_checker_title": "SP Flash Tool System Checker & Diagnostics",
  "system_checker_desc": "Moko jami ma mako jami ma ki lwongo ni driver, kernel modules, twero, ki runtime libraries me neno ni tic maber.",

@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Gumizamu noogaruzaho",
  "linux_setup_view_log": "Yoreka eby'emikono",
  "linux_setup_hide_log": "Shereka ebikwatiraine n'eby'emikono",
+ "sel_keep_data_incompatible": "Titurikubaasa kubiika data yaawe ahabw'okutaho eki ahabw'okuba firmware yaawe eya hati terikuhikaana na Keep Data.",
  "single_instance_open_anyway": "Iguraho App omu muringo gwona",
  "system_checker_title": "SP Flash Ekikwato Enkora y'okukyebera n'okukyebera",
  "system_checker_desc": "Okuhamya okuhikire okwa bavugi, ebicweka bya kernel, orusa, n’amabiikiro g’ebitabo g’obwire bw’okukora kureeba ngu hariho okujwara okurikwesigwa.",

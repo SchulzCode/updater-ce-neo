@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Padayon sa Updater",
  "linux_setup_view_log": "Ipakita ang mga Detalye sa Teknikal",
  "linux_setup_hide_log": "Tagoa ang mga Detalye sa Teknikal",
+ "sel_keep_data_incompatible": "Dili namo matipigan ang imong data alang niini nga pag-install tungod kay ang imong kasamtangang firmware dili tugma sa Keep Data.",
  "single_instance_open_anyway": "Ablihi ang App Bisan Pa",
  "system_checker_title": "SP Flash Tool System Checker & Diagnostics",
  "system_checker_desc": "Komprehensibo nga pag-verify sa mga drayber, kernel modules, permiso, ug runtime nga mga librarya aron masiguro ang kasaligan nga pagkidlap.",

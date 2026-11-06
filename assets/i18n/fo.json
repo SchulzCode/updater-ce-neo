@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Halt fram at dagføra",
  "linux_setup_view_log": "Vís tekniskar smálutir",
  "linux_setup_hide_log": "Goym tekniskar smálutir",
+ "sel_keep_data_incompatible": "Vit kunnu ikki goyma tínar dátur til hesa uppsetingina, tí tín núverandi fastforrit er ikki kompatibelt við Keep Data.",
  "single_instance_open_anyway": "Opna appina allíkavæl",
  "system_checker_title": "SP Flash tól skipanarkanning og sjúkugreining",
  "system_checker_desc": "Umfatandi sannroynd av bilførarum, kjarnumodulum, loyvum og koyritíðarbókasøvnum fyri at tryggja álítandi blink.",

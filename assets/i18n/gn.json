@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Eñemotenonde Actualizador-pe",
  "linux_setup_view_log": "Ohechauka Detalle Técnico rehegua",
  "linux_setup_hide_log": "Oñomi umi Detalle Técnico",
+ "sel_keep_data_incompatible": "Ndaikatúi roñongatu ne marandu ko instalación-pe g̃uarã ne firmware ko’ag̃agua ndojoajúigui Keep Data ndive.",
  "single_instance_open_anyway": "Eipe'a App Taha'e ha'éva",
  "system_checker_title": "SP Flash Tool Sistema jesarekoha & Diagnóstico rehegua",
  "system_checker_desc": "Verificación atyguasu umi conductor, módulo kernel, permiso ha biblioteca ejecución rehegua ojeasegura hag̃ua parpadeo ojeroviakuaáva.",

@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Lesh gys Update",
  "linux_setup_view_log": "Show Mion-ghoo Tecnicagh",
  "linux_setup_hide_log": "Foddee Mion-ghooinney Tecnicagh",
+ "sel_keep_data_incompatible": "Cha vod mayd dty data y choadey son y staydys shoh son cha nel y firmware t'ayd nish co-chrauee rish Keep Data.",
  "single_instance_open_anyway": "Foshlit App erbee",
  "system_checker_title": "SP Flash Instrumentyn Skeerey & Diagnosticyn",
  "system_checker_desc": "Verify glan jeh driveryn, modulyn kernel, cowraghyn, as leabharlannyn runtime dy yannoo shickyr dy vel flashing ymmyrchagh.",

@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Ci gaba zuwa Updater",
  "linux_setup_view_log": "Nuna Bayanan Fasaha",
  "linux_setup_hide_log": "Ɓoye Bayanan Fasaha",
+ "sel_keep_data_incompatible": "Ba za mu iya kiyaye bayananku don wannan shigarwar ba saboda firmware ɗin ku na yanzu bai dace da Ci gaba da Bayanan ba.",
  "single_instance_open_anyway": "Bude App Ko ta yaya",
  "system_checker_title": "SP Flash Tool System Checker & Diagnostics",
  "system_checker_desc": "Cikakken tabbaci na direbobi, kernel modules, izini, da dakunan karatu na lokacin aiki don tabbatar da ingantaccen walƙiya.",

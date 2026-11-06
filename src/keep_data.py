@@ -157,6 +157,26 @@ def tracked_is_compatible(model: str, pkg, settings: Optional[QSettings] = None,
     return False
 
 
+def incompatible_with_current(model: str, pkg, settings: Optional[QSettings] = None, hardware_type: str = "") -> bool:
+    """True when Keep Data is withheld only because the installed firmware differs.
+
+    That is the one refusal the select page can explain in advance: both
+    firmwares have a known family in the catalogue and they do not share a data
+    partition. A firmware that forbids Keep Data outright, or one that needs
+    Format All + Download, is refused for a different reason (or no reason at
+    all), so it must not get this note.
+    """
+    if pkg is None or getattr(pkg, "do_not_keep_data", False):
+        return False
+    if allow_keep_data_any(settings):
+        return False
+    from .pmt_format import pmt_format_required
+
+    if pmt_format_required(pkg, model=model, settings=settings):
+        return False
+    return tracked_is_compatible(model, pkg, settings=settings, hardware_type=hardware_type) is False
+
+
 def keep_data_available(model: str, pkg, settings: Optional[QSettings] = None, hardware_type: str = "") -> bool:
     """Whether the Keep Data choice may be offered for this install."""
     if pkg is not None and getattr(pkg, "do_not_keep_data", False):

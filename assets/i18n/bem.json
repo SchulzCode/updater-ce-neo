@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Twalilileni ukubwekeshapo",
  "linux_setup_view_log": "Langisheni Ifyakubomfya",
  "linux_setup_hide_log": "Fiseni ifyakupangapanga",
+ "sel_keep_data_incompatible": "Teti tusungile ifyebo fyenu pakuti tubike pantu ifibombelo fyenu ifya nomba tafileumfwana na Keep Data.",
  "single_instance_open_anyway": "Isuleni App Nangu cibefyo",
  "system_checker_title": "Icibombelo ca SP ica kufwailisha no kufwailisha",
  "system_checker_desc": "Ukushininkisha ukwafikapo ukwa bakwesha, ifiputulwa fya kernel, insambu, na ma laibulale ya nshita ya kubomba pa kushininkisha ukumwentula ukwashintililwapo.",

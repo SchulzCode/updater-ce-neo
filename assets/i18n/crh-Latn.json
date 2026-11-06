@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Yañılanuvğa devam etiñiz",
  "linux_setup_view_log": "Tehnikiy tafsilâtlarnı köster",
  "linux_setup_hide_log": "Tehnikiy malümatnı gizleñiz",
+ "sel_keep_data_incompatible": "Biz bu yüklev içün malümatıñıznı saqlap olamaymız, çünki siziñ şimdiki proşivkañız Keep Data ile kelişmey.",
  "single_instance_open_anyway": "Er alda yardımcı programmanı açıñız",
  "system_checker_title": "SP Flash Tool Sistema teşkerüv ve diagnostika",
  "system_checker_desc": "İşançlı yanıp-küyüvni temin etmek içün drayverlerniñ, yadro modulleriniñ, ruhsetlerniñ ve çalışuv vaqtı kitaphaneleriniñ er taraflama teşkerilmesi.",

@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Gaa n'ihu na Mmelite",
  "linux_setup_view_log": "Gosi nkọwa nka na ụzụ",
  "linux_setup_hide_log": "Zoo nkọwa nka na ụzụ",
+ "sel_keep_data_incompatible": "Anyị enweghị ike idowe data gị maka nrụnye a n'ihi na firmware gị ugbu a adabaghị na Debe Data.",
  "single_instance_open_anyway": "Mepee ngwa agbanyeghị",
  "system_checker_title": "SP Flash Tool System Checker & Diagnostics",
  "system_checker_desc": "Nnwale zuru oke nke ndị ọkwọ ụgbọ ala, modul kernel, ikike na ọba akwụkwọ oge iji hụ na ọkụ na-egbuke egbuke.",

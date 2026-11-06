@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Weiter zum Updater",
  "linux_setup_view_log": "Technische Details anzeigen",
  "linux_setup_hide_log": "Technische Details ausblenden",
+ "sel_keep_data_incompatible": "Wir können Ihre Daten für diese Installation nicht behalten, da Ihre aktuelle Firmware nicht mit Keep Data kompatibel ist.",
  "single_instance_open_anyway": "App trotzdem öffnen",
  "system_checker_title": "SP Flash Tool System Checker und Diagnose",
  "system_checker_desc": "Umfassende Überprüfung von Treibern, Kernelmodulen, Berechtigungen und Laufzeitbibliotheken, um zuverlässiges Flashen sicherzustellen.",

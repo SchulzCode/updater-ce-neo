@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Շարունակեք Updater",
  "linux_setup_view_log": "Ցույց տալ տեխնիկական մանրամասները",
  "linux_setup_hide_log": "Թաքցնել տեխնիկական մանրամասները",
+ "sel_keep_data_incompatible": "Մենք չենք կարող պահել ձեր տվյալները այս տեղադրման համար, քանի որ ձեր ընթացիկ որոնվածը համատեղելի չէ Keep Data-ի հետ:",
  "single_instance_open_anyway": "Ամեն դեպքում բացեք հավելվածը",
  "system_checker_title": "SP Flash Tool System Checker & Diagnostics",
  "system_checker_desc": "Վարորդների, միջուկի մոդուլների, թույլտվությունների և աշխատաժամանակի գրադարանների համապարփակ ստուգում՝ հուսալի թարթում ապահովելու համար:",

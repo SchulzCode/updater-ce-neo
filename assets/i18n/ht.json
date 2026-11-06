@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Kontinye nan Updater",
  "linux_setup_view_log": "Montre detay teknik",
  "linux_setup_hide_log": "Kache detay teknik",
+ "sel_keep_data_incompatible": "Nou pa ka kenbe done ou yo pou enstalasyon sa a paske firmwèr aktyèl ou a pa konpatib ak Keep Data.",
  "single_instance_open_anyway": "Louvri App de tout fason",
  "system_checker_title": "SP Flash Tool System Checker & Diagnostics",
  "system_checker_desc": "Verifikasyon konplè sou chofè yo, modil nwayo, otorizasyon, ak bibliyotèk egzekite pou asire ke yon flache serye.",

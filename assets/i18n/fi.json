@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Jatka Updateriin",
  "linux_setup_view_log": "Näytä tekniset tiedot",
  "linux_setup_hide_log": "Piilota tekniset tiedot",
+ "sel_keep_data_incompatible": "Emme voi säilyttää tietojasi tätä asennusta varten, koska nykyinen laiteohjelmistosi ei ole yhteensopiva Keep Datan kanssa.",
  "single_instance_open_anyway": "Avaa sovellus joka tapauksessa",
  "system_checker_title": "SP Flash Tool -järjestelmän tarkistus ja diagnostiikka",
  "system_checker_desc": "Ohjainten, ydinmoduulien, käyttöoikeuksien ja ajonaikaisten kirjastojen kattava tarkistus luotettavan vilkkumisen varmistamiseksi.",

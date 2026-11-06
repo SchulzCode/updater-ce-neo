@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Continúe con Updater",
  "linux_setup_view_log": "Mostrar detalles técnicos",
  "linux_setup_hide_log": "Ocultar detalles técnicos",
+ "sel_keep_data_incompatible": "Non podemos conservar os teus datos para esta instalación porque o teu firmware actual non é compatible con Keep Data.",
  "single_instance_open_anyway": "Abre a aplicación de todos os xeitos",
  "system_checker_title": "Comprobador e diagnóstico do sistema SP Flash Tool",
  "system_checker_desc": "Verificación completa de controladores, módulos do núcleo, permisos e bibliotecas de tempo de execución para garantir un flasheo fiable.",

@@ -910,6 +910,15 @@ class SelectPackagePage(QWidget):
         self._refresh_btn.clicked.connect(lambda: self._refresh_releases(force_refresh=True))
         filter_layout.addWidget(self._refresh_btn, 2, 3)
 
+        # Why Keep Data will not be offered, said next to the software name it
+        # applies to: the install card otherwise only asks once the device is
+        # connected, and the answer is already known here.
+        self._keep_data_note = QLabel(tr("sel_keep_data_incompatible"))
+        self._keep_data_note.setWordWrap(True)
+        self._keep_data_note.setProperty("cssClass", "hint")
+        self._keep_data_note.setVisible(False)
+        filter_layout.addWidget(self._keep_data_note, 3, 0, 1, 4)
+
         filter_layout.setColumnStretch(1, 1)
         filter_layout.setColumnStretch(3, 1)
         self._filter_group.set_layout(filter_layout)
@@ -1821,6 +1830,8 @@ class SelectPackagePage(QWidget):
         self._model_label.setText(f"{tr('sel_model')}:")
         self._type_label.setText(f"{tr('sel_type')}:")
         self._software_label.setText(f"{tr('sel_software')}:")
+        if hasattr(self, "_keep_data_note"):
+            self._keep_data_note.setText(tr("sel_keep_data_incompatible"))
         self._refresh_btn.setText(tr("sel_refresh"))
         self._install_btn.setText(tr("sel_install"))
         if self._current_selected_rel:
@@ -2228,10 +2239,39 @@ class SelectPackagePage(QWidget):
         self._selected_type = self._type_combo.currentData()
         self._refresh_releases()
         self._sync_notice_context()
+        self._update_keep_data_note()
 
     def _on_software_changed(self):
         self._refresh_releases()
         self._sync_notice_context()
+        self._update_keep_data_note()
+
+    def _update_keep_data_note(self) -> None:
+        """Say in advance when the player's current firmware blocks Keep Data.
+
+        The catalogue already knows both firmware families, so the refusal is
+        certain before the device is connected. It belongs beside the Software
+        choice, not only on the install card after the player is plugged in.
+        """
+        note = getattr(self, "_keep_data_note", None)
+        if note is None:
+            return
+        try:
+            from .. import keep_data
+
+            blocked = keep_data.incompatible_with_current(
+                self.current_model(),
+                self.current_package(),
+                getattr(self, "settings", None),
+                hardware_type=self.current_hardware_type(),
+            )
+        except Exception:
+            logger.debug("Could not evaluate the Keep Data note", exc_info=True)
+            blocked = False
+        if note.isHidden() == (not blocked):
+            return
+        note.setVisible(bool(blocked))
+        self.content_size_changed.emit()
 
     def _sync_notice_context(self) -> None:
         """Report what the reader is looking at, so notices can be contextual.
@@ -2882,6 +2922,9 @@ class SelectPackagePage(QWidget):
             layout.activate()
         # A session that started with no reachable archive says so here, once.
         self._maybe_show_archive_notice()
+        # The tracked install changes when an install finishes; the note is
+        # about that record as much as about the dropdown.
+        self._update_keep_data_note()
 
     def _update_see_more_link(self):
         rel = self._current_selected_rel

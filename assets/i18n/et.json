@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Jätkake värskendajaga",
  "linux_setup_view_log": "Näita tehnilisi üksikasju",
  "linux_setup_hide_log": "Peida tehnilised üksikasjad",
+ "sel_keep_data_incompatible": "Me ei saa teie andmeid selle installi jaoks säilitada, kuna teie praegune püsivara ei ühildu rakendusega Keep Data.",
  "single_instance_open_anyway": "Avage rakendus ikkagi",
  "system_checker_title": "SP Flash Tool süsteemikontroll ja diagnostika",
  "system_checker_desc": "Draiverite, kerneli moodulite, õiguste ja käitusaja teekide põhjalik kontrollimine, et tagada usaldusväärne vilkumine.",

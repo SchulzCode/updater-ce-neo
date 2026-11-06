@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Terus ke Pembaruan",
  "linux_setup_view_log": "Tunjukin Detail Teknis",
  "linux_setup_hide_log": "Sembunyikan Detail Teknis",
+ "sel_keep_data_incompatible": "Kita kagak bisa nyimpen data lu buat instalasi ini karena firmware lu sekarang kagak kompatibel ama Keep Data.",
  "single_instance_open_anyway": "Buka Aplikasi Pokoknya",
  "system_checker_title": "SP Flash Tool System Checker & Diagnostics",
  "system_checker_desc": "Verifikasi komprehensif dari driver, modul kernel, izin, dan perpustakaan runtime untuk memastikan flashing yang andal.",

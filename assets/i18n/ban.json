@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Lanturang nganyarang",
  "linux_setup_view_log": "Tampilang Rincian Teknis",
  "linux_setup_hide_log": "Ilidang Rincian Teknis",
+ "sel_keep_data_incompatible": "Google nénten prasida nyimpen data Sametoné anggén pamasangan puniki santukan piranti lunak Sametoné mangkin nénten kompatibel sareng Keep Data.",
  "single_instance_open_anyway": "Bukak Aplikasi",
  "system_checker_title": "SP Alat Kilat Sistem Pamriksa & Diagnostik",
  "system_checker_desc": "Verifikasi komprehensif driver, modul kernel, ijin, lan perpustakaan runtime mangda prasida mastikayang kedip-kedip sane andel.",

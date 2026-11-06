@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Fortsæt til Updater",
  "linux_setup_view_log": "Vis tekniske detaljer",
  "linux_setup_hide_log": "Skjul tekniske detaljer",
+ "sel_keep_data_incompatible": "Vi kan ikke beholde dine data til denne installation, fordi din nuværende firmware ikke er kompatibel med Keep Data.",
  "single_instance_open_anyway": "Åbn app alligevel",
  "system_checker_title": "SP Flash Tool System Checker & Diagnostics",
  "system_checker_desc": "Omfattende verifikation af drivere, kernemoduler, tilladelser og runtime-biblioteker for at sikre pålidelig flashing.",

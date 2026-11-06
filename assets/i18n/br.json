@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Kenderc'hel da hizivaat",
  "linux_setup_view_log": "Diskouez munudoù teknikel",
  "linux_setup_hide_log": "Kuzhat munudoù teknikel",
+ "sel_keep_data_incompatible": "N'hallomp ket mirout ho roadennoù evit ar staliadur-mañ rak n'eo ket kenglotus ho meziant bremanel gant Keep Data.",
  "single_instance_open_anyway": "Digeriñ an arload koulskoude",
  "system_checker_title": "SP Flash Tool System Checker & Diagnostics",
  "system_checker_desc": "Gwiriekaat klok ar sturieroù, ar moduloù kernel, an aotreoù hag al levraouegoù amzer-redek evit gwarantiñ ur flash fiziañs.",

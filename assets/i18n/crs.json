@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "kontinyen pour met azour",
  "linux_setup_view_log": "montre bann detay teknik",
  "linux_setup_hide_log": "kasyet bann detay teknik",
+ "sel_keep_data_incompatible": "nou pa kapab gard ou lenformasyon pou sa lenstalasyon akoz ou firmware aktyel pa konpatib avek Keep Data.",
  "single_instance_open_anyway": "ouver app kantmenm",
  "system_checker_title": "SP Flash Tool System Checker & Diagnostics",
  "system_checker_desc": "verifikasyon konpreansiv bann drayver, modil kernel, permisyon, e bibliotek runtime pou asir flashing serye.",

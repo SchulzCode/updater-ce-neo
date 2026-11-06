@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "ወደ ማዘመኛ ይቀጥሉ",
  "linux_setup_view_log": "ቴክኒካዊ ዝርዝሮችን አሳይ",
  "linux_setup_hide_log": "ቴክኒካዊ ዝርዝሮችን ደብቅ",
+ "sel_keep_data_incompatible": "የአሁኑ የእርስዎ firmware ከKeep Data ጋር ተኳሃኝ ስላልሆነ ውሂብዎን ለዚህ ጭነት ማቆየት አንችልም።",
  "single_instance_open_anyway": "ለማንኛውም መተግበሪያ ክፈት",
  "system_checker_title": "የSP ፍላሽ መሣሪያ ስርዓት አራሚ እና ምርመራ",
  "system_checker_desc": "አስተማማኝ ብልጭታ ለማረጋገጥ የአሽከርካሪዎች፣ የከርነል ሞጁሎች፣ ፈቃዶች እና የአሂድ ጊዜ ቤተ-መጽሐፍት አጠቃላይ ማረጋገጫ።",

@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Daŭrigu ĝisdatigilon",
  "linux_setup_view_log": "Montru Teknikajn Detalojn",
  "linux_setup_hide_log": "Kaŝi Teknikajn Detalojn",
+ "sel_keep_data_incompatible": "Ni ne povas konservi viajn datumojn por ĉi tiu instalo ĉar via nuna firmvaro ne kongruas kun Konservu Datumoj.",
  "single_instance_open_anyway": "Malfermu Apon Ĉiukaze",
  "system_checker_title": "SP Flash Tool System Checker & Diagnostics",
  "system_checker_desc": "Ampleksa konfirmo de ŝoforoj, kernaj moduloj, permesoj kaj rultempaj bibliotekoj por certigi fidindan ekbriladon.",

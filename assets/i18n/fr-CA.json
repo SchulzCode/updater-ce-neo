@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Continuer vers le programme de mise à jour",
  "linux_setup_view_log": "Afficher les détails techniques",
  "linux_setup_hide_log": "Masquer les détails techniques",
+ "sel_keep_data_incompatible": "Nous ne pouvons pas conserver vos données pour cette installation parce que votre micrologiciel actuel n'est pas compatible avec Keep Data.",
  "single_instance_open_anyway": "Ouvrir l'application quand même",
  "system_checker_title": "Vérificateur et diagnostic du système d'outil Flash SP",
  "system_checker_desc": "Vérification complète des pilotes, des modules du noyau, des autorisations et des bibliothèques d'exécution pour assurer un flashage fiable.",

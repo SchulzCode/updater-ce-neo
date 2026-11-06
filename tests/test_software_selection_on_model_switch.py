@@ -61,6 +61,37 @@ def _app():
     return QApplication.instance() or QApplication(["--platform", "offscreen"])
 
 
+def test_the_keep_data_note_sits_under_the_software_name(monkeypatch):
+    app = _app()
+    saved = list(catalog.LIVE_CATALOG)
+    try:
+        catalog.set_live_catalog(manifest.parse_manifest_xml(MODEL_XML))
+        monkeypatch.setattr(select_page, "ReleasesWorker", _StubReleasesWorker)
+        page = select_page.SelectPackagePage()
+        try:
+            from src import keep_data
+
+            assert page._keep_data_note.isHidden()
+            monkeypatch.setattr(
+                keep_data, "incompatible_with_current", lambda *a, **k: True
+            )
+            page._update_keep_data_note()
+            assert not page._keep_data_note.isHidden()
+            assert page._keep_data_note.text() == select_page.tr(
+                "sel_keep_data_incompatible"
+            )
+
+            monkeypatch.setattr(
+                keep_data, "incompatible_with_current", lambda *a, **k: False
+            )
+            page._update_keep_data_note()
+            assert page._keep_data_note.isHidden()
+        finally:
+            page.deleteLater()
+    finally:
+        catalog.set_live_catalog(saved)
+
+
 def test_model_switch_keeps_only_a_same_named_software(monkeypatch):
     app = _app()
     saved = list(catalog.LIVE_CATALOG)

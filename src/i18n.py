@@ -1958,6 +1958,14 @@ _STRINGS: dict = {
     # The link that opens the "what happens without the tick" line. The
     # sentence is long and matters only to a reader who is deciding, so it
     # waits behind a link instead of sitting on every card.
+    "sel_keep_data_incompatible": {
+        "en": "We can't keep your data for this install because your current firmware is not compatible with Keep Data.",
+        "zh-CN": "本次安装无法保留你的数据，因为当前固件不兼容“保留数据”。",
+        "fr": "Impossible de conserver vos données pour cette installation : le firmware actuel n'est pas compatible avec Conserver les données.",
+        "es": "No podemos conservar tus datos en esta instalación porque el firmware actual no es compatible con Conservar los datos.",
+        "de": "Wir können deine Daten bei dieser Installation nicht behalten, da die aktuelle Firmware nicht mit Daten behalten kompatibel ist.",
+        "ja": "現在のファームウェアは「データを保持」に対応していないため、このインストールではデータを保持できません。",
+    },
     "keep_data_help_link": {
         "en": "What does this mean?",
         "zh-CN": "这是什么意思？",

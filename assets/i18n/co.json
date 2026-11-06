@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Cuntinuà à Updater",
  "linux_setup_view_log": "Mostra i dettagli tecnichi",
  "linux_setup_hide_log": "Oculta i dettagli tecnichi",
+ "sel_keep_data_incompatible": "Ùn pudemu micca mantene i vostri dati per questa installazione perchè u vostru firmware attuale ùn hè micca cumpatibile cù Keep Data.",
  "single_instance_open_anyway": "Aprite l'app in ogni casu",
  "system_checker_title": "SP Flash Tool System Checker & Diagnostics",
  "system_checker_desc": "Verificazione cumpleta di i drivers, i moduli di u kernel, i permessi è e librerie di runtime per assicurà un flashing affidabile.",

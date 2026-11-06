@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Tovább az Updaterhez",
  "linux_setup_view_log": "Műszaki részletek megjelenítése",
  "linux_setup_hide_log": "Technikai részletek elrejtése",
+ "sel_keep_data_incompatible": "Nem tudjuk megtartani az adatait ehhez a telepítéshez, mert a jelenlegi firmware nem kompatibilis a Keep Data szolgáltatással.",
  "single_instance_open_anyway": "Nyissa meg az alkalmazást",
  "system_checker_title": "SP Flash Tool rendszerellenőrző és diagnosztika",
  "system_checker_desc": "Az illesztőprogramok, kernelmodulok, engedélyek és futásidejű könyvtárak átfogó ellenőrzése a megbízható villogás érdekében.",

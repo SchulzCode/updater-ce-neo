@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Terusken ku Update .",
  "linux_setup_view_log": "Cidahken Rincian Teknis .",
  "linux_setup_hide_log": "Buniken Rincian Teknis .",
+ "sel_keep_data_incompatible": "La banci isimpan kami datandu guna pemasangan enda erkiteken firmware si gundari la cocok ras Keep Data.",
  "single_instance_open_anyway": "Buka App Bagepe .",
  "system_checker_title": "SP Alat Kilat Sistem Pemeriksa & Diagnostik .",
  "system_checker_desc": "Verifikasi si komprehensif kerna driver, modul kernel, izin, ras perpustakaan runtime guna memastikan flashing si andal.",

@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Continueu a Updater",
  "linux_setup_view_log": "Mostra els detalls tècnics",
  "linux_setup_hide_log": "Amaga els detalls tècnics",
+ "sel_keep_data_incompatible": "No podem conservar les vostres dades per a aquesta instal·lació perquè el vostre microprogramari actual no és compatible amb Keep Data.",
  "single_instance_open_anyway": "Obre l'aplicació de totes maneres",
  "system_checker_title": "Comprovador i diagnòstic del sistema SP Flash Tool",
  "system_checker_desc": "Verificació completa de controladors, mòduls del nucli, permisos i biblioteques de temps d'execució per garantir un parpelleig fiable.",

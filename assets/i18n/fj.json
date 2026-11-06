@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Tomana tikoga na kena vakavoutaki",
  "linux_setup_view_log": "Vakaraitaka na itukutuku vakatekinikali",
  "linux_setup_hide_log": "Vunitaka na itukutuku vakatekinoloji",
+ "sel_keep_data_incompatible": "Eda sega ni rawa ni maroroya na nomu itukutuku me baleta na vakacurumi oqo baleta ni nomu firmware ni gauna oqo e sega ni salavata kei na Maroroya na itukutuku.",
  "single_instance_open_anyway": "Dolava na App",
  "system_checker_title": "SP Flash iyaya ni cakacaka ni ivakarau ni vakadidike & Veisele",
  "system_checker_desc": "Vakadeitaki raraba ni draiva, modules ni kernel, veivakadonui, kei na valenivolavola ni gauna ni cici me vakadeitaka na flashing nuitaki.",
