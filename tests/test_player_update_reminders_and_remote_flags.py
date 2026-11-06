@@ -273,8 +273,8 @@ def test_remote_rescue_flags_evaluations(temp_settings):
 
 def test_completion_screen_layout_and_post_install_buttons(app, monkeypatch):
     """Verify that when extra steps are needed:
-    - Completion text and the guide hint are ABOVE the buttons
-    - The appeal reads as one letter: message, picture and signature, buttons
+    - Completion text, the guide hint and View Guide sit ABOVE the appeal
+    - The appeal reads as one letter: message, picture and signature, then buttons
     - If post_install2 URL is present, button reads 'View Guide + Donate' and opens post_install2
     - If donations are disabled, 'donations=false' is appended to View Guide URLs
     """
@@ -312,6 +312,10 @@ def test_completion_screen_layout_and_post_install_buttons(app, monkeypatch):
         assert fp._intro.icon is not None
         assert not fp._intro.icon.pixmap().isNull()
         layout = fp._appeal.layout()
+        # View Guide belongs to the extra-steps instruction, between its
+        # sentence and the appeal copy, not in the donation button row.
+        assert layout.indexOf(fp._completion_guide_hint) < layout.indexOf(fp._view_guide_btn)
+        assert layout.indexOf(fp._view_guide_btn) < layout.indexOf(fp._appeal_body)
         assert layout.indexOf(fp._appeal_body) < layout.indexOf(fp._appeal_signature_row)
         assert layout.indexOf(fp._appeal_signature_row) < layout.indexOf(fp._appeal_dont)
 
@@ -333,6 +337,7 @@ def test_completion_screen_layout_and_post_install_buttons(app, monkeypatch):
         fp.set_post_install_urls("", "")
         fp.show_completion_appeal(True)
         assert fp._completion_guide_hint.isHidden()
+        assert fp._view_guide_btn.isHidden()
         assert not fp._appeal_body.isHidden()
         assert not fp._appeal_signature_row.isHidden()
         assert fp._coffee_btn.text() == "Donate on Ko-Fi"

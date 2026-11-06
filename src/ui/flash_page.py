@@ -2375,6 +2375,15 @@ class FlashPage(QWidget):
         self._completion_guide_hint.setVisible(False)
         appeal_layout.addWidget(self._completion_guide_hint)
 
+        # The guide belongs to the instruction, not the donation ask: it sits
+        # directly under the extra-steps sentence and above the appeal copy.
+        self._view_guide_btn = QPushButton(tr("post_install_view_guide_btn"))
+        self._view_guide_btn.setCursor(Qt.PointingHandCursor)
+        self._view_guide_btn.setStyleSheet("")
+        self._view_guide_btn.clicked.connect(self._open_view_guide)
+        self._view_guide_btn.setVisible(False)
+        appeal_layout.addWidget(self._view_guide_btn, 0, Qt.AlignLeft)
+
         # One plain sentence under the headline: what the app is, and what a
         # coffee actually pays for. The appeal's own words, not the Support
         # page's project pitch.
@@ -2411,11 +2420,6 @@ class FlashPage(QWidget):
 
         actions = QHBoxLayout()
         actions.setSpacing(8)
-        self._view_guide_btn = QPushButton(tr("post_install_view_guide_btn"))
-        self._view_guide_btn.setCursor(Qt.PointingHandCursor)
-        self._view_guide_btn.setStyleSheet("")
-        self._view_guide_btn.clicked.connect(self._open_view_guide)
-        self._view_guide_btn.setVisible(False)
         self._coffee_btn = QPushButton(tr("donate_completion_coffee"))
         self._coffee_btn.setCursor(Qt.PointingHandCursor)
         self._coffee_btn.setStyleSheet("")
@@ -2430,7 +2434,6 @@ class FlashPage(QWidget):
         self._not_now_btn.setCursor(Qt.PointingHandCursor)
         self._not_now_btn.setStyleSheet("")
         self._not_now_btn.clicked.connect(self._on_not_now)
-        actions.addWidget(self._view_guide_btn)
         actions.addWidget(self._coffee_btn)
         actions.addWidget(self._bmc_btn)
         actions.addWidget(self._not_now_btn)
@@ -4974,9 +4977,8 @@ class FlashPage(QWidget):
     def _completion_guide_html(self) -> str:
         """The completion card's extra-steps sentence, as one link.
 
-        The appeal already has a View Guide button; this makes the sentence
-        that announces the extra steps open the same guide when clicked, so
-        the instruction itself is the action.
+        The View Guide button sits below this sentence; making the sentence
+        itself open the guide as well means the instruction is the action.
         """
         return _themed_link(
             "post-install", tr("post_install_explain_completion")
@@ -5107,9 +5109,9 @@ class FlashPage(QWidget):
         appeal_text = tr(self._active_appeal_key)
         if hasattr(self, "_appeal_body"):
             self._appeal_body.setText(appeal_text)
-            # One letter layout: headline, message, signature, buttons. A
-            # guide hint may sit above the message; it never moves it below
-            # the row, where it read as an afterthought.
+            # One letter layout: headline, extra-steps sentence and its guide
+            # button, message, signature, then the donation buttons. The guide
+            # never moves below the message, where it read as an afterthought.
             self._appeal_body.setVisible(True)
             _apply_card_text(self._appeal_body)
         if hasattr(self, "_appeal_signature"):
