@@ -3538,14 +3538,40 @@ class MainWindow(QMainWindow):
         band under the last card. While that page is on screen its current
         size is the only one on offer. The app's own fits still run: each one
         releases the hold, sizes the window, and takes it again.
+
+        A frame too short to show the catalogue is never pinned. The install
+        card's own size animation can still be running when a cancel navigates
+        back, and its end value is the card's compact height: freezing that
+        would leave Select Software as a strip with the release rows and the
+        Install button cut off. Such a frame stays free and is re-measured
+        instead, so it can never become the catalogue's size.
         """
         if not self._select_page_on_screen():
             return
+        floor_h = self._content_floor_height()
+        if self.height() < floor_h:
+            attempts = int(getattr(self, "_select_frame_refit_attempts", 0))
+            if attempts < 4:
+                self._select_frame_refit_attempts = attempts + 1
+                QTimer.singleShot(0, self._refit_short_select_frame)
+            return
+        self._select_frame_refit_attempts = 0
         size = QSize(self.width(), self.height())
         if getattr(self, "_select_size_hold", None) is None:
             self._select_size_hold = (self.minimumSize(), self.maximumSize())
         self.setMinimumSize(size)
         self.setMaximumSize(size)
+
+    def _refit_short_select_frame(self) -> None:
+        """Re-measure the catalogue after a frame landed below its own floor.
+
+        The height to reach is the page's, measured once the widgets are back
+        on screen, so the window grows to the release rows rather than to a
+        fixed number.
+        """
+        if not self._select_page_on_screen():
+            return
+        self._fit_window_to_page()
 
     def _release_select_window_size(self) -> None:
         """Lift the catalogue's fixed-size hold so a page can be fitted."""
@@ -3706,6 +3732,12 @@ class MainWindow(QMainWindow):
         # needs more (the Notices list, a long appeal) scrolls instead; the
         # page's floor still wins where it cannot be drawn any shorter.
         target_h = max(floor_h, min(target_h, MAXIMUM_AUTO_FIT_HEIGHT))
+        if stack.currentIndex() == _PAGE_SELECT and getattr(self, "_select_frame_guard", False):
+            # The frame was just handed back from an install card. This fit may
+            # have measured the page before it laid out at that size, so it can
+            # grow the window but never shrink it below the restored frame.
+            self._select_frame_guard = False
+            target_h = max(target_h, self.height())
         self._apply_window_size_limits(target_h)
         floor_w = max(MINIMUM_WINDOW_WIDTH, min(floor_w, target_w))
         if target_w != self.width() or target_h != self.height():
@@ -4069,6 +4101,13 @@ class MainWindow(QMainWindow):
             return
         self._hugging_install = False
         self._release_select_window_size()
+        # A size animation started for the install card is aimed at that card's
+        # compact frame. Allowed to finish after this navigation, it re-applies
+        # the frame (and its minimum) over the catalogue, which is how the page
+        # came back as an unreadable strip after a cancel. Drop the run's own
+        # animation here; the fits scheduled below measure the catalogue.
+        self._stop_size_anim_for_drag()
+        self._size_anim_minimum = None
         if not (
             self.isMinimized()
             or self.isMaximized()
@@ -4078,6 +4117,35 @@ class MainWindow(QMainWindow):
             self.setMinimumSize(
                 self._minimum_window_width(), self._content_floor_height()
             )
+        frame = getattr(self, "_pre_install_frame", None)
+        self._pre_install_frame = None
+        if frame is not None and not (
+            self.isMinimized()
+            or self.isMaximized()
+            or self.isFullScreen()
+            or bool(self.windowState() & (Qt.WindowMaximized | Qt.WindowFullScreen))
+        ):
+            # Give back the frame the run took, instead of measuring the page.
+            # The card's compact height (and the caps the hug applied) are
+            # lifted first: a resize is clamped by the maximum, so restoring
+            # while the install cap is still in force would land short again.
+            screen = self.screen()
+            max_w, max_h = MAXIMUM_WINDOW_WIDTH, MAXIMUM_AUTO_FIT_HEIGHT
+            if screen is not None:
+                available = screen.availableGeometry()
+                max_w = min(max_w, int(available.width()))
+                max_h = min(max_h, int(available.height()))
+            self.setMaximumSize(max_w, max_h)
+            width = max(int(frame[0]), self._minimum_window_width())
+            height = max(int(frame[1]), self._content_floor_height())
+            self.setMinimumSize(self._minimum_window_width(), self._content_floor_height())
+            self.resize(min(width, max_w), min(height, max_h))
+            # A fit already queued from the catalogue's refill measures the page
+            # before it has laid out at this size, so it may grow the window but
+            # must not squeeze it back under the frame the run returned.
+            self._select_frame_guard = True
+            self._hold_select_window_size()
+            return
         # One turn later: the page's rows and cards report their real heights
         # only after the layout that the navigation itself triggered.
         QTimer.singleShot(0, self._fit_window_to_select_content)
@@ -4524,6 +4592,19 @@ class MainWindow(QMainWindow):
 
     def _nav_to_page(self, page_idx):
         SidebarButton.dismiss_focus_rings()
+        previous_page = self._stack.currentIndex() if hasattr(self, "_stack") else page_idx
+        if previous_page == _PAGE_SELECT and page_idx != _PAGE_SELECT:
+            # Remember the catalogue's own frame before anything can re-measure
+            # it. The size the page pinned for itself is that frame; the current
+            # geometry is the fallback. This is exactly what the user must get
+            # back if the run they are entering is cancelled: once the install
+            # card has taken the window, measuring the catalogue describes the
+            # squeezed page rather than the one it was.
+            hold = getattr(self, "_select_size_hold", None)
+            if hold is not None:
+                self._pre_install_frame = (int(hold[0].width()), int(hold[0].height()))
+            else:
+                self._pre_install_frame = (self.width(), self.height())
         # Settings and Select Software are closed while a run owns the window:
         # the user finishes, fails or cancels the install on its card first.
         # The guard runs before anything else so a blocked call can never
