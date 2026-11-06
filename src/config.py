@@ -181,9 +181,11 @@ FIRMWARE_REPO_FALLBACKS = {
 }
 
 # Minimum visible release per (model, repo): anything older is hidden by default.
-# Only Y1 has hardware revisions (units sold after March 2026 with Innioasis OS 3.0.7
-# pre-installed) incompatible with Rockbox-Y1 pre-0.5. Y2 and non-Y1 models are
-# unrestricted. Users can also tick "Show Old Rockbox Builds" to bypass this for Y1.
+# Only Y1 Type A has the hardware revision (units sold after March 2026 with
+# Innioasis OS 3.0.7 pre-installed) incompatible with Rockbox-Y1 pre-0.5. Y1
+# Type B, Y2, and non-Y1 models are unrestricted: Type B units only ever shipped
+# pre-3.0.7 software. Users can also tick "Show Old Rockbox Builds" to bypass
+# this for Y1 Type A.
 MODEL_REPO_MIN_RELEASE_VERSION = {
     ("Y1", "rockbox-y1/rockbox"): "0.5",
 }

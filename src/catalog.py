@@ -1008,6 +1008,7 @@ def release_version_ok(
     show_old_rockbox=False,
     show_nightly=False,
     release_name=None,
+    selected_type=None,
 ):
     """Whether a release from ``repo`` may be listed for ``model``.
 
@@ -1017,6 +1018,11 @@ def release_version_ok(
     is True.
 
     For Y2, A5, and other non-Y1 models, this gating is NEVER applied.
+    Y1 Type B units are exempt from the version cutoff too: they only ever
+    shipped Original Software from before 3.0.7, so the newer Type A bootloader
+    restriction does not describe them. Pass ``selected_type="B"`` for a Type B
+    browse; tags with no readable version stay hidden because they cannot be
+    proven to be a compatible build.
 
     Tags that carry no semantic version and are nightlies (e.g. nightly-<sha>) are hidden unless
     show_nightly is True. Repos without a pinned minimum are unrestricted.
@@ -1034,6 +1040,7 @@ def release_version_ok(
     slug = slug.strip("/").removesuffix(".git")
     resolved_repo = resolve_firmware_repo(slug)
     is_non_y1 = bool(model) and model_str != "Y1" and "Y1" not in model_str
+    is_type_b = model_str == "Y1" and str(selected_type or "").upper() == "B"
     if is_non_y1:
         # Y2, A5, and non-Y1 models are completely exempt from the < 0.5 restriction
         return True
@@ -1049,6 +1056,11 @@ def release_version_ok(
     version = release_version_tuple(tag_name, release_name=release_name)
     if version is None:
         return False
+    if is_type_b:
+        # Type B units predate the Type A hardware this cutoff protects. A
+        # versioned pre-0.5 build is safe for them; the unversioned case above
+        # still can't be proven compatible.
+        return True
     # Pad so 0.5 and 0.5.0 compare equal, and (0, 4, 9) < (0, 5).
     width = max(len(version), len(minimum))
     version = version + (0,) * (width - len(version))
@@ -2226,6 +2238,7 @@ class ReleasesClient:
                 show_old_rockbox=show_old_rockbox,
                 show_nightly=show_nightly,
                 release_name=rel.get("name"),
+                selected_type=selected_type,
             ):
                 continue
             if original_y1_typea_pre_307_hidden(
