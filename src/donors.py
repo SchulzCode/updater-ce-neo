@@ -1,6 +1,5 @@
 import csv
 import logging
-import random
 import re
 import threading
 import time
@@ -214,16 +213,6 @@ GOAL_LOCAL_MONTHLY = 150.0
 GOAL_LOCAL_RATE_MIN = 0.4
 GOAL_LOCAL_RATE_MAX = 2.5
 
-# When neither the week nor the month is complete, the ask is randomly one of
-# the two. A strong rolling week (1.2× the weekly target in the last seven
-# days) leans the display towards the month, whose summary then has the more
-# useful context. The roll is kept for the calendar day so a rotating bar does
-# not flip every refresh.
-GOAL_WEEK_MONTH_SHARE = 0.5
-GOAL_MONTHLY_BOOST_MULTIPLIER = 1.2
-GOAL_MONTHLY_BOOST_SHARE = 0.8
-_GOAL_MONTH_ROLLS = {}
-
 GOAL_COPY_KEYS = {
     "daily": "donate_goal_day_fmt",
     "weekly": "donate_goal_week_fmt",
@@ -245,13 +234,13 @@ def days_in_month(now=None) -> int:
 
 
 def goal_scope(now=None) -> str:
-    """The rung a day opens on.
+    """The rung a day would open on before checking what is still short.
 
     The first and last three days of a month summarise the month so far.
-    Tuesday, Wednesday and Saturday open on the day's own costs; the rest of
-    the week opens on the week. A day that is still short of its local daily
-    target names today's costs whichever rung it opened on (see
-    :func:`get_goal_stats`).
+    Otherwise the base hint is today's costs on Tuesday, Wednesday and
+    Saturday, and the week on the other days. The ladder always names the
+    smallest outstanding rung, so a short day hands over only once today's
+    target is covered (see :func:`get_goal_stats`).
     """
     now = now or datetime.now()
     if now.day <= GOAL_MONTHLY_OPENING_DAYS:
@@ -266,10 +255,8 @@ def goal_scope(now=None) -> str:
 def goal_ladder(now=None) -> tuple:
     """Rungs a day's display may name, smallest first.
 
-    Month-edge days name only the month. Every other day can name today's
-    costs while they are short, then either the week or the month. The choice
-    between those two is made in :func:`get_goal_stats` so it stays stable for
-    the day instead of changing on every refresh.
+    Month-edge days name only the month. Every other day climbs from today's
+    costs to the week and then the month, naming the first rung still short.
     """
     now = now or datetime.now()
     if goal_scope(now) == "monthly":
@@ -334,17 +321,6 @@ def format_goal_amount(amount) -> str:
     return f"{amount:,.2f}" if big else f"{amount:.2f}"
 
 
-def _goal_monthly_roll(now):
-    """A stable 0..1 roll for the day's week-or-month choice."""
-    key = now.date()
-    roll = _GOAL_MONTH_ROLLS.get(key)
-    if roll is None:
-        _GOAL_MONTH_ROLLS.clear()
-        roll = random.random()
-        _GOAL_MONTH_ROLLS[key] = roll
-    return roll
-
-
 def _goal_raised_by_window(donations, now):
     """Money actually raised today, this week, this month and in the last week.
 
@@ -379,13 +355,12 @@ def _goal_raised_by_window(donations, now):
     return day_raised, week_raised, month_raised, rolling_raised
 
 
-def get_goal_stats(donations, now=None, monthly_roll=None):
+def get_goal_stats(donations, now=None):
     """Raised against the target this day's display should name.
 
     The ladder follows the website's funding bar: a month-edge day always
-    names the month; a day short of its local daily target names today; after
-    that a completed week names the month, and while both week and month are
-    open the display picks one of them for the day. A finished month is
+    names the month; otherwise the first rung still short is named, from
+    today's costs up through the week to the month. A finished month is
     silent.
     """
     now = now or datetime.now()
@@ -398,27 +373,15 @@ def get_goal_stats(donations, now=None, monthly_roll=None):
     shown_day = fx.local(day_raised, code)
     shown_week = fx.local(week_raised, code)
     shown_month = fx.local(month_raised, code)
-    shown_rolling = fx.local(rolling_raised, code)
     raised_by = {"daily": shown_day, "weekly": shown_week, "monthly": shown_month}
     month_reached = shown_month >= targets["monthly"]
 
     scope = None
     if not month_reached:
-        if goal_scope(now) == "monthly":
-            scope = "monthly"
-        elif shown_day < targets["daily"]:
-            scope = "daily"
-        elif shown_week >= targets["weekly"]:
-            scope = "monthly"
-        else:
-            roll = _goal_monthly_roll(now) if monthly_roll is None else float(monthly_roll)
-            boost = targets["weekly"] * GOAL_MONTHLY_BOOST_MULTIPLIER
-            monthly_share = (
-                GOAL_MONTHLY_BOOST_SHARE
-                if shown_rolling >= boost
-                else GOAL_WEEK_MONTH_SHARE
-            )
-            scope = "monthly" if roll < monthly_share else "weekly"
+        for candidate in goal_ladder(now):
+            if raised_by[candidate] < targets[candidate]:
+                scope = candidate
+                break
 
     stats = {
         "scope": scope,

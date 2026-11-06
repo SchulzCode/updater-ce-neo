@@ -57,9 +57,7 @@ def test_week_goal_line_uses_the_week_rung(monkeypatch):
 
     _pin_gbp(monkeypatch)
     now = datetime(2026, 11, 19, 12)
-    stats = get_goal_stats(
-        [{"amount": 20, "dt": now}], now=now, monthly_roll=0.9
-    )
+    stats = get_goal_stats([{"amount": 20, "dt": now}], now=now)
 
     assert stats["scope"] == "weekly"
     assert format_goal_line(stats) == (
@@ -135,33 +133,30 @@ def test_today_hands_over_at_ten_local_units(monkeypatch):
     almost = get_goal_stats([{"amount": 19.98, "dt": now}], now=now)
     assert almost["scope"] == "daily"
 
-    paid = get_goal_stats(
-        [{"amount": 20.00, "dt": now}], now=now, monthly_roll=0.9
-    )
+    paid = get_goal_stats([{"amount": 20.00, "dt": now}], now=now)
     assert paid["scope"] == "weekly"
 
 
-def test_the_week_and_month_are_picked_for_the_day_when_both_are_open(monkeypatch):
+def test_the_week_leads_until_its_target_is_met(monkeypatch):
     from src.donors import format_goal_line, get_goal_stats
 
     _pin_gbp(monkeypatch)
     now = datetime(2026, 11, 19, 12)
-    donations = [{"amount": 24, "dt": now}]
 
-    monthly = get_goal_stats(donations, now=now, monthly_roll=0.1)
-    weekly = get_goal_stats(donations, now=now, monthly_roll=0.9)
-
-    assert monthly["scope"] == "monthly"
+    weekly = get_goal_stats([{"amount": 24, "dt": now}], now=now)
     assert weekly["scope"] == "weekly"
-    assert format_goal_line(monthly) == (
-        "<b>You've helped us raise £12 of our £150 costs for this month</b>"
-    )
     assert format_goal_line(weekly) == (
         "<b>You've helped us raise £12 of our £50 costs for this week</b>"
     )
 
+    monthly = get_goal_stats([{"amount": 100, "dt": now}], now=now)
+    assert monthly["scope"] == "monthly"
+    assert format_goal_line(monthly) == (
+        "<b>You've helped us raise £50 of our £150 costs for this month</b>"
+    )
 
-def test_the_choice_is_stable_across_refreshes(monkeypatch):
+
+def test_the_week_choice_is_stable_across_refreshes(monkeypatch):
     from src.donors import get_goal_stats
 
     _pin_gbp(monkeypatch)
@@ -169,7 +164,7 @@ def test_the_choice_is_stable_across_refreshes(monkeypatch):
     donations = [{"amount": 24, "dt": now}]
 
     first = get_goal_stats(donations, now=now)["scope"]
-    assert first in ("weekly", "monthly")
+    assert first == "weekly"
     for _ in range(5):
         assert get_goal_stats(donations, now=now)["scope"] == first
 
@@ -179,9 +174,7 @@ def test_a_completed_week_always_shows_the_month(monkeypatch):
 
     _pin_gbp(monkeypatch)
     now = datetime(2026, 11, 19, 12)
-    stats = get_goal_stats(
-        [{"amount": 100, "dt": now}], now=now, monthly_roll=0.9
-    )
+    stats = get_goal_stats([{"amount": 100, "dt": now}], now=now)
 
     assert stats["scope"] == "monthly"
     assert format_goal_line(stats) == (
@@ -189,7 +182,7 @@ def test_a_completed_week_always_shows_the_month(monkeypatch):
     )
 
 
-def test_sixty_in_the_last_week_leans_towards_the_month(monkeypatch):
+def test_a_strong_rolling_week_does_not_skip_the_weekly_rung(monkeypatch):
     from src.donors import get_goal_stats
 
     _pin_gbp(monkeypatch)
@@ -201,11 +194,11 @@ def test_sixty_in_the_last_week_leans_towards_the_month(monkeypatch):
         {"amount": 24, "dt": now},
     ]
 
-    assert get_goal_stats(quiet, now=now, monthly_roll=0.6)["scope"] == "weekly"
-    boosted = get_goal_stats(strong, now=now, monthly_roll=0.6)
-    assert boosted["last_week_raised"] == 144.0
-    assert boosted["week_raised"] == 24.0
-    assert boosted["scope"] == "monthly"
+    assert get_goal_stats(quiet, now=now)["scope"] == "weekly"
+    strong_stats = get_goal_stats(strong, now=now)
+    assert strong_stats["last_week_raised"] == 144.0
+    assert strong_stats["week_raised"] == 24.0
+    assert strong_stats["scope"] == "weekly"
 
 
 def test_a_completed_month_is_silent(monkeypatch):

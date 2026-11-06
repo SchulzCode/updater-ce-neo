@@ -63,7 +63,6 @@ def test_donation_status_bar_goal_suppression(qapp, monkeypatch):
     mid = get_goal_stats(
         [{"amount": 50.0, "name": "Alice", "dt": now}],
         now=now,
-        monthly_roll=0.9,
     )
     high = get_goal_stats(
         [{"amount": 250.0, "name": "Bob", "dt": now}], now=now
