@@ -261,22 +261,40 @@ def test_disabling_removes_shortcuts_in_multiple_languages(tmp_path, monkeypatch
 
 
 def _installer_shortcut_names():
-    """The [CustomMessages] shortcut names the Windows installer compiles."""
+    """The [CustomMessages] shortcut names the Windows installer compiles.
+
+    The per-language entries live in an include generated from the app's
+    catalogs; Inno merges it into the section, so the test does too.
+    """
+
+    def _entries(text):
+        values = {}
+        for line in text.splitlines():
+            line = line.strip()
+            if not line or line.startswith((";", "#", "{")):
+                continue
+            key, separator, value = line.partition("=")
+            if separator and key.endswith(
+                ("AppShortcutName", "DesktopAppShortcutName")
+            ):
+                yield key, value.strip()
+
     text = (ROOT / "scripts" / "build_windows_installer.iss").read_text(
         encoding="utf-8-sig"
     )
     section = text.split("[CustomMessages]", 1)[1].split("[Files]", 1)[0]
     values = {}
     keys = []
-    for line in section.splitlines():
-        line = line.strip()
-        if not line or line.startswith((";", "#")):
-            continue
-        key, separator, value = line.partition("=")
-        if separator and key.endswith(("AppShortcutName", "DesktopAppShortcutName")):
-            keys.append(key)
-            values[key] = value.strip()
+    for key, value in _entries(section):
+        keys.append(key)
+        values[key] = value
+    include = ROOT / "scripts" / "build_windows_installer_names.iss"
+    assert include.is_file(), "run scripts/generate_windows_shortcut_names.py"
+    for key, value in _entries(include.read_text(encoding="utf-8-sig")):
+        keys.append(key)
+        values[key] = value
     assert len(keys) == len(set(keys)), "duplicate shortcut custom message"
+    assert "AppShortcutName" in values and "DesktopAppShortcutName" in values
     return values
 
 
@@ -308,7 +326,9 @@ def test_installer_shortcut_names_match_the_app(monkeypatch):
     assert messages["DesktopAppShortcutName"] == sm.DESKTOP_APP_NAME
 
     for inno_name, codes in sm.INNO_SHORTCUT_LANGUAGES.items():
-        localized = sm._localized_creation_name(codes[0])
+        localized = next(
+            (name for name in map(sm._localized_creation_name, codes) if name), ""
+        )
         expected_menu = localized or sm.APP_NAME
         expected_desktop = localized or sm.DESKTOP_APP_NAME
         menu = messages.get(f"{inno_name}.AppShortcutName", messages["AppShortcutName"])

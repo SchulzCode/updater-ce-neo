@@ -265,7 +265,10 @@ def test_remote_rescue_flags_evaluations(temp_settings):
     with patch("src.remote_flags._probe_remote_file", side_effect=lambda fn: "background_on" in fn):
         remote_flags.clear_remote_flags_cache()
         from src.tray import run_in_background_enabled
-        assert run_in_background_enabled(temp_settings) is True
+        # macOS parks the mode behind the platform gate; the flag precedence is
+        # still what the shipping hosts run.
+        with patch("src.tray.background_mode_supported", return_value=True):
+            assert run_in_background_enabled(temp_settings) is True
 
 
 def test_completion_screen_layout_and_post_install_buttons(app, monkeypatch):

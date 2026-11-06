@@ -59,7 +59,8 @@ def test_flash_page_usb_disconnected_recovery_prompt(qapp):
     assert not fp._wait_cancel_btn.isHidden()
     assert fp._wait_continue_btn.toolTip().lower() == "next"
 
-    # In Updater CE branding, the paperclip image hint is displayed
+    # In Updater CE branding, the paperclip image hint opens from its link
+    fp._on_paperclip_help()
     assert not fp._paperclip_hint_host.isHidden()
     assert fp._paperclip_img.pixmap() is not None and not fp._paperclip_img.pixmap().isNull()
 
@@ -78,6 +79,7 @@ def test_flash_page_usb_disconnected_generic_device(qapp):
     assert "press next" in prompt_text
     assert not fp._wait_continue_btn.isHidden()
     # Generic all models paperclip hint image is shown
+    fp._on_paperclip_help()
     assert not fp._paperclip_hint_host.isHidden()
     assert fp._paperclip_img.pixmap() is not None and not fp._paperclip_img.pixmap().isNull()
 
@@ -95,6 +97,7 @@ def test_flash_page_usb_disconnected_branding_and_models(qapp, monkeypatch):
     # 2. Updater CE brand -> paperclip hint image IS shown
     monkeypatch.setattr(branding, "is_generic_mtk_brand", lambda: False)
     fp.show_usb_disconnected()
+    fp._on_paperclip_help()
     assert not fp._paperclip_hint_host.isHidden()
     assert fp._paperclip_img.pixmap() is not None and not fp._paperclip_img.pixmap().isNull()
 

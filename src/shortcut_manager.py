@@ -158,6 +158,16 @@ def _name_for_language(lang: str) -> str:
     return ""
 
 
+def shortcut_name_for_language(lang: str) -> str:
+    """The app's app-shortcut name for *lang*, or "" when it keeps English.
+
+    Public because the Windows installer's shortcut messages are generated from
+    this one function: Setup has to write the same file name the app writes,
+    renames and deletes.
+    """
+    return _name_for_language(lang)
+
+
 def _localized_creation_name(lang: str = "") -> str:
     """The localized app shortcut name for an app language, or "".
 

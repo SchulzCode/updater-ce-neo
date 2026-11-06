@@ -1934,6 +1934,38 @@ _STRINGS: dict = {
     },
     # The tick on the power-off / connect card. Off unless the user asks for
     # it, and then their user data partition is never written or erased.
+    # The acknowledgement on a read-once hint: it puts the hint away and the
+    # app remembers, so a tested install is not re-explained every time.
+    "hint_got_it": {
+        "en": "Got it.",
+        "zh-CN": "知道了",
+        "de": "Verstanden",
+        "fr": "Compris",
+        "es": "Entendido",
+        "ja": "了解しました",
+    },
+    # The link that opens the paperclip tip. The diagram is asked for, not
+    # spent on every power-off card: the link is the card's row, the tip is
+    # the reader's choice.
+    # The link that opens the "what happens without the tick" line. The
+    # sentence is long and matters only to a reader who is deciding, so it
+    # waits behind a link instead of sitting on every card.
+    "keep_data_help_link": {
+        "en": "What does this mean?",
+        "zh-CN": "这是什么意思？",
+        "de": "Was bedeutet das?",
+        "fr": "Qu'est-ce que cela signifie ?",
+        "es": "¿Qué significa esto?",
+        "ja": "どういう意味ですか？",
+    },
+    "flash_paperclip_help": {
+        "en": "How?",
+        "zh-CN": "怎么做？",
+        "de": "Wie?",
+        "fr": "Comment ?",
+        "es": "¿Cómo?",
+        "ja": "どうやるの？",
+    },
     "flash_keep_data_option": {
         "en": "Keep my settings",
         "zh-CN": "保留我的设置和媒体",

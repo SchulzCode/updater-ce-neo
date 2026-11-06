@@ -26,13 +26,26 @@ SF_UPDATE_SYMBOL = "arrow.down.circle.fill"
 _AUTOMATIC_TERMINATION_HELD = False
 
 
+def background_mode_supported(platform: Optional[str] = None) -> bool:
+    """Whether this host ships the run-in-background / menu bar mode.
+
+    macOS builds temporarily ship without it: no menu bar item, no
+    start-at-login entry, and closing the window quits the app. Windows and
+    Linux keep the opt-in. One switch to turn it back on when macOS returns.
+    """
+    return (platform or sys.platform) != "darwin"
+
+
 def run_in_background_setting(settings: Optional[QSettings] = None) -> bool:
     """The user's saved opt-in alone, ignoring remote debug overrides.
 
     The start-at-login entry follows this value: a remote flag may force the
     background mode for a session, but it must not add or remove something in
-    the user's login items behind their back.
+    the user's login items behind their back. A host without the background
+    mode reads as off, so its stale opt-in is never honoured.
     """
+    if not background_mode_supported():
+        return False
     settings = settings or QSettings("innioasis", "updater")
     value = settings.value(RUN_IN_BACKGROUND_KEY, False)
     return str(value).lower() in ("1", "true", "yes")
@@ -40,6 +53,8 @@ def run_in_background_setting(settings: Optional[QSettings] = None) -> bool:
 
 def run_in_background_enabled(settings: Optional[QSettings] = None) -> bool:
     """The opt-in switch. Off unless the user turned it on."""
+    if not background_mode_supported():
+        return False
     try:
         from .remote_flags import is_remote_flag_active
         if is_remote_flag_active("background_off") or is_remote_flag_active("no_background"):

@@ -1,4 +1,4 @@
-; ==============================================================================
+﻿; ==============================================================================
 ; Updater CE — Windows Installer (Inno Setup 6)
 ; Repository: https://github.com/y1-community/updater-ce-neo
 ; ==============================================================================
@@ -293,6 +293,9 @@ RestartPcToFinish=Restart PC to finish setup
 ; so removing and recreating one never changes its name or leaves a duplicate.
 AppShortcutName=Innioasis Updater
 DesktopAppShortcutName=Innioasis Updater CE
+; Every other language's name is generated from the app's own catalogs, so
+; Setup writes exactly the file name the app writes, renames and deletes.
+#include "build_windows_installer_names.iss"
 #if FileExists(AddBackslash(CompilerPath) + "Languages\Arabic.isl")
 arabic.CreateStartMenuIcon=إنشاء اختصارات في قائمة ابدأ
 arabic.SpFlashToolShortcut=SP Flash Tool
@@ -306,8 +309,6 @@ arabic.StepShortcuts=جارٍ إزالة الاختصارات القديمة...
 arabic.StepLegacy=جارٍ تنظيف البيانات ومجلدات التثبيت القديمة...
 arabic.StepDriverInstall=جارٍ تثبيت برنامج تشغيل MediaTek SP...
 arabic.RestartPcToFinish=إعادة تشغيل الكمبيوتر لإكمال الإعداد
-arabic.AppShortcutName=برنامج التحديث
-arabic.DesktopAppShortcutName=برنامج التحديث
 #endif
 #if FileExists(AddBackslash(CompilerPath) + "Languages\Armenian.isl")
 armenian.CreateStartMenuIcon=Ստեղծել պիտակներ «Սկիզբ» ընտրացանկում
@@ -322,8 +323,6 @@ armenian.StepShortcuts=Հեռացվում են հին պիտակները...
 armenian.StepLegacy=Մաքրվում են հին տվյալները և պանակները...
 armenian.StepDriverInstall=Տեղադրվում է MediaTek SP դրայվերը...
 armenian.RestartPcToFinish=Վերագործարկել համակարգիչը՝ տեղադրումն ավարտելու համար
-armenian.AppShortcutName=Թարմացնող
-armenian.DesktopAppShortcutName=Թարմացնող
 #endif
 #if FileExists(AddBackslash(CompilerPath) + "Languages\BrazilianPortuguese.isl")
 brazilianportuguese.CreateStartMenuIcon=Criar atalhos no Menu Iniciar
@@ -352,8 +351,6 @@ bulgarian.StepShortcuts=Премахване на стари преки пъти
 bulgarian.StepLegacy=Почистване на стари данни и инсталационни папки...
 bulgarian.StepDriverInstall=Инсталиране на драйвера MediaTek SP...
 bulgarian.RestartPcToFinish=Рестартирайте компютъра, за да завършите инсталацията
-bulgarian.AppShortcutName=Актуализатор
-bulgarian.DesktopAppShortcutName=Актуализатор
 #endif
 #if FileExists(AddBackslash(CompilerPath) + "Languages\Catalan.isl")
 catalan.CreateStartMenuIcon=Crea dreceres al menú Inici
@@ -368,8 +365,6 @@ catalan.StepShortcuts=S'estan eliminant les dreceres antigues...
 catalan.StepLegacy=S'estan netejant les dades i carpetes d'instal·lació antigues...
 catalan.StepDriverInstall=S'està instal·lant el controlador MediaTek SP...
 catalan.RestartPcToFinish=Reinicia l'ordinador per finalitzar la instal·lació
-catalan.AppShortcutName=Actualitzador
-catalan.DesktopAppShortcutName=Actualitzador
 #endif
 #if FileExists(AddBackslash(CompilerPath) + "Languages\ChineseSimplified.isl")
 chinesesimplified.CreateStartMenuIcon=创建开始菜单快捷方式
@@ -384,8 +379,6 @@ chinesesimplified.StepShortcuts=正在删除旧快捷方式...
 chinesesimplified.StepLegacy=正在清理旧数据和安装文件夹...
 chinesesimplified.StepDriverInstall=正在安装联发科 (MediaTek) SP 驱动程序...
 chinesesimplified.RestartPcToFinish=重启电脑以完成安装
-chinesesimplified.AppShortcutName=更新程序
-chinesesimplified.DesktopAppShortcutName=更新程序
 #endif
 #if FileExists(AddBackslash(CompilerPath) + "Languages\ChineseTraditional.isl")
 chinesetraditional.CreateStartMenuIcon=建立開始功能表捷徑
@@ -414,8 +407,6 @@ corsican.StepShortcuts=Eliminazione di l'anziani accurtatoghji...
 corsican.StepLegacy=Pulizia di i vechji cartulari...
 corsican.StepDriverInstall=Installazione di u pilotu MediaTek SP...
 corsican.RestartPcToFinish=Riavvià l'urdinatore per compie l'installazione
-corsican.AppShortcutName=Updater
-corsican.DesktopAppShortcutName=Updater
 #endif
 #if FileExists(AddBackslash(CompilerPath) + "Languages\Czech.isl")
 czech.CreateStartMenuIcon=Vytvořit zástupce v nabídce Start
@@ -430,8 +421,6 @@ czech.StepShortcuts=Odstraňování starých zástupců...
 czech.StepLegacy=Čištění starých dat a instalačních složek...
 czech.StepDriverInstall=Instalace ovladače MediaTek SP...
 czech.RestartPcToFinish=Restartovat počítač pro dokončení instalace
-czech.AppShortcutName=Aktualizátor
-czech.DesktopAppShortcutName=Aktualizátor
 #endif
 #if FileExists(AddBackslash(CompilerPath) + "Languages\Danish.isl")
 danish.CreateStartMenuIcon=Opret genveje i menuen Start
@@ -446,8 +435,6 @@ danish.StepShortcuts=Fjerner gamle genveje...
 danish.StepLegacy=Rydder op i gamle data og installationsmapper...
 danish.StepDriverInstall=Installerer MediaTek SP-driver...
 danish.RestartPcToFinish=Genstart pc'en for at fuldføre installationen
-danish.AppShortcutName=Opdaterer
-danish.DesktopAppShortcutName=Opdaterer
 #endif
 #if FileExists(AddBackslash(CompilerPath) + "Languages\Dutch.isl")
 dutch.CreateStartMenuIcon=Snelkoppelingen in het menu Start maken
@@ -476,8 +463,6 @@ finnish.StepShortcuts=Poistetaan vanhoja pikakuvakkeita...
 finnish.StepLegacy=Siivotaan vanhoja tietoja ja asennuskansioita...
 finnish.StepDriverInstall=Asennetaan MediaTek SP -ajuria...
 finnish.RestartPcToFinish=Käynnistä tietokone uudelleen asennuksen viimeistelemiseksi
-finnish.AppShortcutName=Päivittäjä
-finnish.DesktopAppShortcutName=Päivittäjä
 #endif
 #if FileExists(AddBackslash(CompilerPath) + "Languages\French.isl")
 french.CreateStartMenuIcon=Créer des raccourcis dans le menu Démarrer
@@ -492,8 +477,6 @@ french.StepShortcuts=Suppression des anciens raccourcis...
 french.StepLegacy=Nettoyage des anciennes données et dossiers d'installation...
 french.StepDriverInstall=Installation du pilote MediaTek SP...
 french.RestartPcToFinish=Redémarrer le PC pour terminer l'installation
-french.AppShortcutName=Programme de mise à jour
-french.DesktopAppShortcutName=Programme de mise à jour
 #endif
 #if FileExists(AddBackslash(CompilerPath) + "Languages\German.isl")
 german.CreateStartMenuIcon=Startmenü-Verknüpfungen erstellen
@@ -508,8 +491,6 @@ german.StepShortcuts=Alte Verknüpfungen werden entfernt...
 german.StepLegacy=Alte Daten und Installationsordner werden bereinigt...
 german.StepDriverInstall=MediaTek SP-Treiber wird installiert...
 german.RestartPcToFinish=PC neu starten, um die Einrichtung abzuschließen
-german.AppShortcutName=Updater
-german.DesktopAppShortcutName=Updater
 #endif
 #if FileExists(AddBackslash(CompilerPath) + "Languages\Hebrew.isl")
 hebrew.CreateStartMenuIcon=צור קיצורי דרך בתפריט התחל
@@ -538,8 +519,6 @@ hungarian.StepShortcuts=Régi parancsikonok eltávolítása...
 hungarian.StepLegacy=Régi adatok és telepítési mappák tisztítása...
 hungarian.StepDriverInstall=MediaTek SP illesztőprogram telepítése...
 hungarian.RestartPcToFinish=A számítógép újraindítása a telepítés befejezéséhez
-hungarian.AppShortcutName=Frissítő
-hungarian.DesktopAppShortcutName=Frissítő
 #endif
 #if FileExists(AddBackslash(CompilerPath) + "Languages\Icelandic.isl")
 icelandic.CreateStartMenuIcon=Búa til flýtivísa í Start-valmynd
@@ -554,8 +533,6 @@ icelandic.StepShortcuts=Fjarlægi gamla flýtivísa...
 icelandic.StepLegacy=Hreinsa gömul gögn og möppur...
 icelandic.StepDriverInstall=Set upp MediaTek SP rekla...
 icelandic.RestartPcToFinish=Endurræsa tölvuna til að ljúka uppsetningu
-icelandic.AppShortcutName=Uppfærsla
-icelandic.DesktopAppShortcutName=Uppfærsla
 #endif
 #if FileExists(AddBackslash(CompilerPath) + "Languages\Italian.isl")
 italian.CreateStartMenuIcon=Crea collegamenti nel menu Start
@@ -570,8 +547,6 @@ italian.StepShortcuts=Rimozione dei vecchi collegamenti...
 italian.StepLegacy=Pulizia dei vecchi dati e delle cartelle di installazione...
 italian.StepDriverInstall=Installazione del driver MediaTek SP...
 italian.RestartPcToFinish=Riavvia il PC per completare l'installazione
-italian.AppShortcutName=Programma di aggiornamento
-italian.DesktopAppShortcutName=Programma di aggiornamento
 #endif
 #if FileExists(AddBackslash(CompilerPath) + "Languages\Japanese.isl")
 japanese.CreateStartMenuIcon=スタート メニューにショートカットを作成する
@@ -586,8 +561,6 @@ japanese.StepShortcuts=古いショートカットを削除しています...
 japanese.StepLegacy=古いデータとインストール フォルダーをクリーンアップしています...
 japanese.StepDriverInstall=MediaTek SP ドライバーをインストールしています...
 japanese.RestartPcToFinish=PC を再起動してセットアップを完了する
-japanese.AppShortcutName=アップデーター
-japanese.DesktopAppShortcutName=アップデーター
 #endif
 #if FileExists(AddBackslash(CompilerPath) + "Languages\Korean.isl")
 korean.CreateStartMenuIcon=시작 메뉴 바로가기 만들기
@@ -658,8 +631,6 @@ russian.StepShortcuts=Удаление старых ярлыков...
 russian.StepLegacy=Очистка старых данных и папок установки...
 russian.StepDriverInstall=Установка драйвера MediaTek SP...
 russian.RestartPcToFinish=Перезагрузить компьютер для завершения установки
-russian.AppShortcutName=Программа обновления CE
-russian.DesktopAppShortcutName=Программа обновления CE
 #endif
 #if FileExists(AddBackslash(CompilerPath) + "Languages\Slovak.isl")
 slovak.CreateStartMenuIcon=Vytvoriť odkazy v ponuke Štart
@@ -702,8 +673,6 @@ spanish.StepShortcuts=Eliminando accesos directos antiguos...
 spanish.StepLegacy=Limpiando datos y carpetas de instalación antiguas...
 spanish.StepDriverInstall=Instalando el controlador MediaTek SP...
 spanish.RestartPcToFinish=Reiniciar el PC para finalizar la instalación
-spanish.AppShortcutName=Actualizador
-spanish.DesktopAppShortcutName=Actualizador
 #endif
 #if FileExists(AddBackslash(CompilerPath) + "Languages\Swedish.isl")
 swedish.CreateStartMenuIcon=Skapa genvägar på Start-menyn
@@ -785,7 +754,6 @@ Name: "{userprograms}\Innioasis Updater"; Filename: "{app}\{#MyAppExeName}"; Ico
 #else
 Name: "{userprograms}\{cm:AppShortcutName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: startmenuicon; Check: ShouldInstallMainApp
 #endif
-Name: "{userprograms}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"; Tasks: startmenuicon
 #ifdef MyIsMediaTek
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; Check: ShouldInstallMainApp
 #else

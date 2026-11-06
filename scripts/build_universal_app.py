@@ -315,7 +315,13 @@ def ensure_cached_assets():
                         # WHEEL tags do not carry the distribution version; the
                         # wheel filename stem encoded in RECORD's dist-info does.
                         dist_info = Path(metadata[0]).parts[0] if metadata else ""
-                        cached_ok = cached_ok and expected_filename.lower().startswith(dist_info.lower().replace("_", "-").replace(".dist-info", ""))
+                        # Wheel filenames use underscores where dist-info names
+                        # use hyphens (pyside6_essentials-6.9.3 vs
+                        # PySide6_Essentials-6.9.3.dist-info). Comparing the raw
+                        # strings never matched, so every build re-downloaded
+                        # hundreds of megabytes it already had in the cache.
+                        dist_stem = dist_info.lower().replace(".dist-info", "").replace("_", "-")
+                        cached_ok = cached_ok and expected_filename.lower().replace("_", "-").startswith(dist_stem)
                 except (OSError, zipfile.BadZipFile):
                     cached_ok = False
         if not cached_ok:
@@ -444,7 +450,12 @@ def build_universal_python(dest_python: Path):
     # Clean unneeded standard library modules
     lib_dir = dest_python / "lib" / "python3.11"
     if lib_dir.exists():
-        for unneeded in ["idlelib", "turtledemo", "turtle.py", "ensurepip", "tkinter", "test", "tests"]:
+        for unneeded in [
+            "idlelib", "turtledemo", "turtle.py", "ensurepip", "tkinter", "test", "tests",
+            # Editors/2to3/pydoc data are never imported by the app; removing
+            # them saves the precompile, lipo and signature work as well.
+            "lib2to3", "distutils", "pydoc_data",
+        ]:
             p = lib_dir / unneeded
             if p.is_dir():
                 shutil.rmtree(p)
@@ -498,6 +509,80 @@ def install_universal_packages(site_packages: Path, dest_python: Path):
         qpdf_plugin = pyside_dir / "Qt/plugins/imageformats/libqpdf.dylib"
         if qpdf_plugin.is_file():
             qpdf_plugin.unlink()
+
+        # Qt's developer executables: lupdate alone is 82 MB of lipo'd Mach-O.
+        # Nothing here starts any of them (the catalogs are JSON, not .ts/.qm,
+        # and the app has no QML to lint or ship).
+        for dev_tool in ("lupdate", "lrelease", "qmlls", "qmlformat", "qmllint"):
+            tool = pyside_dir / dev_tool
+            if tool.is_file():
+                tool.unlink()
+
+        # QML/Quick, Designer and OpenGL are a second UI stack this app never
+        # imports (it is pure QtWidgets). Verified with otool over a built
+        # bundle: each family references only itself, and the virtual-keyboard
+        # input-context plugin is the one plugin that needs QtQuick, so the
+        # whole set leaves together instead of dangling unloadable Mach-O.
+        # These also have no importer and no Mach-O reference anywhere in the
+        # bundle (checked with otool): the app is QtCore/Gui/Widgets/Network/Svg.
+        qt_lib = pyside_dir / "Qt" / "lib"
+        for pattern in (
+            "QtQuick*", "QtQml*", "QtDesigner*", "QtOpenGL*", "QtSql*",
+            "QtHelp*", "QtTest*", "QtLabs*", "QtUiTools*",
+            # QtGui itself links QtDBus, so it must stay.
+            "QtPrintSupport*", "QtXml*", "QtSvgWidgets*", "QtConcurrent*",
+        ):
+            for path in qt_lib.glob(pattern):
+                if path.is_dir():
+                    shutil.rmtree(path)
+                elif path.is_file():
+                    path.unlink()
+        for pattern in (
+            "QtQuick*", "QtQml*", "QtDesigner*", "QtOpenGL*", "QtSql*",
+            "QtHelp*", "QtTest*", "QtUiTools*", "libpyside6qml*.dylib",
+            "QtPrintSupport*", "QtXml*", "QtSvgWidgets*",
+            "QtConcurrent*", "QtExampleIcons*",
+        ):
+            for path in pyside_dir.glob(pattern):
+                if path.is_dir():
+                    shutil.rmtree(path)
+                elif path.is_file():
+                    path.unlink()
+        vkb_plugin = pyside_dir / "Qt/plugins/platforminputcontexts/libqtvirtualkeyboardplugin.dylib"
+        if vkb_plugin.is_file():
+            vkb_plugin.unlink()
+
+    # The interpreter never installs anything: drop the packaging toolchain
+    # python-build-standalone ships in site-packages. Hundreds of files and
+    # ~11 MB that would otherwise be precompiled, lipo'd and signed.
+    for pack in ("pip", "setuptools", "pkg_resources", "_distutils_hack"):
+        p = site_packages / pack
+        if p.is_dir():
+            shutil.rmtree(p)
+        elif p.is_file():
+            p.unlink()
+    # That module's .pth shim runs on every interpreter start; with the module
+    # gone it prints a ModuleNotFoundError traceback into the app's log.
+    distutils_pth = site_packages / "distutils-precedence.pth"
+    if distutils_pth.is_file():
+        distutils_pth.unlink()
+
+    # C++ headers exist to build bindings against, never to run the app.
+    pyside_include = site_packages / "PySide6" / "include"
+    if pyside_include.is_dir():
+        shutil.rmtree(pyside_include)
+
+    # tkinter is removed above, so its Tcl/Tk runtime is dead weight too.
+    tk_lib = dest_python / "lib"
+    for name in ("tcl9", "tcl9.0", "tk9.0", "itcl4.3.8"):
+        p = tk_lib / name
+        if p.is_dir():
+            shutil.rmtree(p)
+    for pattern in ("libtcl9*.dylib", "libtk9*.dylib", "libitcl4*.dylib"):
+        for p in tk_lib.glob(pattern):
+            p.unlink()
+    for p in (dest_python / "lib" / "python3.11" / "lib-dynload").glob("_tkinter*"):
+        p.unlink()
 
 
 def write_interpreter_identity(python_dir: Path) -> None:
@@ -629,6 +714,12 @@ def build():
         write_manifest=False,
     )
     shutil.copytree(ASSETS, APP_CODE / "assets", dirs_exist_ok=True)
+    # The 360p themes archive is 62 MB of every build. It is downloaded at first
+    # themes install (see theme_pack.THEME_PACK_URL) and merged over the small
+    # fonts pack, which stays bundled for offline/font coverage.
+    bundled_themes_zip = APP_CODE / "assets" / "360p" / "themes-themepack.zip"
+    if bundled_themes_zip.is_file():
+        bundled_themes_zip.unlink()
 
     # 5b. Unar (cross-platform .rar extractor parity with Chinese reference release)
     unar_src = ROOT / "tools" / "macos" / "unar"

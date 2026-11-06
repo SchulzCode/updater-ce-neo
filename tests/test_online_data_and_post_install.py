@@ -701,20 +701,40 @@ def test_keep_data_warning_is_model_appropriate(qapp):
         page.set_model("Y1")
         page.set_keep_data_available(True, keep_data_label("Y1"))
         assert page._keep_data_cb.text() == tr("flash_keep_data_option")
-        assert page._keep_data_warning.text() == tr("flash_keep_data_warning_y1")
+        # The explanation waits behind its link until it is asked for.
+        assert page._keep_data_warning.isHidden()
+        assert not page._keep_data_help_link.isHidden()
+        page._on_keep_data_help()
+        assert page._keep_data_warning_sentence == tr("flash_keep_data_warning_y1")
+        assert tr("flash_keep_data_warning_y1") in page._keep_data_warning.text()
 
         page._keep_data_cb.setChecked(True)
         assert page._keep_data_warning.isHidden()
         page._keep_data_cb.setChecked(False)
 
+        # Its Got it takes the link with the sentence: the hint is read, so the
+        # card keeps neither an inert "What does this mean?" nor the warning.
+        page._on_keep_data_warning_got_it()
+        assert page._keep_data_warning.isHidden()
+        assert page._keep_data_help_link.isHidden()
+        page._keep_data_cb.setChecked(True)
+        page._keep_data_cb.setChecked(False)
+        assert page._keep_data_help_link.isHidden()
+
+        from src.ui.flash_page import _set_hint_dismissed
+
+        _set_hint_dismissed("keep_data_warning", False)
+
         page.set_model("Y2")
-        assert page._keep_data_warning.text() == tr("flash_keep_data_warning")
+        assert page._keep_data_warning_sentence == tr("flash_keep_data_warning")
         page.set_keep_data_available(False, keep_data_label("Y2"))
-        assert page._keep_data_warning.text() == tr("flash_keep_data_unavailable")
+        assert page._keep_data_warning_sentence == tr("flash_keep_data_unavailable")
+        # News the reader needs now: an unavailable tick is never behind a link.
+        assert not page._keep_data_warning.isHidden()
 
         page.set_model("Y1")
-        assert page._keep_data_warning.text() == tr("flash_keep_data_unavailable_y1")
-        assert "partition" not in page._keep_data_warning.text().lower()
+        assert page._keep_data_warning_sentence == tr("flash_keep_data_unavailable_y1")
+        assert "partition" not in page._keep_data_warning_sentence.lower()
     finally:
         page.deleteLater()
 
@@ -1011,10 +1031,15 @@ def test_guided_power_off_and_keep_data_flow(qapp):
         assert fp._wait_cancel_btn._symbol == "cancel"
         assert not fp._keep_data_choice.isHidden()
         assert fp._keep_data_choice.count() > 1
-        # The question takes the progress band's place in the card head, and
-        # the firmware list it asks about is listed directly beneath it.
-        assert fp._wait_head_stack.currentWidget() is fp._wait_question_label
+        # The firmware list takes the band's own slot, so it sits between the
+        # icon and the X/arrow chips and shares their axis. The question moves
+        # up into the row the software title would have used, which gives its
+        # row to the list rather than stacking two headings above it.
+        assert fp._wait_head_stack.currentWidget() is fp._keep_data_choice_holder
         assert "Y1" in fp._wait_question_label.text()
+        assert not fp._wait_question_heading.isHidden()
+        assert "Y1" in fp._wait_question_heading.text()
+        assert fp._wait_pkg_label.isHidden()
         assert fp._keep_data_hint.isVisible()
     finally:
         win.close()

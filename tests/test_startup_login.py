@@ -129,6 +129,9 @@ def test_every_launch_reconciles_the_entry_with_the_saved_setting(monkeypatch):
 
 
 def test_the_saved_background_setting_owns_the_entry(monkeypatch):
+    # The remote-flag precedence still has to work on the hosts that ship the
+    # mode; macOS parks it, so lift the gate for this check.
+    monkeypatch.setattr(tray, "background_mode_supported", lambda: True)
     settings = QSettings("innioasis", "updater")
     settings.setValue(tray.RUN_IN_BACKGROUND_KEY, False)
     try:

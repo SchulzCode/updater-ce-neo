@@ -235,23 +235,36 @@ def test_paperclip_hint_names_the_hidden_button_per_model():
         # Every known model but the A5 hides the button beside the headphone
         # jack, and the copy says what the button is for: powering the player
         # off — with a paperclip or a pin.
+        # The tip is asked for: the card shows the link first and the tip
+        # arrives when it is followed.
+        page.set_model("Y1")
+        page.show_power_off_prompt()
+        assert "How?" in page._wait_question_label.text()
+        assert page._paperclip_hint_host.isHidden()
+
         for model in ("Y1", "Y2"):
             page.set_model(model)
             page.show_power_off_prompt()
+            page._on_paperclip_help()
+            assert "How?" not in page._wait_question_label.text(), model
             assert not page._paperclip_hint_host.isHidden(), model
-            assert page._paperclip_hint.text() == tr("flash_paperclip_hint").format(model=model), model
+            assert page._paperclip_sentence == tr("flash_paperclip_hint").format(model=model), model
             assert "headphone" in page._paperclip_hint.text(), model
             assert "paperclip or pin" in page._paperclip_hint.text(), model
-            assert page._paperclip_hint.text().startswith("You can completely power off your"), model
+            assert page._paperclip_sentence.startswith("You can completely power off your"), model
+            # The acknowledgement is the last words of the sentence, not a row
+            # of its own under it.
+            assert "Got it" in page._paperclip_hint.text(), model
             assert page._paperclip_img.pixmap() is not None and not page._paperclip_img.pixmap().isNull(), model
 
         page.set_model("A5")
         page.show_power_off_prompt()
-        assert page._paperclip_hint.text() == tr("flash_paperclip_hint_a5").format(model="A5")
+        assert page._paperclip_sentence == tr("flash_paperclip_hint_a5").format(model="A5")
         assert "power button" in page._paperclip_hint.text()
         assert "headphone" not in page._paperclip_hint.text()
         assert "paperclip or pin" in page._paperclip_hint.text()
-        assert page._paperclip_hint.text().startswith("You can completely power off your A5")
+        assert page._paperclip_sentence.startswith("You can completely power off your A5")
+        assert "Got it" in page._paperclip_hint.text()
         assert page._paperclip_img.pixmap() is not None and not page._paperclip_img.pixmap().isNull()
 
         # Not at the connect step: the player is already powered off by then.
@@ -293,6 +306,7 @@ def test_stop_question_hides_the_paperclip_tip_and_asks_to_cancel():
     try:
         page.set_model("Y1")
         page.show_power_off_prompt()
+        page._on_paperclip_help()
         assert not page._paperclip_hint_host.isHidden()
 
         # Asking whether to stop borrows the card: no power-off instruction
@@ -382,6 +396,7 @@ def test_paperclip_hint_is_drawn_from_the_bundled_vector_asset(monkeypatch):
             rendered.clear()
             page.set_model(model)
             page.show_power_off_prompt()
+            page._on_paperclip_help()
             app.processEvents()
             assert rendered, model
             asset, height = rendered[-1]

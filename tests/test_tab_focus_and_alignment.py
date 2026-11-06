@@ -135,7 +135,10 @@ def test_all_install_cards_continual_alignment():
     assert top <= page._wait_continue_btn.geometry().center().y() <= bottom
     # Inside-card mode hint is hidden
     assert not page._wait_mode_hint.isVisible()
-    # Under-card paperclip hint is visible for Y1
+    # Under-card paperclip hint opens from the prompt's own How? link
+    assert "How?" in page._wait_question_label.text()
+    page._on_paperclip_help()
+    app.processEvents()
     assert page._paperclip_hint_host.isVisible()
     assert "headphone" in page._paperclip_hint.text().lower() or "button" in page._paperclip_hint.text().lower()
 

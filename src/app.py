@@ -872,6 +872,11 @@ def main():
 
     if background:
         app.setQuitOnLastWindowClosed(False)
+    elif _sys.platform == "darwin":
+        # macOS builds temporarily have no background mode: the window is the
+        # app, so closing it ends the process instead of leaving an invisible
+        # copy behind with no menu bar item to bring it back.
+        app.setQuitOnLastWindowClosed(True)
 
     startup_splash = None
     if _sys.platform.startswith("win") and presentation == "window":

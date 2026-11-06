@@ -1765,11 +1765,14 @@ class SelectPackagePage(QWidget):
         # The toast spot leaves the page's height, so the window must refit.
         self.content_size_changed.emit()
     def reset_selection_and_filters(self) -> None:
-        """Reset filters, selections, cached firmware display, and battery reminder toast back to initial defaults."""
+        """Reset filters, selections and cached firmware display back to defaults.
+
+        A dismissed battery reminder stays dismissed: the toast is a hint the
+        user closed, not a filter this reset owns.
+        """
         from PySide6.QtCore import QSettings
 
         settings = self.settings or QSettings("innioasis", "updater")
-        settings.remove("battery_hint_dismissed")
         self._check_battery_toast_visibility()
         if hasattr(self, "_brand_combo") and self._brand_combo.count() > 0:
             # Back to the default brand first: the device list is scoped to it.

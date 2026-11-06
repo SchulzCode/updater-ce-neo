@@ -222,10 +222,16 @@ def ensure_combined_payload() -> Optional[Path]:
         if not zip_path.is_file() or not _zip_is_fresh(zip_path):
             if not _download_zip(_pack.THEME_PACK_URL, zip_path):
                 if not zip_path.is_file():
-                    # Offline with no cache: bundled base alone still helps.
+                    # Offline with no cache: the bundled fonts pack still helps,
+                    # but there are no themes to add without a download.
                     base = _pack.bundled_rockbox_dir()
                     if base.is_dir():
                         _pack.merge_dirs(base, dest)
+                        return dest
+                    fonts = _pack.bundled_fonts_pack_zip_path()
+                    if fonts.is_file():
+                        logger.warning("No cached 360p themes; passive payload is fonts only")
+                        _pack.extract_theme_pack_zip(fonts, dest)
                         return dest
                     return None
         try:
@@ -235,6 +241,8 @@ def ensure_combined_payload() -> Optional[Path]:
             base = _pack.bundled_rockbox_dir()
             if base.is_dir():
                 _pack.merge_dirs(base, dest)
+            elif _pack.bundled_fonts_pack_zip_path().is_file():
+                _pack.extract_theme_pack_zip(_pack.bundled_fonts_pack_zip_path(), dest)
             else:
                 return None
         return dest if dest.is_dir() else None

@@ -853,7 +853,15 @@ class SettingsPage(QWidget):
             tooltip=run_in_background_desc(),
         )
         self._cb_run_in_background.setStyleSheet("")  # no host style override
-        from ..tray import run_in_background_enabled
+        from ..tray import background_mode_supported, run_in_background_enabled
+        # macOS builds temporarily ship without the background mode: closing
+        # the window quits and there is no menu bar item or login entry. Hide
+        # both switches that would promise it rather than showing dead ones.
+        supported = background_mode_supported()
+        self._background_card.setVisible(supported)
+        # The switch lives in a row (caption + switch), so hiding the checkbox
+        # alone left its words on the card. The row goes with it.
+        self._set_switch_row_visible(self._cb_notifications_background, supported)
         self._cb_run_in_background.setChecked(run_in_background_enabled())
         self._cb_run_in_background.toggled.connect(self._on_run_in_background_toggled)
         self._background_desc = QLabel(run_in_background_desc())
@@ -2163,6 +2171,7 @@ class SettingsPage(QWidget):
             background.setChecked(bool(run_in_background_enabled()))
             background.blockSignals(False)
             background.setEnabled(supported)
+            self._set_switch_row_visible(background, supported)
 
     def _focus_background_card(self) -> None:
         """Take the reader from Notifications to the card that keeps the app open."""

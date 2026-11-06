@@ -2839,23 +2839,69 @@ class MainWindow(QMainWindow):
             self.reset_all_configuration_and_caches()
             event.accept()
             return
+        # Ctrl/⌘+G: hardware stages complete themselves so the interface can
+        # be walked by hand without a player. Cmd arrives as ControlModifier on
+        # macOS, so both are accepted; no other chord is, leaving text-field
+        # shortcuts alone.
+        mods = event.modifiers()
+        if (
+            event.key() == Qt.Key_G
+            and bool(mods & (Qt.ControlModifier | Qt.MetaModifier))
+            and not (mods & (Qt.AltModifier | Qt.ShiftModifier))
+        ):
+            self.toggle_install_simulation()
+            event.accept()
+            return
         super().keyPressEvent(event)
+
+    def toggle_install_simulation(self) -> bool:
+        """Ctrl/⌘+G: skip the hardware waits so UI routes can be walked.
+
+        Off at every launch. The run output records the switch, because a
+        firmware or themes stage that finishes in seconds with no player
+        attached should never be mistaken for a real install.
+        """
+        from .. import simulation
+
+        on = simulation.toggle()
+        self._append_log(
+            "Install simulation on: firmware and themes stages complete themselves "
+            "(Ctrl/Cmd+G turns it off)."
+            if on
+            else "Install simulation off: installs use the player again."
+        )
+        return on
 
     def reset_all_configuration_and_caches(self):
         """Completely reset app config back to default, opt credits/donations back in, and clear caches."""
         from .. import device_tracking, downloads, config
         from ..i18n import translator
 
-        # 1. Clear QSettings across all namespaces
+        # 1. Clear QSettings across all namespaces. What the user has read and
+        # put away survives: a hint dismissed with Got it (or an X) is never
+        # shown again, and a reset clears preferences, not memory. Snapshot the
+        # dismissals, clear, then write them back.
+        from .flash_page import _HINT_DISMISS_GROUP
+
+        def _dismissals(store):
+            return {
+                key: store.value(key)
+                for key in store.allKeys()
+                if key.startswith(f"{_HINT_DISMISS_GROUP}/")
+                or key == "battery_hint_dismissed"
+            }
+
         s = QSettings("innioasis", "updater")
-        s.clear()
-        s.remove("battery_hint_dismissed")
         s_caps = QSettings("Innioasis", "UpdaterCE")
-        s_caps.clear()
-        s_caps.remove("battery_hint_dismissed")
         s_ref = QSettings("Innioasis", "Innioasis Updater")
-        s_ref.clear()
-        s_ref.remove("battery_hint_dismissed")
+        kept = [
+            (store, _dismissals(store)) for store in (s, s_caps, s_ref)
+        ]
+        for store in (s, s_caps, s_ref):
+            store.clear()
+        for store, dismissals in kept:
+            for key, value in dismissals.items():
+                store.setValue(key, value)
 
         # Notice read-state is cleared with the settings: dismissed notices
         # come back, including ones dismissed earlier in this session.
@@ -3055,7 +3101,7 @@ class MainWindow(QMainWindow):
             # install never waits on the network; the status line reports it.
             self._start_theme_pack_refresh()
         else:
-            self._append_log("[Rockbox Themes] Offline mode active: using built-in 360p theme pack.")
+            self._append_log("[Rockbox Themes] Offline mode active: using cached 360p themes and the bundled fonts pack.")
         self._theme_install_pending = False
         self.start_rockbox_themes_manually()
 
@@ -5318,6 +5364,19 @@ class MainWindow(QMainWindow):
             self._sp_flash_tool_tried = True
         if hasattr(self, "_failure_grace_timer") and self._failure_grace_timer.isActive():
             self._failure_grace_timer.stop()
+        from .. import simulation
+
+        if simulation.enabled():
+            # No worker is started: the driver emits the service's own signals,
+            # so the card, the state machine and the completion routing all take
+            # their real paths. Nothing touches USB or a backend process.
+            self.service.stop_device_monitor()
+            previous = getattr(self, "_sim_flash_run", None)
+            if previous is not None:
+                previous.stop()
+            self._sim_flash_run = simulation.FlashRun(self.service, self)
+            self._sim_flash_run.start()
+            return
         self.service.start_flash(
             self._package_path,
             pre_extracted_dir=pre_extracted,
@@ -5851,6 +5910,10 @@ class MainWindow(QMainWindow):
     def _on_flash_finished(self, ok, error_code):
         # A coalesced earlier tick must not repaint the bar behind the result.
         self._drop_pending_progress()
+        run = getattr(self, "_sim_flash_run", None)
+        if run is not None:
+            run.stop()
+            self._sim_flash_run = None
         self._elapsed_timer.stop()
         if hasattr(self, "_kill_process_timer") and self._kill_process_timer.isActive():
             self._kill_process_timer.stop()
@@ -7126,6 +7189,10 @@ class MainWindow(QMainWindow):
         # Only the ✕ (confirm stop) button lands here, via the stop-check
         # callback. The ← (back) button only dismisses the check inside the
         # progress card so the run keeps going — it must never navigate away.
+        run = getattr(self, "_sim_flash_run", None)
+        if run is not None:
+            run.stop()
+            self._sim_flash_run = None
         if hasattr(self, "_flash_page") and self._flash_page is not None:
             self._flash_page.dismiss_prompt_stop()
         self._return_to_select_software()
@@ -7388,6 +7455,17 @@ class MainWindow(QMainWindow):
         self._install_complete = False
         self._install_failed = False
         self._power_off_prompt = False
+        # A keep-data question that was on screen when the run was abandoned is
+        # part of the run. Left set, it keeps ``_install_run_active`` true, which
+        # blocks the navigation back to Select Software and leaves the window
+        # holding the progress card's compact height — the catalogue came back
+        # as a strip too short to read.
+        self._keep_data_confirm_pending = False
+        self._keep_data_erase_confirm_pending = False
+        self._format_all_confirm_pending = False
+        self._keep_data = False
+        if hasattr(self, "_flash_page") and self._flash_page is not None:
+            self._flash_page.clear_keep_data_confirmation()
         self._compact_install_screen = False
         self._download_active = False
         self._prep_active = False

@@ -13,6 +13,7 @@ from PySide6.QtCore import (
     QEventLoop,
     QPropertyAnimation,
     QRect,
+    QSettings,
     QSize,
     Qt,
     QTimer,
@@ -87,6 +88,46 @@ _READY_HEADING = re.compile(
 def _themed_link(href: str, text: str) -> str:
     """An in-app link in the theme foreground, with no visited or clicked tint."""
     return link_html(text, bold=False).replace('href="#"', f'href="{href}"', 1)
+
+
+def _hint_text_link(href: str, text: str) -> str:
+    """An action written into hint copy, dimmer than it and underlined.
+
+    Used for the acknowledgement that puts a read-once hint away and for the
+    link that opens it: both are actions on the hint rather than more copy, and
+    an affordance painted in the sentence's own colour and weight reads as the
+    last words of the sentence.
+    """
+    from .dark import T
+
+    try:
+        colour = T().fg_muted
+    except Exception:
+        colour = ""
+    style = "text-decoration: underline; border: none; background: transparent;"
+    if colour:
+        style = f"color: {colour}; {style}"
+    return f'<a href="{href}" style="{style}">{text}</a>'
+
+
+#: Settings group for the install card's "read it, put it away" hints. One key
+#: per hint, so dismissing the paperclip tip never hides the microSD line.
+#: A dismissal is permanent: ``MainWindow.reset_all_configuration_and_caches``
+#: snapshots this group across its settings clear, because a hint the user has
+#: already read never needs showing again.
+_HINT_DISMISS_GROUP = "dismissed_install_hints"
+
+
+def _hint_dismissed(name: str, settings=None) -> bool:
+    """True when the user dismissed ``name`` with its own Got it link."""
+    store = settings if settings is not None else QSettings("innioasis", "updater")
+    return bool(store.value(f"{_HINT_DISMISS_GROUP}/{name}", False, type=bool))
+
+
+def _set_hint_dismissed(name: str, dismissed: bool = True, settings=None) -> None:
+    """Remember, across launches, that ``name`` has been read."""
+    store = settings if settings is not None else QSettings("innioasis", "updater")
+    store.setValue(f"{_HINT_DISMISS_GROUP}/{name}", bool(dismissed))
 from .icons import get_symbol_data_uri, get_symbol_icon, get_symbol_pixmap
 from .native_controls import (
     NativeRoundChip,
@@ -106,6 +147,14 @@ ROCKBOX_BOOT_WAIT_MS = 20_000
 #: Height of the paperclip diagram. Drawn 8% larger than the original 60 px so
 #: the pin and the button it points at stay legible on a phone-sized photo.
 _PAPERCLIP_HINT_PX = round(60 * 1.08)
+
+#: The progress card's type scale. One rank per job, so a prompt and the hint
+#: under it never read as two different kinds of text: the software title is
+#: the small bold line, a question in the band is the only 14, and every
+#: sentence of body copy — prompt, hint, explainer, reassurance — is 12.
+_TITLE_PX = 13
+_QUESTION_PX = 14
+_BODY_PX = 12
 
 
 def install_horizontal_chrome(sidebar: int) -> int:
@@ -176,6 +225,11 @@ class _FitLabel(_StatusLabel):
 
     def __init__(self, text: str = ""):
         self._wrap_width = INSTALL_TEXT_WIDTH
+        # Height is measured at this width. The column (and the minimum width
+        # that sizes the window) stays ``_wrap_width``; a label the host has
+        # already given its real width can tighten its reserved height without
+        # moving anything. See :meth:`set_measure_width`.
+        self._measure_width = INSTALL_TEXT_WIDTH
         self._elide = False
         self._marquee = False
         self._single_line = False
@@ -193,8 +247,25 @@ class _FitLabel(_StatusLabel):
         if getattr(self, "_wrap_width", None) == target_w:
             return
         self._wrap_width = target_w
+        self._measure_width = target_w
         if not self._single_line:
             self.setMinimumWidth(self._wrap_width)
+        self._refresh_mode()
+        self.updateGeometry()
+
+    def set_measure_width(self, width: int) -> None:
+        """Reserve the height this label needs at ``width``.
+
+        A word-wrapped label inside a fixed column reserves the lines the
+        column would need, which is far more than it draws once the card is
+        wider than that column — the leftover becomes a gap under the text.
+        Only the height follows ``width`` here: the column and its minimum
+        width are untouched, so window sizing does not move.
+        """
+        target = max(1, int(width))
+        if self._measure_width == target:
+            return
+        self._measure_width = target
         self._refresh_mode()
         self.updateGeometry()
 
@@ -251,16 +322,19 @@ class _FitLabel(_StatusLabel):
         if self._single_line:
             return QSize(self.line_width(), self.heightForWidth(self._wrap_width))
         if self._elide or self._marquee:
-            return QSize(self._wrap_width, self.heightForWidth(self._wrap_width))
-        return QSize(self._wrap_width, self._wrapped_height(self._wrap_width))
+            return QSize(self._wrap_width, self.heightForWidth(self._measures()))
+        return QSize(self._wrap_width, self._wrapped_height(self._measures()))
 
     def minimumSizeHint(self):  # noqa: N802 (Qt naming)
         if self._single_line:
             return QSize(0, self.heightForWidth(self._wrap_width))
         return QSize(
             min(self._wrap_width, max(40, self._unbroken_width())),
-            self._wrapped_height(self._wrap_width),
+            self._wrapped_height(self._measures()),
         )
+
+    def _measures(self) -> int:
+        return max(self._wrap_width, int(self._measure_width))
 
     def _unbroken_width(self) -> int:
         text = self.text() or ""
@@ -299,7 +373,7 @@ class _FitLabel(_StatusLabel):
             self._stop_marquee()
         self.setWordWrap(not self._elide and not self._marquee)
         if not self._elide and not self._marquee:
-            self.setMinimumHeight(self._wrapped_height(self._wrap_width))
+            self.setMinimumHeight(self._wrapped_height(self._measures()))
         else:
             self.setMinimumHeight(max(18, self.fontMetrics().height() + 2))
 
@@ -407,7 +481,7 @@ def _style_card_heading(label) -> None:
     if label is None:
         return
     font = label.font()
-    font.setPixelSize(14)
+    font.setPixelSize(_QUESTION_PX)
     font.setWeight(QFont.Weight.Bold)
     label.setFont(font)
     _apply_card_text(label)
@@ -416,7 +490,7 @@ def _style_card_heading(label) -> None:
 def _status_label(text: str, *, strong: bool = False) -> _FitLabel:
     label = _FitLabel(text)
     font = label.font()
-    font.setPixelSize(13 if strong else 12)
+    font.setPixelSize(_TITLE_PX if strong else _BODY_PX)
     font.setWeight(QFont.Weight.DemiBold if strong else QFont.Weight.Normal)
     label.setFont(font)
     _apply_card_text(label)
@@ -670,14 +744,22 @@ class _CardHead(QWidget):
         return res
 
     def band_span(self) -> tuple[int, int]:
-        """Vertical extent of title + band in this row's coordinates."""
+        """Vertical extent of the row's action line, in this row's coordinates.
+
+        The band leads the head now, with the software title beneath it, so the
+        line the icon and chips are centred on is the band's own row; the title
+        is only the fallback when no band is showing.
+        """
         self._sync_to_band()
-        top = self.identity.y() + self.title.geometry().top()
         if self.band is not None and not self.band.isHidden():
-            bottom = self.identity.y() + self.band.geometry().bottom()
-        else:
-            bottom = self.identity.y() + self.title.geometry().bottom()
-        return top, bottom
+            return (
+                self.identity.y() + self.band.geometry().top(),
+                self.identity.y() + self.band.geometry().bottom(),
+            )
+        return (
+            self.identity.y() + self.title.geometry().top(),
+            self.identity.y() + self.title.geometry().bottom(),
+        )
 
 
 class _GlyphActions(QWidget):
@@ -1780,7 +1862,9 @@ class FlashPage(QWidget):
 
     def _build_waiting_view(self):
         self._wait_icon = _make_squircle_icon()
-        self._wait_pkg_label = _status_label(self._package_name or "\u2014", strong=True)
+        # Reference copy, not the card's action line: the prompt or question
+        # takes the top row and this name sits under it at body size.
+        self._wait_pkg_label = _status_label(self._package_name or "\u2014")
         self._wait_progress_bar = InstallProgress()
         _configure_progress(self._wait_progress_bar)
 
@@ -1816,6 +1900,12 @@ class FlashPage(QWidget):
         self._wait_question_label.setWordWrap(True)
         self._wait_question_label.setTextFormat(Qt.PlainText)
         self._wait_question_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        # The prompt's own line carries the tip's How? link as its last words.
+        self._wait_question_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.LinksAccessibleByMouse
+        )
+        self._wait_question_label.setOpenExternalLinks(False)
+        self._wait_question_label.linkActivated.connect(self._on_paperclip_help)
         _style_card_heading(self._wait_question_label)
         self._wait_question_label.setVisible(False)
         self._wait_head_stack.addWidget(self._wait_question_label)
@@ -1826,6 +1916,25 @@ class FlashPage(QWidget):
             [self._wait_cancel_btn, self._wait_continue_btn],
         )
         self._wait_row = self._wait_head.box
+        # The question in the software title's own row. The card asks it there
+        # when the band is busy holding the firmware list instead, so the two
+        # lines of the head read question -> list, with the X and the tick on
+        # the list's axis.
+        self._wait_question_heading = QLabel("")
+        self._wait_question_heading.setWordWrap(True)
+        self._wait_question_heading.setTextFormat(Qt.PlainText)
+        self._wait_question_heading.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        _style_card_heading(self._wait_question_heading)
+        self._wait_question_heading.setVisible(False)
+        # The card's own line — prompt, question or progress band — owns the
+        # top row, and the software title drops beneath it in small copy: the
+        # line the user has to act on is what the head is for.
+        identity = self._wait_head.identity_box
+        identity.removeWidget(self._wait_pkg_label)
+        identity.removeWidget(self._wait_head_stack)
+        identity.insertWidget(0, self._wait_question_heading)
+        identity.insertWidget(1, self._wait_head_stack)
+        identity.insertWidget(2, self._wait_pkg_label)
 
         self._wait_prompt_label = _status_label(
             tr("flash_connect_device_prompt").format(model=self._connect_model_text())
@@ -1841,7 +1950,9 @@ class FlashPage(QWidget):
         self._keep_data_cb.setChecked(False)
         self._keep_data_cb.setToolTip(tr("flash_keep_data_tooltip"))
         self._keep_data_cb.setAccessibleName(tr("flash_keep_data_option"))
-        apply_explicit_foreground(self._keep_data_cb, " font-size: 12px; border: none;")
+        apply_explicit_foreground(
+            self._keep_data_cb, f" font-size: {_BODY_PX}px; border: none;"
+        )
         self._keep_data_cb.setVisible(False)
         copy.addWidget(self._keep_data_cb)
         self._keep_data_choice = QComboBox()
@@ -1849,22 +1960,17 @@ class FlashPage(QWidget):
         self._keep_data_choice.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
         )
-        # The firmware list sits directly under the question that asks for it,
-        # where the single-firmware question used to be: the card asks "Which
-        # software is currently running on your Y1?" in the band's slot, then
-        # lists the software to choose from beneath that line. It stops at the
-        # chips' leading edge — the progress band's own right edge — so it
-        # never reads as a wider second row under the card head.
+        # The firmware list takes the band's own slot, between the icon and the
+        # chips: it is what the question is about, so it belongs on the band's
+        # axis, with the round chips reading as the answers to the row it sits
+        # on. While it is there the software title gives its row to the
+        # question (see ``_sync_wait_band_page``).
         self._keep_data_choice_holder = QWidget()
         choice_row = QHBoxLayout(self._keep_data_choice_holder)
-        choice_row.setContentsMargins(
-            0, 0, _CARD_HEAD_GAP * 2 + 2 * ROUND_NEXT_BUTTON_PX, 0
-        )
+        choice_row.setContentsMargins(0, 0, 0, 0)
         choice_row.setSpacing(0)
         choice_row.addWidget(self._keep_data_choice)
-        copy.insertWidget(
-            copy.indexOf(self._wait_prompt_label) + 1, self._keep_data_choice_holder
-        )
+        self._wait_head_stack.addWidget(self._keep_data_choice_holder)
         self._keep_data_choice.setVisible(False)
         self._keep_data_choice_holder.setVisible(False)
         self._wait_head_stack.setCurrentWidget(self._wait_progress_bar)
@@ -1879,8 +1985,28 @@ class FlashPage(QWidget):
         self._keep_data_warning = QLabel("")
         self._keep_data_warning.setWordWrap(True)
         self._keep_data_warning.setProperty("cssClass", "hint")
+        self._keep_data_warning.setTextFormat(Qt.TextFormat.RichText)
+        self._keep_data_warning.setTextInteractionFlags(
+            Qt.TextInteractionFlag.LinksAccessibleByMouse
+        )
+        self._keep_data_warning.setOpenExternalLinks(False)
+        self._keep_data_warning.linkActivated.connect(self._on_keep_data_warning_got_it)
         self._keep_data_warning.setVisible(False)
         copy.addWidget(self._keep_data_warning)
+        # "If you continue without this…" waits behind a link: it is a
+        # paragraph for the reader who is deciding, not a line every card owes
+        # the reader who already knows.
+        self._keep_data_warning_revealed = False
+        self._keep_data_help_link = QLabel(self._keep_data_help_html())
+        self._keep_data_help_link.setTextFormat(Qt.TextFormat.RichText)
+        self._keep_data_help_link.setTextInteractionFlags(
+            Qt.TextInteractionFlag.LinksAccessibleByMouse
+        )
+        self._keep_data_help_link.setOpenExternalLinks(False)
+        self._keep_data_help_link.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._keep_data_help_link.linkActivated.connect(self._on_keep_data_help)
+        self._keep_data_help_link.setVisible(False)
+        copy.insertWidget(copy.indexOf(self._keep_data_warning), self._keep_data_help_link)
         self._keep_data_cb.toggled.connect(self._update_keep_data_warning)
         self._keep_data_allowed = True
         self._keep_data_confirm_active = False
@@ -1890,12 +2016,34 @@ class FlashPage(QWidget):
         self._format_all_confirm_active = False
         self._wait_col = copy
 
-        self._keep_data_microsd_note = QLabel(tr("keep_data_microsd_reassurance"))
+        self._keep_data_microsd_note = QLabel(self._microsd_note_html())
         self._keep_data_microsd_note.setWordWrap(True)
         self._keep_data_microsd_note.setProperty("cssClass", "dimmed")
-        self._keep_data_microsd_note.setStyleSheet("font-size: 11px; margin-top: 2px;")
+        self._keep_data_microsd_note.setStyleSheet(
+            f"font-size: {_BODY_PX}px; margin-top: 2px;"
+        )
+        self._keep_data_microsd_note.setTextFormat(Qt.TextFormat.RichText)
+        self._keep_data_microsd_note.setTextInteractionFlags(
+            Qt.TextInteractionFlag.LinksAccessibleByMouse
+        )
+        self._keep_data_microsd_note.setOpenExternalLinks(False)
+        self._keep_data_microsd_note.linkActivated.connect(self._on_microsd_got_it)
         self._keep_data_microsd_note.setVisible(False)
-        copy.addWidget(self._keep_data_microsd_note)
+        copy.insertWidget(copy.indexOf(self._keep_data_cb) + 1, self._keep_data_microsd_note)
+
+        # What the tick keeps and what the install replaces, under the tick it
+        # describes. The warning below covers the unchecked case, so only one
+        # of the two ever speaks at a time.
+        self._keep_data_note = QLabel(tr("flash_keep_data_tooltip"))
+        self._keep_data_note.setWordWrap(True)
+        self._keep_data_note.setProperty("cssClass", "dimmed")
+        self._keep_data_note.setStyleSheet(
+            f"font-size: {_BODY_PX}px; margin-top: 2px;"
+        )
+        self._keep_data_note.setVisible(False)
+        # Right under the tick, above the microSD reassurance: what keeping data
+        # means first, then the one thing that is never touched.
+        copy.insertWidget(copy.indexOf(self._keep_data_cb) + 1, self._keep_data_note)
 
         # Retained for attribute compatibility, but kept hidden and not added to layout
         self._attempt_lbl = QLabel("")
@@ -1925,7 +2073,7 @@ class FlashPage(QWidget):
         # Paperclip hint with diagram image and model-specific wording in the main card
         self._paperclip_hint = _status_label("")
         hint_font = self._paperclip_hint.font()
-        hint_font.setPixelSize(12)
+        hint_font.setPixelSize(_BODY_PX)
         self._paperclip_hint.setFont(hint_font)
         self._paperclip_hint.setWordWrap(True)
         self._paperclip_hint.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
@@ -1933,16 +2081,33 @@ class FlashPage(QWidget):
         self._paperclip_img = _SvgVectorWidget()
         self._paperclip_img.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
+        # The acknowledgement is the last words of the tip itself, so it reads
+        # as one sentence — "... using a paperclip or pin. Got it." — instead
+        # of a second line that costs a whole row of the card.
+        self._paperclip_hint.setTextFormat(Qt.TextFormat.RichText)
+        self._paperclip_hint.setTextInteractionFlags(
+            Qt.TextInteractionFlag.LinksAccessibleByMouse
+        )
+        self._paperclip_hint.setOpenExternalLinks(False)
+        self._paperclip_hint.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._paperclip_hint.linkActivated.connect(self._on_paperclip_got_it)
+        self._paperclip_sentence = ""
+        # The tip is asked for: the prompt line ends in its How? link, and the
+        # diagram and its copy arrive when the link is followed.
+        self._paperclip_revealed = False
+
         self._paperclip_hint_host = QWidget()
         self._paperclip_hint_host.setObjectName("paperclipHintHost")
-        self._paperclip_hint_host.setStyleSheet("background: transparent; border: none; margin-top: 6px;")
+        self._paperclip_hint_host.setStyleSheet("background: transparent; border: none; margin-top: 2px;")
         hint_layout = QVBoxLayout(self._paperclip_hint_host)
-        hint_layout.setContentsMargins(0, 4, 0, 4)
-        hint_layout.setSpacing(8)
+        hint_layout.setContentsMargins(0, 0, 0, 0)
+        hint_layout.setSpacing(6)
         hint_layout.addWidget(self._paperclip_hint)
         hint_layout.addWidget(self._paperclip_img, 0, Qt.AlignmentFlag.AlignLeft)
         self._paperclip_hint_host.setVisible(False)
-        copy.addWidget(self._paperclip_hint_host)
+        # Above the tick, which sits below it: the hint says how to power the
+        # player off, then the tick and its copy say what the install keeps.
+        copy.insertWidget(copy.indexOf(self._keep_data_cb), self._paperclip_hint_host)
         self._update_paperclip_hint()
 
         return self._wrap_centered(self._wait_card)
@@ -2370,8 +2535,9 @@ class FlashPage(QWidget):
             and not is_mtk
             and not getattr(self, "_stop_open", False)
         )
-        wanted = is_power_off or is_usb_disconnected
-        if not wanted:
+        wanted = (is_power_off or is_usb_disconnected) and not _hint_dismissed("paperclip")
+        revealed = bool(getattr(self, "_paperclip_revealed", False))
+        if not wanted or not revealed:
             host.setVisible(False)
             if img_label is not None:
                 img_label.setFixedSize(0, 0)
@@ -2384,11 +2550,17 @@ class FlashPage(QWidget):
             model_name = device_label_for_model(model) if model else tr("device_fallback_word")
             is_a5 = is_a5_model(model)
             key = "flash_paperclip_hint_a5" if is_a5 else "flash_paperclip_hint"
-            label.setText(tr(key).format(model=model_name))
+            self._paperclip_sentence = tr(key).format(model=model_name)
+            label.setText(self._paperclip_hint_html(self._paperclip_sentence))
             label.setVisible(True)
+            # Measure at the width the card actually gives the tip, once the
+            # layout has run: the wrap column is narrower than the card, and
+            # reserving for it left a gap between the sentence and the diagram.
+            QTimer.singleShot(0, self._fit_paperclip_hint_height)
         else:
             # In disconnect recovery / failover, prompt label already carries the
             # instructions; show only the paperclip diagram image without duplicate text.
+            self._paperclip_sentence = ""
             label.setText("")
             label.setVisible(False)
 
@@ -2445,12 +2617,14 @@ class FlashPage(QWidget):
             if not source.isNull():
                 img_label.setProperty("_hint_source", source)
 
+            hint_h = label.sizeHint().height() if label.isVisible() else 0
             if hasattr(img_label, "load_svg"):
                 ok = img_label.load_svg(img_path, txt)
                 img_label.setVisible(ok)
                 if ok and host is not None:
-                    hint_h = label.sizeHint().height() if label.isVisible() else 0
-                    host.setMinimumHeight(int(img_label.height()) + hint_h + 12)
+                    # Exactly the tip and its diagram plus the gap between them:
+                    # reserving more left a hole under the sentence.
+                    host.setMinimumHeight(int(img_label.height()) + hint_h + 4)
             else:
                 if not source.isNull():
                     img_label.setPixmap(source)
@@ -2458,8 +2632,9 @@ class FlashPage(QWidget):
                     img_label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
                     img_label.setVisible(True)
                     if host is not None:
-                        hint_h = label.sizeHint().height() if label.isVisible() else 0
-                        host.setMinimumHeight(int(source.deviceIndependentSize().height()) + hint_h + 12)
+                        host.setMinimumHeight(
+                            int(source.deviceIndependentSize().height()) + hint_h + 4
+                        )
                 else:
                     img_label.setVisible(False)
                     img_label.setFixedSize(0, 0)
@@ -2467,7 +2642,9 @@ class FlashPage(QWidget):
                         host.setMinimumHeight(0)
 
         waiting = getattr(self, "_waiting_view", None)
-        host.setVisible(waiting is not None and self._stack.currentWidget() is waiting)
+        host.setVisible(
+            revealed and waiting is not None and self._stack.currentWidget() is waiting
+        )
         self._note_paperclip_visibility_change(was_hidden)
 
     def _note_paperclip_visibility_change(self, was_hidden: bool) -> None:
@@ -2855,6 +3032,8 @@ class FlashPage(QWidget):
             self._keep_data_cb.setVisible(False)
         if hasattr(self, "_keep_data_warning"):
             self._keep_data_warning.setVisible(False)
+        if hasattr(self, "_keep_data_help_link"):
+            self._keep_data_help_link.setVisible(False)
         self.show_flashing()
         self._warning.setVisible(False)
         if hasattr(self, "_appeal"):
@@ -2932,6 +3111,9 @@ class FlashPage(QWidget):
         if hasattr(self, "_adb_watch_timer"):
             self._adb_watch_timer.stop()
         self._close_theme_folder_dialog()
+        sim_timer = getattr(self, "_sim_theme_timer", None)
+        if sim_timer is not None:
+            sim_timer.stop()
         for attr in ("_adb_watch_worker", "_adb_push_worker", "_dir_merge_worker"):
             w = getattr(self, attr, None)
             if w is not None:
@@ -3095,8 +3277,13 @@ class FlashPage(QWidget):
             self._keep_data_cb.setVisible(False)
         if hasattr(self, "_keep_data_warning"):
             self._keep_data_warning.setVisible(False)
+        if hasattr(self, "_keep_data_help_link"):
+            self._keep_data_help_link.setVisible(False)
         msg = self._power_off_prompt_text()
         self._wait_prompt_label.setText(msg)
+        # The recovery sentence is the card's action line here, so it belongs
+        # in the band's slot rather than under a bar that can only say 0%.
+        self._sync_wait_band_page()
         if hasattr(self._wait_progress_bar, "set_failed"):
             self._wait_progress_bar.set_failed(True)
         else:
@@ -3206,6 +3393,12 @@ class FlashPage(QWidget):
         model_str = (model or "Y1").upper()
         self._rockbox_already_powered_on = bool(already_powered_on)
         self._log_theme(f"[Rockbox Themes] Starting 360p themes & fonts stage for {model_str}...")
+
+        from .. import simulation
+
+        if simulation.enabled():
+            self._start_simulated_themes_stage()
+            return
 
         from ..adb import find_adb_binary, adb_devices
         adb_bin = find_adb_binary()
@@ -3423,6 +3616,38 @@ class FlashPage(QWidget):
         self._adb_push_worker.log.connect(self._log_theme)
         self._adb_push_worker.finished.connect(self._on_theme_push_finished)
         self._adb_push_worker.start()
+
+    def _start_simulated_themes_stage(self) -> None:
+        """The themes stage with no player attached: same widgets, no ADB."""
+        self._log_theme(
+            "[Simulation] Hardware skipped: the themes and fonts push completes itself."
+        )
+        self.set_step(tr("rockbox_stage_installing"))
+        self._eta_label.setText(tr("rockbox_stage_pushing"))
+        for attr in ("_theme_row", "_theme_step1_widget", "_theme_fallback_widget", "_theme_trouble_widget"):
+            widget = getattr(self, attr, None)
+            if widget is not None:
+                widget.setVisible(False)
+        self._hide_theme_wizard_chips()
+        if hasattr(self, "_flash_head"):
+            self._flash_head._sync_to_band()
+        self.themes.reset_progress()
+        self._sim_theme_percent = 0
+        timer = getattr(self, "_sim_theme_timer", None)
+        if timer is None:
+            timer = QTimer(self)
+            timer.setInterval(120)
+            timer.timeout.connect(self._sim_theme_tick)
+            self._sim_theme_timer = timer
+        timer.start()
+
+    def _sim_theme_tick(self) -> None:
+        self._sim_theme_percent = min(100, self._sim_theme_percent + 5)
+        self._on_theme_push_progress(self._sim_theme_percent, 100)
+        if self._sim_theme_percent >= 100:
+            self._sim_theme_timer.stop()
+            # The success path, unchanged: verification, placement, hand-off.
+            QTimer.singleShot(250, lambda: self._on_theme_push_finished(True, ""))
 
     def _on_theme_push_progress(self, curr: int, total: int) -> None:
         from ..progress_model import scale_theme_progress
@@ -3878,10 +4103,10 @@ class FlashPage(QWidget):
             return
         visible = self._keep_data_visible()
         cb.setVisible(visible)
-        if hasattr(self, "_keep_data_microsd_note"):
-            self._keep_data_microsd_note.setVisible(visible)
         if not visible:
             self._keep_data_warning.setVisible(False)
+        # Warning, explainer and microSD reassurance are set together there,
+        # with the tick's own state and the user's dismissed-hint choices.
         self._update_keep_data_warning()
 
     def set_has_userdata(self, has_userdata: bool, preserve_data_default: bool = False) -> None:
@@ -3918,11 +4143,27 @@ class FlashPage(QWidget):
         self._sync_keep_data_visibility()
         self._update_keep_data_warning()
 
+    def _keep_data_help_html(self) -> str:
+        """The link that opens the "if you continue without this" line."""
+        return _hint_text_link("keep-data-help", tr("keep_data_help_link"))
+
+    def _on_keep_data_help(self, _link: str = "") -> None:
+        self._keep_data_warning_revealed = True
+        self._update_keep_data_warning()
+        self._notify_geometry_change()
+
+    def _on_keep_data_warning_got_it(self, _link: str = "") -> None:
+        self._keep_data_warning_revealed = False
+        _set_hint_dismissed("keep_data_warning")
+        self._update_keep_data_warning()
+        self._notify_geometry_change()
+
     def _update_keep_data_warning(self) -> None:
         """Explain what happens without the tick, in model-appropriate terms."""
         warning = getattr(self, "_keep_data_warning", None)
         cb = getattr(self, "_keep_data_cb", None)
         microsd_note = getattr(self, "_keep_data_microsd_note", None)
+        note = getattr(self, "_keep_data_note", None)
         if warning is None or cb is None:
             return
         model = str(getattr(self, "_model", "") or "").upper()
@@ -3964,13 +4205,57 @@ class FlashPage(QWidget):
             elif not cb.isChecked():
                 key = "flash_keep_data_warning_y1" if y1_like else "flash_keep_data_warning"
                 text = tr(key)
-        if warning.text() != text:
-            warning.setText(text)
-        warning.setVisible(bool(text))
+        # Only the "if you continue without this" explanation waits behind a
+        # link: an unavailable or format-all warning is news the reader needs
+        # now and stays on the card. The link is the explanation's only door,
+        # so once that Got it is used the link goes too: a door with nothing
+        # behind it is worse than no door, and the hint is never re-shown.
+        self._keep_data_warning_sentence = text
+        explanation = bool(
+            visible
+            and getattr(self, "_keep_data_allowed", True)
+            and not cb.isChecked()
+            and not format_required
+        )
+        dismissed = _hint_dismissed("keep_data_warning")
+        revealed = bool(getattr(self, "_keep_data_warning_revealed", False)) and not dismissed
+        help_link = getattr(self, "_keep_data_help_link", None)
+        if help_link is not None:
+            wanted_link = self._keep_data_help_html()
+            if help_link.text() != wanted_link:
+                help_link.setText(wanted_link)
+            help_link.setVisible(explanation and not revealed and not dismissed)
+        if explanation:
+            # Hidden until the link is followed, and hidden again for good once
+            # its Got it is used: toggling the tick must not bring it back.
+            body = (
+                f"{text} {_hint_text_link('keep-data-got-it', tr('hint_got_it'))}"
+                if revealed
+                else ""
+            )
+        else:
+            body = text
+        if warning.text() != body:
+            warning.setText(body)
+        warning.setVisible(bool(body))
+        if note is not None:
+            # The tick explains itself only while it is on; the warning above
+            # carries the explanation for the unchecked case instead.
+            note_text = (
+                tr("flash_keep_data_tooltip")
+                if (visible and cb.isChecked() and not format_required)
+                else ""
+            )
+            if note.text() != note_text:
+                note.setText(note_text)
+            note.setVisible(bool(note_text))
         if microsd_note is not None:
             # The format-all warning already says what happens to microSD
-            # media; the standalone reassurance would repeat it.
-            microsd_note.setVisible(bool(text) and not format_visible)
+            # media; the standalone reassurance would repeat it. A user who
+            # put it away with its Got it link keeps it away.
+            microsd_note.setVisible(
+                bool(text) and not format_visible and not _hint_dismissed("microsd")
+            )
         self._notify_geometry_change()
 
     def show_keep_data_confirmation(
@@ -3987,6 +4272,8 @@ class FlashPage(QWidget):
         self._keep_data_cb.setVisible(False)
         if hasattr(self, "_keep_data_warning"):
             self._keep_data_warning.setVisible(False)
+        if hasattr(self, "_keep_data_help_link"):
+            self._keep_data_help_link.setVisible(False)
         names = [str(c) for c in (choices or ()) if str(c).strip()]
         self._keep_data_choice.clear()
         self._keep_data_choice.addItems(names)
@@ -4105,6 +4392,7 @@ class FlashPage(QWidget):
         self._power_off_recovery_key = "format_all_recovery"
         self._power_off_recovery_kwargs = {"model": self._connect_model_text()}
         self._wait_prompt_label.setText(self._power_off_prompt_text())
+        self._sync_wait_band_page()
         self._update_keep_data_warning()
         self._update_paperclip_hint()
 
@@ -4116,6 +4404,93 @@ class FlashPage(QWidget):
             cb = getattr(self, "_try_anyway_callback", None)
             if callable(cb):
                 cb()
+
+    def _microsd_note_html(self) -> str:
+        """The microSD reassurance with its own Got it link at the end."""
+        from html import escape
+
+        return (
+            f"{escape(tr('keep_data_microsd_reassurance'))} "
+            f"{_hint_text_link('got-it', tr('hint_got_it'))}"
+        )
+
+    def _fit_paperclip_hint_height(self) -> None:
+        """Reserve the paperclip tip's height for the width it is drawn at.
+
+        The host reserves the tip plus its diagram, so its figure has to follow
+        the label's new measured height; otherwise the space saved by wrapping
+        to the card's width stays reserved under the sentence.
+        """
+        label = getattr(self, "_paperclip_hint", None)
+        if label is None or label.isHidden() or label.width() <= 0:
+            return
+        if not hasattr(label, "set_measure_width"):
+            return
+        label.set_measure_width(label.width())
+        host = getattr(self, "_paperclip_hint_host", None)
+        image = getattr(self, "_paperclip_img", None)
+        if host is not None and image is not None and image.isVisible():
+            wanted = int(image.height()) + label.sizeHint().height() + 4
+            if host.minimumHeight() != wanted:
+                host.setMinimumHeight(wanted)
+                self._notify_geometry_change()
+
+    def _paperclip_hint_html(self, sentence: str) -> str:
+        """The paperclip tip with its Got it link as the end of the sentence."""
+        from html import escape
+
+        return f"{escape(sentence)} {_hint_text_link('got-it', tr('hint_got_it'))}"
+
+    def _paperclip_help_html(self) -> str:
+        """The link that opens the paperclip tip on a power-off card."""
+        return _hint_text_link("show-hint", tr("flash_paperclip_help"))
+
+    def _paperclip_help_wanted(self) -> bool:
+        """Whether the prompt line should end in the tip's How? link."""
+        if _hint_dismissed("paperclip") or getattr(self, "_paperclip_revealed", False):
+            return False
+        if getattr(self, "_stop_open", False):
+            return False
+        copy = getattr(self, "_wait_copy", "")
+        if copy == "power_off":
+            return bool((getattr(self, "_model", "") or "").strip()) and getattr(
+                self, "_show_pin_tip", True
+            )
+        if copy == "usb_disconnected":
+            from ..branding import is_generic_mtk_brand
+
+            return not is_generic_mtk_brand()
+        return False
+
+    def _prompt_band_html(self, sentence: str) -> str:
+        """The prompt, with the tip's How? link as the end of its sentence."""
+        from html import escape
+
+        text = escape(sentence)
+        if self._paperclip_help_wanted():
+            text = f"{text} {self._paperclip_help_html()}"
+        return text
+
+    def _on_paperclip_help(self, _link: str = "") -> None:
+        """Open the paperclip tip: the diagram is shown when it is asked for."""
+        self._paperclip_revealed = True
+        self._update_paperclip_hint()
+        # The How? link has done its job: the prompt keeps its own words.
+        self._sync_wait_band_page()
+        self._notify_geometry_change()
+
+    def _on_paperclip_got_it(self, _link: str = "") -> None:
+        """Put the paperclip tip away for good: it is never shown again."""
+        _set_hint_dismissed("paperclip")
+        self._update_paperclip_hint()
+        self._sync_wait_band_page()
+        self._relayout_for_text()
+
+    def _on_microsd_got_it(self, _link: str = "") -> None:
+        """Put the microSD reassurance away and remember that it was read."""
+        _set_hint_dismissed("microsd")
+        self._update_keep_data_warning()
+        self._relayout_for_text()
 
     def _set_yes_no_glyphs(self, yes_no: bool) -> None:
         """Swap the wait card's chips between Next/Cancel and Yes/No glyphs."""
@@ -4139,7 +4514,7 @@ class FlashPage(QWidget):
             btn.setAccessibleName(label)
 
     def _show_keep_data_choice(self, active: bool) -> None:
-        """Show the firmware list under the question that asks about it."""
+        """Show the firmware list in the band's slot, level with the chips."""
         choice = getattr(self, "_keep_data_choice", None)
         if choice is None:
             return
@@ -4161,23 +4536,82 @@ class FlashPage(QWidget):
         label.setText(str(text or ""))
         self._sync_wait_band_page()
 
+    def _style_wait_band_line(self, label, *, pixel: int, weight: QFont.Weight) -> None:
+        """A question is the bold 14; the prompt leads the card at 13 semibold.
+
+        The prompt has no software title above it any more, so it is the card's
+        headline: it takes the title's rank instead of reading as body copy.
+        """
+        key = (pixel, weight)
+        if getattr(self, "_wait_band_style", None) == key:
+            return
+        self._wait_band_style = key
+        font = label.font()
+        font.setPixelSize(pixel)
+        font.setWeight(weight)
+        label.setFont(font)
+
     def _sync_wait_band_page(self) -> None:
-        """The band's slot belongs to the question while the card is asking.
+        """The band's slot belongs to the card's own line while it is asking.
 
         Every path that moves the card on sets a progress value again, so the
         band comes back by itself once the question has been answered or
         abandoned; a question must never be left standing over a live run.
+
+        A prompt-only stage — power the player off, bring it back after a
+        dropped USB — has no percentage to report, so a bar frozen at 0% there
+        reports nothing. Its sentence takes the band's slot instead, which puts
+        the words of the action on the same row as the X and the tick that
+        answer it, and the copy line under the band stops repeating it.
         """
         stack = getattr(self, "_wait_head_stack", None)
         if stack is None:
             return
         question = getattr(self, "_wait_question_label", None)
+        prompt = getattr(self, "_wait_prompt_label", None)
+        heading = getattr(self, "_wait_question_heading", None)
+        title = getattr(self, "_wait_pkg_label", None)
         asking = bool(
             getattr(self, "_keep_data_confirm_active", False)
             or getattr(self, "_keep_data_erase_confirm_active", False)
             or getattr(self, "_format_all_confirm_active", False)
         )
-        if asking and question is not None and question.text().strip():
+        prompt_line = ""
+        if (
+            not asking
+            and getattr(self, "_prompt_only", False)
+            and not getattr(self, "_stop_open", False)
+            and prompt is not None
+        ):
+            prompt_line = prompt.text().strip()
+        band_text = question.text().strip() if asking and question is not None else prompt_line
+        if not band_text:
+            band_text = ""
+        prompt_band = bool(band_text) and not asking
+        if question is not None and band_text:
+            if asking:
+                question.setTextFormat(Qt.TextFormat.PlainText)
+                if question.text() != band_text:
+                    question.setText(band_text)
+            else:
+                question.setTextFormat(Qt.TextFormat.RichText)
+                wanted_text = self._prompt_band_html(band_text)
+                if question.text() != wanted_text:
+                    question.setText(wanted_text)
+            self._style_wait_band_line(
+                question,
+                pixel=_QUESTION_PX if asking else _TITLE_PX,
+                weight=QFont.Weight.Bold if asking else QFont.Weight.DemiBold,
+            )
+        choice = getattr(self, "_keep_data_choice", None)
+        holder = getattr(self, "_keep_data_choice_holder", None)
+        # The list needs the band's slot, because that is the row the chips sit
+        # on. The question then takes the software title's row, so the card
+        # still reads as one question and its answers rather than two headings.
+        dropdown = bool(choice is not None and holder is not None and not choice.isHidden())
+        if dropdown:
+            wanted = holder
+        elif band_text:
             wanted = question
         else:
             wanted = self._wait_progress_bar
@@ -4186,15 +4620,29 @@ class FlashPage(QWidget):
         question_visible = wanted is question
         if question is not None and question.isVisible() != question_visible:
             question.setVisible(question_visible)
+        if heading is not None and title is not None:
+            heading_text = band_text if dropdown else ""
+            if heading.text() != heading_text:
+                heading.setText(heading_text)
+            heading.setVisible(bool(heading_text))
+            # The head leads with the line the user has to act on. A prompt-only
+            # stage has no title: "power off and disconnect" is about the player
+            # in hand, and the run's software name costs a row the prompt needs.
+            # A keep-data question keeps the name it explains; its dropdown case
+            # gives that row to the question instead.
+            title.setVisible(not (dropdown or prompt_band))
+        # The band already carries the sentence, so the line under it would
+        # repeat it. While the bar is reporting a real run, that line is the
+        # card's status copy and stays.
+        if prompt is not None:
+            prompt.setVisible(not (band_text or dropdown))
         # A single yes/no question keeps its two answers beside its words: the
         # chips slide in to the question and back out when it is answered. The
-        # dropdown screen has no chips to move — it widens into the band's
-        # column instead — so the pair stays on the row's edge there.
+        # dropdown screen has no chips to move — they stay on the row's edge,
+        # level with the list they confirm — so the pair is left alone there.
         head = getattr(self, "_wait_head", None)
-        choice = getattr(self, "_keep_data_choice", None)
-        dropdown = choice is not None and not choice.isHidden()
         if head is not None:
-            inline = bool(asking and question is not None and not dropdown)
+            inline = bool(band_text and question is not None and not dropdown)
             head.set_band_inline(inline, question)
 
     def keep_data_confirm_choice(self) -> str:
@@ -4230,6 +4678,8 @@ class FlashPage(QWidget):
         self._keep_data_cb.setVisible(False)
         if hasattr(self, "_keep_data_warning"):
             self._keep_data_warning.setVisible(False)
+        if hasattr(self, "_keep_data_help_link"):
+            self._keep_data_help_link.setVisible(False)
         if hasattr(self, "_wait_mode_hint"):
             self._wait_mode_hint.setText(hint or "")
             self._wait_mode_hint.setVisible(False)
@@ -4343,6 +4793,7 @@ class FlashPage(QWidget):
         self._model = (model or "").strip() or ""
         if hasattr(self, "_wait_prompt_label") and getattr(self, "_wait_copy", "") == "power_off":
             self._wait_prompt_label.setText(self._power_off_prompt_text())
+            self._sync_wait_band_page()
         if hasattr(self, "_prep_pkg_label"):
             self._render_package_name()
         self._update_paperclip_hint()
@@ -4354,7 +4805,10 @@ class FlashPage(QWidget):
 
     def refresh_theme(self):
         """Called when system theme or accent changes."""
+        if hasattr(self, "_keep_data_microsd_note"):
+            self._keep_data_microsd_note.setText(self._microsd_note_html())
         self._update_paperclip_hint()
+        self._update_keep_data_warning()
         if hasattr(self, "_post_install_hint"):
             self._post_install_hint.setText(self._post_install_hint_html())
         if hasattr(self, "_completion_guide_hint"):
@@ -5201,8 +5655,9 @@ class FlashPage(QWidget):
             self._keep_data_cb.setToolTip(tr("flash_keep_data_tooltip"))
             self._keep_data_cb.setAccessibleName(tr("flash_keep_data_option"))
         if hasattr(self, "_keep_data_microsd_note"):
-            self._keep_data_microsd_note.setText(tr("keep_data_microsd_reassurance"))
+            self._keep_data_microsd_note.setText(self._microsd_note_html())
         self._update_paperclip_hint()
+        self._sync_wait_band_page()
         if hasattr(self, "_post_install_hint"):
             self._post_install_hint.setText(self._post_install_hint_html())
         if hasattr(self, "_flash_retry_btn"):
@@ -5571,6 +6026,11 @@ class FlashPage(QWidget):
 
     def _relayout_for_text(self) -> None:
         self.sync_text_fit()
+        # The paperclip tip wraps to the card, not to the design column, so its
+        # reserved height follows the width it is actually given.
+        hint = getattr(self, "_paperclip_hint", None)
+        if hint is not None and not hint.isHidden() and hint.width() > 0:
+            hint.set_measure_width(hint.width())
         self.updateGeometry()
         self._notify_geometry_change()
 

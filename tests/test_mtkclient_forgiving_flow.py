@@ -71,6 +71,7 @@ def test_mtkclient_paperclip_prompt_and_120s_timeout():
     # Paperclip hint is available for known models at the power-off step
     page.show()
     page.show_power_off_prompt(show_pin_tip=True)
+    page._on_paperclip_help()
     paperclip_visible = getattr(page, "_paperclip_hint_host", None)
     assert paperclip_visible is not None and not paperclip_visible.isHidden()
     assert "headphone" in page._paperclip_hint.text().lower()

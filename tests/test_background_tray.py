@@ -9,6 +9,8 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ["INNIOASIS_HEADLESS"] = "1"
 
@@ -40,6 +42,17 @@ def _window():
 
 def _clear_opt_in():
     QSettings("innioasis", "updater").remove(tray.RUN_IN_BACKGROUND_KEY)
+
+
+@pytest.fixture(autouse=True)
+def _background_mode_available(monkeypatch):
+    """These checks cover the tray mechanics, which macOS currently parks.
+
+    The platform gate is asserted on its own below; here the feature is made
+    available so the hide/restore behaviour stays covered for the hosts that
+    still ship it.
+    """
+    monkeypatch.setattr(tray, "background_mode_supported", lambda: True)
 
 
 def test_background_opt_in_defaults_to_off():
@@ -342,4 +355,49 @@ def test_settings_run_in_background_toggled_updates_quit_on_last_window_closed(m
     finally:
         _clear_opt_in()
         settings_page.deleteLater()
+
+
+def test_macos_ignores_a_saved_background_opt_in(monkeypatch):
+    """macOS builds temporarily ship without the menu bar mode."""
+    monkeypatch.setattr(tray, "background_mode_supported", lambda: False)
+    QSettings("innioasis", "updater").setValue(tray.RUN_IN_BACKGROUND_KEY, True)
+    try:
+        assert tray.run_in_background_enabled() is False
+        assert tray.run_in_background_setting() is False
+    finally:
+        _clear_opt_in()
+
+
+def test_macos_settings_hides_the_background_switches(monkeypatch):
+    monkeypatch.setattr(tray, "background_mode_supported", lambda: False)
+    from src.ui.settings_page import SettingsPage
+
+    _app()
+    page = SettingsPage()
+    try:
+        assert page._background_card.isHidden()
+        assert page._cb_notifications_background.isHidden()
+    finally:
+        _clear_opt_in()
+        page.deleteLater()
+
+
+def test_macos_close_quits_instead_of_hiding(monkeypatch):
+    """Closing the window on macOS ends the process, tray opt-in or not."""
+    monkeypatch.setattr(tray, "background_mode_supported", lambda: False)
+    QSettings("innioasis", "updater").setValue(tray.RUN_IN_BACKGROUND_KEY, True)
+    quit_calls = []
+    app, win = _window()
+    monkeypatch.setattr(win, "_schedule_app_quit", lambda: quit_calls.append(True))
+    try:
+        event = QCloseEvent()
+        win.closeEvent(event)
+        assert event.isAccepted()
+        assert quit_calls == [True]
+        assert getattr(win, "_background_tray", None) is None
+    finally:
+        _clear_opt_in()
+        win._force_quit = True
+        win.close()
+        app.processEvents()
 

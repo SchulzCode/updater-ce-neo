@@ -33,19 +33,28 @@ from .ui.dark import T
 
 logger = logging.getLogger(__name__)
 
-#: Upstream Rockbox 360p themes repository zip.
-THEME_PACK_URL = "https://github.com/rockbox-y1/themes/archive/refs/heads/themepack.zip"
+#: Upstream Rockbox 360p themes release asset. The themes archive is no longer
+#: shipped inside the macOS app (it was 62 MB of every build); it is downloaded
+#: on first themes install and merged over the small bundled fonts pack.
+THEME_PACK_URL = "https://github.com/rockbox-y1/themes/releases/download/for_the_gays_and_the_theys/themepack.zip"
 
-#: Sources merged in order. The updater-ce-neo copies are refreshed before the
-#: GitHub Pages mirror and the upstream Rockbox archive, so new themes and fonts
-#: reach the app without waiting for a Pages cache rebuild.
-THEME_PACK_URLS = (
-    "https://raw.githubusercontent.com/y1-community/updater-ce-neo/main/assets/360p/themes-themepack.zip",
-    "https://raw.githubusercontent.com/y1-community/updater-ce-neo/main/assets/360p/fonts-pack-merge-into-themes-pack.zip",
-    "https://raw.githubusercontent.com/ryan-specter/updater-ce-neo/main/assets/360p/themes-themepack.zip",
-    "https://raw.githubusercontent.com/ryan-specter/updater-ce-neo/main/assets/360p/fonts-pack-merge-into-themes-pack.zip",
+#: Theme sources tried in order; the first one that answers is merged. The
+#: repository copies remain as fallbacks if the release asset is unavailable.
+THEME_PACK_THEME_URLS = (
     THEME_PACK_URL,
+    "https://raw.githubusercontent.com/y1-community/updater-ce-neo/main/assets/360p/themes-themepack.zip",
+    "https://raw.githubusercontent.com/ryan-specter/updater-ce-neo/main/assets/360p/themes-themepack.zip",
 )
+
+#: Font-only overlays, always merged after the themes so a themes-only archive
+#: cannot drop the bundled Rockbox fonts. They also seed a fresh cache.
+THEME_PACK_FONT_URLS = (
+    "https://raw.githubusercontent.com/y1-community/updater-ce-neo/main/assets/360p/fonts-pack-merge-into-themes-pack.zip",
+    "https://raw.githubusercontent.com/ryan-specter/updater-ce-neo/main/assets/360p/fonts-pack-merge-into-themes-pack.zip",
+)
+
+#: Every source a refresh uses, in order.
+THEME_PACK_URLS = THEME_PACK_THEME_URLS + THEME_PACK_FONT_URLS
 
 #: Remote/merged themepack archive name (downloads dir or bundled zip).
 THEME_PACK_ZIP_NAME = "rockbox_360p_themepack.zip"
@@ -135,11 +144,17 @@ def download_and_merge_theme_pack(
     timeout: float = 30.0,
     progress_cb: Optional[Callable[[int, int], None]] = None,
 ) -> tuple[bool, str, int]:
-    """Download every theme/font source and merge it into our 360p zip.
+    """Download the latest themes and merge them over the bundled fonts pack.
+
+    The themes archive is no longer shipped inside the macOS app, so the release
+    asset is fetched on first use. Only the first theme source that answers is
+    merged; the others are fallbacks. The font-only sources are always merged so
+    a themes-only archive cannot drop the bundled Rockbox fonts. Existing
+    destination entries are preserved, so a cached pack keeps its other files.
 
     In offline mode, immediately skips downloading and returns (True, "offline", 0).
-    If network download fails, logs a warning and returns (True, "offline_fallback", 0)
-    so callers continue seamlessly with existing stored 360p themes.
+    If every source fails, logs a warning and returns (True, "offline_fallback", 0)
+    so callers continue with the cached/bundled payload.
     """
     from . import config
     if config.is_offline_mode():
@@ -150,12 +165,11 @@ def download_and_merge_theme_pack(
 
     download_dir = downloads_dir()
     download_dir.mkdir(parents=True, exist_ok=True)
-    total_count = 0
-    merged_any = False
-    downloaded_all = 0
-    total_all = 0
-    last_error = None
-    for index, url in enumerate(THEME_PACK_URLS):
+    downloaded = [0]
+    totals = [0]
+    merge_count = 0
+
+    def fetch_and_merge(url: str, index: int) -> Optional[int]:
         temp_remote = download_dir / f"themepack_download_{index}.zip"
         tmp_part = temp_remote.with_suffix(".part")
         try:
@@ -163,33 +177,43 @@ def download_and_merge_theme_pack(
             with urllib.request.urlopen(request, timeout=timeout) as resp, open(tmp_part, "wb") as f:
                 source_total = int(resp.headers.get("Content-Length", 0) or 0)
                 if source_total > 0:
-                    total_all += source_total
-                source_done = 0
+                    totals[0] += source_total
                 while True:
                     chunk = resp.read(64 * 1024)
                     if not chunk:
                         break
                     f.write(chunk)
-                    source_done += len(chunk)
-                    downloaded_all += len(chunk)
+                    downloaded[0] += len(chunk)
                     if progress_cb:
-                        progress_cb(downloaded_all, total_all if total_all > 0 else 0)
+                        progress_cb(downloaded[0], totals[0] if totals[0] > 0 else 0)
             os.replace(tmp_part, temp_remote)
-            total_count = merge_remote_theme_pack_into_zip(temp_remote, target_zip_path)
-            merged_any = True
+            return merge_remote_theme_pack_into_zip(temp_remote, target_zip_path)
         except Exception as e:
-            last_error = e
             logger.warning("[Rockbox Themes] Source %s failed (%s); trying the next copy.", url, e)
+            return None
         finally:
             try:
                 temp_remote.unlink(missing_ok=True)
                 tmp_part.unlink(missing_ok=True)
             except Exception:
                 pass
-    if merged_any:
-        return True, "merged", total_count
-    logger.warning("[Rockbox Themes] All remote theme sources failed (%s); using stored 360p zip.", last_error)
-    return True, "offline_fallback", 0
+
+    themes_merged = False
+    for index, url in enumerate(THEME_PACK_THEME_URLS):
+        count = fetch_and_merge(url, index)
+        if count is not None:
+            merge_count = count
+            themes_merged = True
+            break
+    for offset, url in enumerate(THEME_PACK_FONT_URLS):
+        count = fetch_and_merge(url, len(THEME_PACK_THEME_URLS) + offset)
+        if count is not None:
+            merge_count = count
+
+    if themes_merged:
+        return True, "merged", merge_count
+    logger.warning("[Rockbox Themes] All theme sources failed; keeping the cached/bundled payload.")
+    return True, "offline_fallback", merge_count
 
 
 class ThemePackUpdateWorker(QThread):
@@ -510,6 +534,12 @@ class ThemePackGuidanceDialog(QDialog):
             self._select_btn.setEnabled(True)
             return
 
+        # The release asset carries themes; merge the bundled fonts over it so
+        # this legacy dialog installs the same payload the wizard does.
+        try:
+            ensure_normalized_theme_pack_zip(self._zip_path, force_rebuild=True)
+        except Exception:
+            logger.debug("Could not merge the bundled fonts into the theme pack", exc_info=True)
         self._start_install()
 
     def _start_install(self):
@@ -600,7 +630,9 @@ def ensure_normalized_theme_pack_zip(
     (no leading 'themes-themepack' or '.rockbox' directory wrapper).
 
     The original base files in assets/360p are never modified; building occurs in
-    a temporary working file before atomic replacement.
+    a temporary working file before atomic replacement. Packaged builds ship the
+    fonts pack but not the themes archive, so a fresh cache with no download
+    yields fonts only and the caller decides whether that is enough.
     """
     target = Path(target_zip_path) if target_zip_path else (downloads_dir() / THEME_PACK_ZIP_NAME)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -740,28 +772,44 @@ def build_combined_rockbox_dir(zip_path: str | Path, dest_dir: str | Path,
                                progress_cb: Optional[Callable[[int, int], None]] = None) -> int:
     """Build the full 360p payload: bundled base + remote overlay.
 
-    Copies :func:`bundled_rockbox_dir` (themes + fonts pack) into
-    ``dest_dir``, then extracts the latest remote themepack ``zip_path`` over
-    it, overwriting same-name files. Bundled-only files (notably fonts) are
-    preserved. Returns the number of remote files merged.
+    Copies the bundled base into ``dest_dir``, then extracts the latest remote
+    themepack ``zip_path`` over it, overwriting same-name files. The base is the
+    legacy ``.rockbox`` tree or bundled themes archive when present; packaged
+    builds ship only the fonts pack, which becomes the base so fonts survive.
+    Returns the number of remote files merged.
     """
+    import tempfile
+
     dest = Path(dest_dir)
     dest.mkdir(parents=True, exist_ok=True)
     base = None
+    extracted_base: Optional[Path] = None
     if bundled_rockbox_dir().is_dir():
         base = bundled_rockbox_dir()
     elif bundled_themepack_zip_path().is_file():
         # Prefer a bundled archive when the legacy directory is absent.
-        base = dest / "_from_bundled_zip"
-        extract_theme_pack_zip(bundled_themepack_zip_path(), base, progress_cb=None)
-    if base is not None and base.is_dir():
-        merge_dirs(base, dest)
-    else:
-        logger.warning(
-            "build_combined_rockbox_dir: bundled theme source missing: "
-            f"{bundled_rockbox_dir()!r} / {bundled_themepack_zip_path()!r}"
-        )
-    return extract_theme_pack_zip(Path(zip_path), dest, progress_cb=progress_cb)
+        extracted_base = Path(tempfile.mkdtemp(prefix="rockbox_360p_base_"))
+        extract_theme_pack_zip(bundled_themepack_zip_path(), extracted_base, progress_cb=None)
+        base = extracted_base
+    elif bundled_fonts_pack_zip_path().is_file():
+        # The themes archive is downloaded at install time; the small fonts
+        # pack is the bundled base so a slow or offline network still gets fonts.
+        extracted_base = Path(tempfile.mkdtemp(prefix="rockbox_360p_base_"))
+        extract_theme_pack_zip(bundled_fonts_pack_zip_path(), extracted_base, progress_cb=None)
+        base = extracted_base
+    try:
+        if base is not None and base.is_dir():
+            merge_dirs(base, dest)
+        else:
+            logger.warning(
+                "build_combined_rockbox_dir: no bundled theme or fonts source: "
+                f"{bundled_rockbox_dir()!r} / {bundled_themepack_zip_path()!r} / "
+                f"{bundled_fonts_pack_zip_path()!r}"
+            )
+        return extract_theme_pack_zip(Path(zip_path), dest, progress_cb=progress_cb)
+    finally:
+        if extracted_base is not None:
+            shutil.rmtree(extracted_base, ignore_errors=True)
 
 
 def sync_bundled_themepack_from_remote(zip_path: str | Path,

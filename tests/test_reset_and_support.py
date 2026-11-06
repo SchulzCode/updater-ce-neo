@@ -504,10 +504,12 @@ def test_flash_page_paperclip_tip_inside_card_removed(qapp):
     fp.show_power_off_prompt()
     # Inside-card mode hint must be hidden in favour of the beneath-card tip
     assert fp._wait_mode_hint.isHidden()
+    fp._on_paperclip_help()
     assert not fp._paperclip_hint_host.isHidden()
 
 
-def test_reset_on_r_restores_battery_reminder(qapp):
+def test_reset_on_r_keeps_a_dismissed_battery_reminder_away(qapp):
+    """Closing the toast is forever: resetting settings must not bring it back."""
     s = QSettings("innioasis", "updater")
     s.setValue("battery_hint_dismissed", True)
     assert s.value("battery_hint_dismissed", False, type=bool) is True
@@ -517,13 +519,32 @@ def test_reset_on_r_restores_battery_reminder(qapp):
         win._select_page._check_battery_toast_visibility()
         assert win._select_page._battery_toast.isHidden()
 
-        # Trigger reset
         win.reset_all_configuration_and_caches()
 
-        # After reset, battery_hint_dismissed must be False/cleared and toast visible
-        assert s.value("battery_hint_dismissed", False, type=bool) is False
-        assert not win._select_page._battery_toast.isHidden()
-        assert not win._select_page._toast_container.isHidden()
+        assert s.value("battery_hint_dismissed", False, type=bool) is True
+        assert win._select_page._battery_toast.isHidden()
+        assert win._select_page._toast_container.isHidden()
+    finally:
+        win.close()
+        win.deleteLater()
+        qapp.processEvents()
+
+
+def test_reset_keeps_dismissed_install_hints_away(qapp):
+    """Every Got it the user has used stays used across a configuration reset."""
+    s = QSettings("innioasis", "updater")
+    for name in ("paperclip", "microsd", "keep_data_warning"):
+        s.setValue(f"dismissed_install_hints/{name}", True)
+
+    win = MainWindow()
+    try:
+        win.reset_all_configuration_and_caches()
+
+        for name in ("paperclip", "microsd", "keep_data_warning"):
+            assert (
+                s.value(f"dismissed_install_hints/{name}", False, type=bool) is True
+            ), name
+        assert not win._flash_page._paperclip_help_wanted()
     finally:
         win.close()
         win.deleteLater()
