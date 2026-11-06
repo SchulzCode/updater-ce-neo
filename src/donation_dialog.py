@@ -623,13 +623,14 @@ class DonationStatusBar(QStatusBar):
     def _build_donor_lines(self):
         """Build recognized donor recognition lines adhering to community display rules.
 
-        - Ko-Fi donations: 'bought x coffees' (or 1 coffee).
+        - Ko-Fi donations: 'bought x coffees on Ko-Fi' (or 1 coffee).
+        - Buy Me a Coffee donations: 'bought x coffees' (or 1 coffee).
         - Other methods (Revolut, PayPal, Patreon, Bitcoin, etc.): local-currency amount by [Method].
         - Top supporters: Recognise higher than average or multiple donations with 'Top supporter ' prefix.
         - Ko-Fi only top supporters show total in coffees; multiple methods show the local-currency total.
         - Natural relative date phrasing (e.g. 'last year', 'in August', 'last month', 'in July', etc.).
         """
-        from .donors import format_donation_when
+        from .donors import coffee_method, format_donation_when
 
         _symbol, code = fx.pair()
         valid = []
@@ -679,11 +680,19 @@ class DonationStatusBar(QStatusBar):
                 top_prefix = tr("donate_top_supporter_prefix") if is_top else ""
             when = format_donation_when(dt)
             methods_norm = {m.lower() for m in methods}
-            ko_fi_only = all("ko-fi" in m or "kofi" in m for m in methods_norm)
+            coffee_kinds = {coffee_method(m) for m in methods_norm}
+            coffee_only = bool(coffee_kinds) and "" not in coffee_kinds
 
-            if ko_fi_only:
+            if coffee_only:
                 coffees = max(1, int(round(amt)))
-                tmpl = tr("donate_bought_coffee") if coffees == 1 else tr("donate_bought_coffees")
+                # A pure Ko-Fi gift names its platform; a Buy Me a Coffee gift
+                # (or a donor who used both pages) keeps the plain wording.
+                kofi = coffee_kinds == {"kofi"}
+                if coffees == 1:
+                    key = "donate_bought_coffee_kofi" if kofi else "donate_bought_coffee"
+                else:
+                    key = "donate_bought_coffees_kofi" if kofi else "donate_bought_coffees"
+                tmpl = tr(key)
                 raw_line = tmpl.format(top_prefix=top_prefix, anchor=anchor, count=coffees, when=when)
             else:
                 amt_str = fx.money(amt, code)
@@ -1114,15 +1123,14 @@ class DonationDialog(QDialog):
             layout.addWidget(self._dont_ask)
 
         # Two donation actions, side by side: the Ko-fi page, and Buy Me a
-        # Coffee beside it. Russian readers get one region-appropriate action:
-        # Boosty in Russia, Buy Me a Coffee outside it (see fx.donation_route()).
+        # Coffee beside it. The Russian market gets Boosty alone, because the
+        # international coffee pages cannot take a Russian card (see
+        # fx.donation_route()).
         actions = QHBoxLayout()
         actions.setSpacing(8)
         route = fx.donation_route()
         if route == "boosty":
             links = [("donate_boosty", "boosty")]
-        elif route == "bmc":
-            links = [("donate_buy_me_a_coffee", "bmc")]
         else:
             links = [("donate_buy_coffee", "kofi"), ("donate_buy_me_a_coffee", "bmc")]
         for key, link in links:

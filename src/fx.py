@@ -30,7 +30,7 @@ def _table(text, cast=str):
 
 
 _BAKED = _table("""
-USD 1.000 EUR 0.8934 GBP 0.7454 JPY 158.4 CNY 6.684 INR 94.83 AUD 1.434 CAD 1.399
+USD 1.000 EUR 0.8934 GBP 0.7454 JPY 158.4 CNY 6.684 INR 94.83 AUD 1.434 CAD 1.399 NZD 1.680
 CHF 0.8200 SEK 9.791 NOK 9.281 DKK 6.680 PLN 3.945 CZK 21.76 HUF 325.9 RON 4.772
 BGN 1.748 TRY 50.04 BRL 5.486 MXN 18.74 ARS 1550 CLP 978.1 COP 3221 PEN 3.465
 ZAR 16.62 NGN 1346 KES 130.0 EGP 55.37 ILS 3.164 AED 3.6725 SAR 3.750 QAR 3.640
@@ -57,7 +57,7 @@ _ZERO = frozenset(
 )
 
 _SYM = _table("""
-USD $ EUR € GBP £ JPY ¥ CNY ¥ INR ₹ AUD A$ CAD CA$ CHF CHF SEK kr NOK kr DKK kr
+USD $ EUR € GBP £ JPY ¥ CNY ¥ INR ₹ AUD A$ NZD NZ$ CAD CA$ CHF CHF SEK kr NOK kr DKK kr
 PLN zł CZK Kč HUF Ft RON lei BGN лв TRY ₺ BRL R$ MXN MX$ ARS AR$ CLP CL$ COP COL$
 PEN S/ ZAR R NGN ₦ KES KSh EGP E£ ILS ₪ AED د.إ SAR ﷼ QAR ﷼ KWD د.ك BHD د.ب
 OMR ﷼ JOD د.ا HKD HK$ SGD S$ TWD NT$ KRW ₩ THB ฿ MYR RM IDR Rp PHP ₱ VND ₫
@@ -70,7 +70,7 @@ BND B$ MVR Rf AFN ؋ PGK K FJD FJ$ SBD SI$ VUV VT WST WS$ TOP T$ BOB Bs PYG ₲
 UYU $U VES Bs. CRC ₡ PAB B/. GTQ Q HNL L NIO C$ DOP RD$ CUP $ JMD J$ TTD TT$
 BBD Bds$ BSD B$ BZD BZ$ GYD G$ SRD Sr$ HTG G IQD ع.د LBP ل.ل SYP £ YER ﷼
 TMT m KGS сом TJS SM ZWL Z$ ERN Nfk DJF Fdj BIF FBu KMF CF MRU UM STN Db
-SSP £ XCD EC$ AWG ƒ ANG ƒ KYD CI$ FKP £ GIP £
+SSP £ XCD EC$ AWG ƒ ANG ƒ KYD CI$ FKP £ GIP £ IRR ﷼
 """)
 
 _REGION = _table("""
@@ -143,14 +143,14 @@ def _russian_ui() -> bool:
 def donation_route() -> str:
     """The donation method for this reader, or "" for the normal worldwide row.
 
-    A Russian card cannot be used on the international coffee pages, so Russian
-    readers in Russia get Boosty alone. A Russian reader outside Russia gets the
-    Buy Me a Coffee page in Boosty's place, which also makes that fallback
-    testable from a non-Russian machine.
+    A Russian card cannot be used on the international coffee pages, so the
+    Russian market gets Boosty alone. The market is either a Russian interface
+    or a machine in Russia; an English interface in Russia must still be able
+    to donate.
     """
-    if not _russian_ui():
-        return ""
-    return "boosty" if territory() == "RU" else "bmc"
+    if _russian_ui() or territory() == "RU":
+        return "boosty"
+    return ""
 
 
 def routed():
@@ -162,7 +162,12 @@ def _detect():
     env = os.environ.get(_ENV, "").strip().upper()
     if len(env) == 3 and env.isalpha():
         return env
-    region = _territory()
+    # The chosen interface language is the strongest signal for the Russian
+    # market: it keeps the goal in roubles even when the machine's regional
+    # settings are not set to Russia.
+    if _russian_ui():
+        return "RUB"
+    region = territory()
     if region in _REGION:
         return _REGION[region]
     zone = ""
@@ -190,6 +195,11 @@ def rate(code="USD"):
     code = (code or "USD").upper()
     value = _state["rates"].get(code) or _BAKED.get(code) or 1.0
     return float(value)
+
+
+def decimal_currency(code="USD") -> bool:
+    """True when ``code`` has a conventional hundredth-style minor unit."""
+    return (code or "USD").upper() not in _ZERO
 
 
 def _unit(code):

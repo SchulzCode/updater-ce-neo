@@ -352,10 +352,6 @@ class SupportPage(QWidget):
             # Boosty is the only page that takes a Russian card, so it is the
             # whole method row there; the Honeygain and crypto links go too.
             primary_methods = [("donate_boosty", "boosty")]
-        elif route == "bmc":
-            # A Russian reader outside Russia gets the coffee page that works
-            # there, in Boosty's place.
-            primary_methods = [("donate_buy_me_a_coffee", "bmc")]
 
         for key, link_id in primary_methods:
             url = DONATION_LINKS.get(link_id, "")

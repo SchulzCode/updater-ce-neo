@@ -48,7 +48,7 @@ def test_day_goal_line_is_warm_and_local(monkeypatch):
 
     assert stats["scope"] == "daily"
     assert format_goal_line(stats) == (
-        "<b>You've helped us raise £2.90 of our £5 costs for today</b>"
+        "<b>You've helped us raise £2.90 of our £10 costs for today</b>"
     )
 
 
@@ -58,12 +58,12 @@ def test_week_goal_line_uses_the_week_rung(monkeypatch):
     _pin_gbp(monkeypatch)
     now = datetime(2026, 11, 19, 12)
     stats = get_goal_stats(
-        [{"amount": 10, "dt": now}], now=now, monthly_roll=0.9
+        [{"amount": 20, "dt": now}], now=now, monthly_roll=0.9
     )
 
     assert stats["scope"] == "weekly"
     assert format_goal_line(stats) == (
-        "<b>You've helped us raise £5 of our £25 costs for this week</b>"
+        "<b>You've helped us raise £10 of our £50 costs for this week</b>"
     )
 
 
@@ -76,7 +76,7 @@ def test_month_goal_line_uses_the_month_rung(monkeypatch):
 
     assert stats["scope"] == "monthly"
     assert format_goal_line(stats) == (
-        "<b>You've helped us raise £20 of our £100 costs for this month</b>"
+        "<b>You've helped us raise £20 of our £150 costs for this month</b>"
     )
 
 
@@ -126,17 +126,17 @@ def test_a_short_day_asks_for_today_even_when_the_week_opened_on_weekly(monkeypa
     assert get_goal_stats(donations, now=now)["scope"] == "daily"
 
 
-def test_today_hands_over_at_nine_dollars_ninety_nine(monkeypatch):
+def test_today_hands_over_at_ten_local_units(monkeypatch):
     from src.donors import get_goal_stats
 
     _pin_gbp(monkeypatch)
     now = datetime(2026, 11, 19, 12)
 
-    almost = get_goal_stats([{"amount": 9.98, "dt": now}], now=now)
+    almost = get_goal_stats([{"amount": 19.98, "dt": now}], now=now)
     assert almost["scope"] == "daily"
 
     paid = get_goal_stats(
-        [{"amount": 9.99, "dt": now}], now=now, monthly_roll=0.9
+        [{"amount": 20.00, "dt": now}], now=now, monthly_roll=0.9
     )
     assert paid["scope"] == "weekly"
 
@@ -146,7 +146,7 @@ def test_the_week_and_month_are_picked_for_the_day_when_both_are_open(monkeypatc
 
     _pin_gbp(monkeypatch)
     now = datetime(2026, 11, 19, 12)
-    donations = [{"amount": 12, "dt": now}]
+    donations = [{"amount": 24, "dt": now}]
 
     monthly = get_goal_stats(donations, now=now, monthly_roll=0.1)
     weekly = get_goal_stats(donations, now=now, monthly_roll=0.9)
@@ -154,10 +154,10 @@ def test_the_week_and_month_are_picked_for_the_day_when_both_are_open(monkeypatc
     assert monthly["scope"] == "monthly"
     assert weekly["scope"] == "weekly"
     assert format_goal_line(monthly) == (
-        "<b>You've helped us raise £6 of our £100 costs for this month</b>"
+        "<b>You've helped us raise £12 of our £150 costs for this month</b>"
     )
     assert format_goal_line(weekly) == (
-        "<b>You've helped us raise £6 of our £25 costs for this week</b>"
+        "<b>You've helped us raise £12 of our £50 costs for this week</b>"
     )
 
 
@@ -166,7 +166,7 @@ def test_the_choice_is_stable_across_refreshes(monkeypatch):
 
     _pin_gbp(monkeypatch)
     now = datetime(2026, 11, 19, 12)
-    donations = [{"amount": 12, "dt": now}]
+    donations = [{"amount": 24, "dt": now}]
 
     first = get_goal_stats(donations, now=now)["scope"]
     assert first in ("weekly", "monthly")
@@ -180,12 +180,12 @@ def test_a_completed_week_always_shows_the_month(monkeypatch):
     _pin_gbp(monkeypatch)
     now = datetime(2026, 11, 19, 12)
     stats = get_goal_stats(
-        [{"amount": 50, "dt": now}], now=now, monthly_roll=0.9
+        [{"amount": 100, "dt": now}], now=now, monthly_roll=0.9
     )
 
     assert stats["scope"] == "monthly"
     assert format_goal_line(stats) == (
-        "<b>You've helped us raise £25 of our £100 costs for this month</b>"
+        "<b>You've helped us raise £50 of our £150 costs for this month</b>"
     )
 
 
@@ -195,16 +195,16 @@ def test_sixty_in_the_last_week_leans_towards_the_month(monkeypatch):
     _pin_gbp(monkeypatch)
     # Monday 16 November 2026, so the current week starts today.
     now = datetime(2026, 11, 16, 12)
-    quiet = [{"amount": 12, "dt": now}]
+    quiet = [{"amount": 24, "dt": now}]
     strong = [
-        {"amount": 50, "dt": datetime(2026, 11, 15, 12)},
-        {"amount": 12, "dt": now},
+        {"amount": 120, "dt": datetime(2026, 11, 15, 12)},
+        {"amount": 24, "dt": now},
     ]
 
     assert get_goal_stats(quiet, now=now, monthly_roll=0.6)["scope"] == "weekly"
     boosted = get_goal_stats(strong, now=now, monthly_roll=0.6)
-    assert boosted["last_week_raised"] == 62.0
-    assert boosted["week_raised"] == 12.0
+    assert boosted["last_week_raised"] == 144.0
+    assert boosted["week_raised"] == 24.0
     assert boosted["scope"] == "monthly"
 
 
@@ -213,7 +213,7 @@ def test_a_completed_month_is_silent(monkeypatch):
 
     _pin_gbp(monkeypatch)
     now = datetime(2026, 11, 19, 12)
-    stats = get_goal_stats([{"amount": 200, "dt": now}], now=now)
+    stats = get_goal_stats([{"amount": 300, "dt": now}], now=now)
 
     assert stats["covered"] is True
     assert stats["scope"] is None
@@ -227,7 +227,7 @@ def test_zero_monthly_and_covered_goals_do_not_render_a_cold_dollar_line(monkeyp
     now = datetime(2026, 11, 3, 12)
 
     assert format_goal_line(get_goal_stats([], now=now)) == ""
-    covered = get_goal_stats([{"amount": 200, "dt": now}], now=now)
+    covered = get_goal_stats([{"amount": 300, "dt": now}], now=now)
     assert covered["covered"] is True
     assert format_goal_line(covered) == ""
 
@@ -245,7 +245,7 @@ def test_a_quiet_day_still_names_today(monkeypatch):
     assert stats["scope"] == "daily"
     assert stats["day_raised"] == 0
     assert format_goal_line(stats) == (
-        "<b>You've helped us raise £0 of our £5 costs for today</b>"
+        "<b>You've helped us raise £0 of our £10 costs for today</b>"
     )
 
 
@@ -277,8 +277,8 @@ def test_status_bar_uses_the_period_line_not_the_monthly_dollar_line(qapp, monke
         "reached": False,
         "covered": False,
         "shown_raised": 2.9,
-        "shown_target": 5.0,
-        "shown_percent": 58.0,
+        "shown_target": 10.0,
+        "shown_percent": 29.0,
         "currency_code": "GBP",
         "currency_symbol": "£",
     }
@@ -306,3 +306,57 @@ def test_usd_goal_line_keeps_the_dollar_mark(monkeypatch):
     assert format_goal_line(stats) == (
         "<b>You've helped us raise $2.90 of our $10 costs for today</b>"
     )
+
+
+def test_gbp_and_eur_get_local_daily_and_weekly_floors(monkeypatch):
+    from src import fx
+    from src.donors import goal_targets
+
+    monkeypatch.setenv("UPDATER_CURRENCY", "GBP")
+    monkeypatch.setattr(fx, "rate", lambda code="USD": 0.7454)
+    assert goal_targets("GBP") == {
+        "daily": 10.0,
+        "weekly": 50.0,
+        "monthly": 150.0,
+    }
+
+    monkeypatch.setenv("UPDATER_CURRENCY", "EUR")
+    monkeypatch.setattr(fx, "rate", lambda code="USD": 0.8934)
+    assert goal_targets("EUR") == {
+        "daily": 10.0,
+        "weekly": 50.0,
+        "monthly": 179.0,
+    }
+
+
+def test_stronger_decimal_currencies_keep_their_existing_targets(monkeypatch):
+    from src import fx
+    from src.donors import goal_targets
+
+    monkeypatch.setenv("UPDATER_CURRENCY", "CAD")
+    monkeypatch.setattr(fx, "rate", lambda code="USD": 1.399)
+    assert goal_targets("CAD") == {
+        "daily": 14.0,
+        "weekly": 70.0,
+        "monthly": 280.0,
+    }
+
+
+def test_inflated_currencies_keep_dollar_equivalent_targets(monkeypatch):
+    from src import fx
+    from src.donors import goal_targets
+
+    monkeypatch.setenv("UPDATER_CURRENCY", "RUB")
+    monkeypatch.setattr(fx, "rate", lambda code="USD": 81.42)
+    assert goal_targets("RUB") == {
+        "daily": 820.0,
+        "weekly": 4100.0,
+        "monthly": 16300.0,
+    }
+
+    monkeypatch.setattr(fx, "rate", lambda code="USD": 158.4)
+    assert goal_targets("JPY") == {
+        "daily": 1590.0,
+        "weekly": 8000.0,
+        "monthly": 32000.0,
+    }

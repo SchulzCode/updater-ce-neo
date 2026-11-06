@@ -2269,8 +2269,6 @@ class SettingsPage(QWidget):
         route = fx.donation_route()
         if route == "boosty":
             open_browser(DONATION_LINKS["boosty"])
-        elif route == "bmc":
-            open_browser(DONATION_LINKS["bmc"])
         else:
             open_browser(DONATION_LINKS["kofi"])
 
@@ -2281,13 +2279,10 @@ class SettingsPage(QWidget):
         open_browser(DONATION_LINKS["bmc"])
 
     def _sync_donation_methods(self) -> None:
-        """Show Boosty/BMC alone for Russian readers, as the region dictates."""
+        """Show Boosty alone for the Russian market."""
         route = fx.donation_route()
         if hasattr(self, "_settings_coffee_btn"):
-            key = {
-                "boosty": "donate_boosty",
-                "bmc": "donate_buy_me_a_coffee",
-            }.get(route, "donate_coffee_btn")
+            key = {"boosty": "donate_boosty"}.get(route, "donate_coffee_btn")
             self._settings_coffee_btn.setText(tr(key))
         if hasattr(self, "_settings_bmc_btn"):
             self._settings_bmc_btn.setText(tr("donate_buy_me_a_coffee"))

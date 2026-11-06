@@ -3578,7 +3578,7 @@ _STRINGS: dict = {
     },
     "donate_completion_body_momentum": {
         "zh-CN": "我们依靠小额赞助来实现每月服务器托管目标并保持独立。即使只请一杯咖啡，也能为保持本工具免费和维护带来巨大帮助。",
-        "en": "We rely on small donations to hit our monthly hosting goals and stay independent. Chipping in just one coffee makes a huge difference in keeping this tool free and maintained.",
+        "en": "We rely on small donations to hit our monthly hosting goals and stay independent. Chipping in the price of a coffee or two makes a huge difference in keeping this tool free and maintained.",
         "fr": "Nous comptons sur de petits dons pour atteindre nos objectifs mensuels d'hébergement et rester indépendants. Même un seul café fait une énorme différence pour garder cet outil gratuit et maintenu.",
         "es": "Dependemos de pequeñas donaciones para alcanzar nuestras metas mensuales de alojamiento y mantenernos independientes. Aportar un solo café marca una gran diferencia para mantener esta herramienta libre.",
         "de": "Wir setzen auf kleine Spenden, um unsere monatlichen Hosting-Ziele zu erreichen und unabhängig zu bleiben. Schon ein einzelner Kaffee macht einen riesigen Unterschied, damit dieses Tool kostenlos bleibt.",
@@ -3781,6 +3781,22 @@ _STRINGS: dict = {
         "es": "{top_prefix}{anchor} nos invitó a {count} cafés {when}.",
         "de": "{top_prefix}{anchor} hat uns {count} Kaffees {when} spendiert.",
         "ja": "{top_prefix}{anchor} が {when} コーヒーを {count} 杯ごちそうしてくれました。",
+    },
+    "donate_bought_coffee_kofi": {
+        "zh-CN": "{top_prefix}{anchor} {when} 在 Ko-Fi 上请我们喝了一杯咖啡。",
+        "en": "{top_prefix}{anchor} bought us a coffee on Ko-Fi {when}.",
+        "fr": "{top_prefix}{anchor} nous a offert un café sur Ko-Fi {when}.",
+        "es": "{top_prefix}{anchor} nos invitó a un café en Ko-Fi {when}.",
+        "de": "{top_prefix}{anchor} hat uns {when} einen Kaffee auf Ko-Fi spendiert.",
+        "ja": "{top_prefix}{anchor} が {when} Ko-Fi でコーヒーを一杯ごちそうしてくれました。",
+    },
+    "donate_bought_coffees_kofi": {
+        "zh-CN": "{top_prefix}{anchor} {when} 在 Ko-Fi 上请我们喝了 {count} 杯咖啡。",
+        "en": "{top_prefix}{anchor} bought us {count} coffees on Ko-Fi {when}.",
+        "fr": "{top_prefix}{anchor} nous a offert {count} cafés sur Ko-Fi {when}.",
+        "es": "{top_prefix}{anchor} nos invitó a {count} cafés en Ko-Fi {when}.",
+        "de": "{top_prefix}{anchor} hat uns {when} {count} Kaffees auf Ko-Fi spendiert.",
+        "ja": "{top_prefix}{anchor} が {when} Ko-Fi でコーヒーを {count} 杯ごちそうしてくれました。",
     },
     "donate_donated_by_method": {
         "zh-CN": "{top_prefix}{anchor} {when} 通过 {method} 赞助了 ${amount}。",

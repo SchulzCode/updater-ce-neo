@@ -186,58 +186,65 @@ def test_russia_is_offered_boosty_and_nothing_else(qapp, monkeypatch, russian_ui
         fp.deleteLater()
 
     monkeypatch.delenv("UPDATER_REGION")
-    assert fx.routed() == "bmc"
+    assert fx.routed() == "boosty"
     qapp.processEvents()
 
 
-def test_boosty_route_requires_russian_copy(qapp, monkeypatch):
-    """A Russian region alone must not show Boosty to an English interface."""
+def test_russian_region_gets_boosty_and_rubles(qapp, monkeypatch):
+    """The Russian market gets Boosty alone and a rouble goal, even in English."""
     from src import fx
     from src.i18n import tr
 
     monkeypatch.setenv("UPDATER_REGION", "RU")
+    monkeypatch.delenv("UPDATER_CURRENCY", raising=False)
     assert fx.territory() == "RU"
-    assert fx.donation_route() == ""
+    assert fx.donation_route() == "boosty"
+    assert fx.pair()[1] == "RUB"
 
     page = SupportPage()
     try:
-        assert len(page._method_buttons) == 5
-        assert page._method_buttons[0][0].text() == tr("donate_kofi")
+        assert [key for _btn, key in page._method_buttons] == ["donate_boosty"]
+        assert page._method_buttons[0][0].text() == tr("donate_boosty")
     finally:
         page.close()
         page.deleteLater()
 
     dialog = DonationDialog(donations=[])
     try:
-        assert [btn.text() for btn in dialog._pay_buttons] == [
-            tr("donate_buy_coffee"),
-            tr("donate_buy_me_a_coffee"),
-        ]
+        assert [btn.text() for btn in dialog._pay_buttons] == [tr("donate_boosty")]
     finally:
         dialog.close()
         dialog.deleteLater()
     qapp.processEvents()
 
 
-def test_russian_outside_russia_gets_bmc_in_boostys_place(
+def test_explicit_currency_wins_over_a_russian_ui(monkeypatch, russian_ui):
+    from src import fx
+
+    monkeypatch.setenv("UPDATER_REGION", "GB")
+    monkeypatch.setenv("UPDATER_CURRENCY", "GBP")
+    assert fx.pair()[1] == "GBP"
+
+
+def test_russian_ui_outside_russia_still_gets_boosty(
     qapp, monkeypatch, russian_ui
 ):
-    """A Russian reader outside Russia can still test the substitute action."""
+    """A Russian interface is the Russian market even on a non-Russian machine."""
     from src import fx
     from src.config import DONATION_LINKS
     from src.i18n import tr
     from src.ui.settings_page import SettingsPage
 
     monkeypatch.setenv("UPDATER_REGION", "GB")
-    assert fx.donation_route() == "bmc"
-    assert DONATION_LINKS["bmc"].endswith("buymeacoffee.com/ryanspecter")
+    monkeypatch.delenv("UPDATER_CURRENCY", raising=False)
+    assert fx.donation_route() == "boosty"
+    assert fx.pair()[1] == "RUB"
+    assert DONATION_LINKS["boosty"].endswith("boosty.to/ryanspecter")
 
     page = SupportPage()
     try:
-        assert [key for _btn, key in page._method_buttons] == [
-            "donate_buy_me_a_coffee"
-        ]
-        assert page._method_buttons[0][0].text() == tr("donate_buy_me_a_coffee")
+        assert [key for _btn, key in page._method_buttons] == ["donate_boosty"]
+        assert page._method_buttons[0][0].text() == tr("donate_boosty")
         assert page._honeygain_link.isHidden()
         assert page._crypto_toggle_link.isHidden()
     finally:
@@ -247,7 +254,7 @@ def test_russian_outside_russia_gets_bmc_in_boostys_place(
     settings = SettingsPage()
     try:
         settings.retranslate()
-        assert settings._settings_coffee_btn.text() == tr("donate_buy_me_a_coffee")
+        assert settings._settings_coffee_btn.text() == tr("donate_boosty")
         assert settings._settings_bmc_btn.isHidden()
     finally:
         settings.close()
@@ -255,9 +262,7 @@ def test_russian_outside_russia_gets_bmc_in_boostys_place(
 
     dialog = DonationDialog(donations=[])
     try:
-        assert [btn.text() for btn in dialog._pay_buttons] == [
-            tr("donate_buy_me_a_coffee")
-        ]
+        assert [btn.text() for btn in dialog._pay_buttons] == [tr("donate_boosty")]
     finally:
         dialog.close()
         dialog.deleteLater()
@@ -266,7 +271,7 @@ def test_russian_outside_russia_gets_bmc_in_boostys_place(
     try:
         fp.set_post_install_urls("https://example.com/guide", "https://example.com/donate")
         assert fp._post_install_url_2 == ""
-        assert fp._coffee_btn.text() == tr("donate_buy_me_a_coffee")
+        assert fp._coffee_btn.text() == tr("donate_boosty")
         assert fp._bmc_btn.isHidden()
     finally:
         fp.close()
@@ -291,7 +296,7 @@ def test_settings_card_restores_the_second_coffee_page_when_english_returns(
         translator().set_language("ru")
         page.retranslate()
         qapp.processEvents()
-        assert page._settings_coffee_btn.text() == tr("donate_buy_me_a_coffee")
+        assert page._settings_coffee_btn.text() == tr("donate_boosty")
         assert page._settings_bmc_btn.isHidden()
 
         translator().set_language("en")
@@ -322,7 +327,7 @@ def test_completion_screen_follows_a_language_switch_mid_run(qapp, monkeypatch):
         page.retranslate()
         qapp.processEvents()
         assert page._post_install_url_2 == ""
-        assert page._coffee_btn.text() == tr("donate_buy_me_a_coffee")
+        assert page._coffee_btn.text() == tr("donate_boosty")
         assert page._bmc_btn.isHidden()
 
         translator().set_language("en")
@@ -348,9 +353,7 @@ def test_support_page_switches_route_when_the_language_changes(qapp, monkeypatch
         translator().set_language("ru")
         page.retranslate()
         qapp.processEvents()
-        assert [key for _btn, key in page._method_buttons] == [
-            "donate_buy_me_a_coffee"
-        ]
+        assert [key for _btn, key in page._method_buttons] == ["donate_boosty"]
         translator().set_language("en")
         page.retranslate()
         qapp.processEvents()

@@ -34,15 +34,15 @@ class TestDonationFormattingAndExamples:
         # Reference date: October 27, 2026
         now = datetime(2026, 10, 27, 12, 0, 0)
 
-        # 1. Top supporter Alexis P bought us 90 coffees last year.
+        # 1. Top supporter Alexis P bought us 90 coffees on Ko-Fi last year.
         dt_alexis = datetime(2025, 9, 2)
         assert format_donation_when(dt_alexis, now=now) == "last year"
 
-        # 2. Top supporter Zangu bought us 50 coffees in August.
+        # 2. Top supporter Zangu bought us 50 coffees on Ko-Fi in August.
         dt_zangu = datetime(2026, 8, 23)
         assert format_donation_when(dt_zangu, now=now) == "in August"
 
-        # 3. Bryon bought us 5 coffees last month
+        # 3. Bryon bought us 5 coffees on Ko-Fi last month
         dt_bryon = datetime(2026, 9, 15)
         assert format_donation_when(dt_bryon, now=now) == "last month"
 
@@ -71,13 +71,13 @@ class TestDonationFormattingAndExamples:
 
         # Verify all 5 lines match the exact requirements
         alexis_line = next((l for l in lines if "Alexis P" in l), "")
-        assert "Top supporter Alexis P bought us 90 coffees last year" in alexis_line
+        assert "Top supporter Alexis P bought us 90 coffees on Ko-Fi last year" in alexis_line
 
         zangu_line = next((l for l in lines if "Zangu" in l), "")
-        assert "Top supporter Zangu bought us 50 coffees in August" in zangu_line
+        assert "Top supporter Zangu bought us 50 coffees on Ko-Fi in August" in zangu_line
 
         bryon_line = next((l for l in lines if "Bryon" in l), "")
-        assert "Bryon bought us 5 coffees last month" in bryon_line
+        assert "Bryon bought us 5 coffees on Ko-Fi last month" in bryon_line
         assert "Top supporter" not in bryon_line
 
         mason_line = next((l for l in lines if "Mason M" in l), "")
@@ -124,7 +124,7 @@ class TestDonationFormattingAndExamples:
         ]
         bar = DonationStatusBar(donations=donations)
         lines = [strip_html(x) for x in bar._donor_lines]
-        assert "Jimmy G bought us a coffee" in lines[0]
+        assert "Jimmy G bought us a coffee on Ko-Fi" in lines[0]
         assert "coffees" not in lines[0]
         bar.deleteLater()
 

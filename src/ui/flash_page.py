@@ -4394,8 +4394,8 @@ class FlashPage(QWidget):
 
         self._post_install_url = str(post_install or "").strip()
         self._post_install_url_2_source = str(post_install_2 or "").strip()
-        # The second URL is the donation page; Russian readers are sent to
-        # Boosty in Russia or Buy Me a Coffee outside it instead.
+        # The second URL is the donation page; the Russian market is sent to
+        # Boosty instead.
         self._post_install_url_2 = (
             "" if fx.donation_route() else self._post_install_url_2_source
         )
@@ -4449,16 +4449,14 @@ class FlashPage(QWidget):
         if hasattr(self, "_coffee_btn"):
             if route == "boosty":
                 self._coffee_btn.setText(tr("donate_boosty"))
-            elif route == "bmc":
-                self._coffee_btn.setText(tr("donate_buy_me_a_coffee"))
             elif post_install_2:
                 self._coffee_btn.setText(tr("donate_completion_coffee_guide"))
             else:
                 self._coffee_btn.setText(tr("donate_completion_coffee"))
         if hasattr(self, "_bmc_btn"):
             self._bmc_btn.setText(tr("donate_buy_me_a_coffee"))
-            # Boosty/BMC is the only method offered for a Russian reader, so
-            # the second coffee page is hidden rather than left as a dead end.
+            # Boosty is the only method offered in the Russian market, so the
+            # second coffee page is hidden rather than left as a dead end.
             self._bmc_btn.setVisible(not route)
 
     # -- post-install guide -------------------------------------------------
@@ -4503,9 +4501,6 @@ class FlashPage(QWidget):
         route = fx.donation_route()
         if route == "boosty":
             open_browser(DONATION_LINKS["boosty"])
-            return
-        if route == "bmc":
-            open_browser(DONATION_LINKS["bmc"])
             return
         post_install_2 = getattr(self, "_post_install_url_2", "")
         if post_install_2:

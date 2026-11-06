@@ -62,9 +62,9 @@ def test_anonymous_gifts_are_not_merged_into_one_supporter():
     lines = [clean_html(line) for line in _make_status_bar(donations)._build_donor_lines()]
 
     # Four different people: four lines, each with only its own amount
-    # (Ko-fi gifts are phrased as coffees, so 6.77 reads as 7 coffees).
+    # (Ko-fi gifts are phrased as coffees on Ko-Fi, so 6.77 reads as 7 coffees).
     assert len(lines) == 4
-    for amount in ("$50.25", "$13.20", "7 coffees", "$4.85"):
+    for amount in ("$50.25", "$13.20", "7 coffees on Ko-Fi", "$4.85"):
         assert sum(amount in line for line in lines) == 1
     # The old bug summed these four people into one $75.07 supporter.
     for merged_total in ("75.07", "63.45", "70.22"):

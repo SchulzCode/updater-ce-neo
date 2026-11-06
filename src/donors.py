@@ -189,9 +189,9 @@ def get_monthly_goal_stats(donations, now=None):
 # The monthly figure is a summary, not the everyday ask: it leads on the first
 # and last three days of a month, and otherwise appears once the smaller rungs
 # are covered. Tuesday, Wednesday and Saturday open on a single day's costs;
-# the rest of the week opens on the week. A day still short of $9.99 names
-# today's costs whichever rung it opened on, so a supporter sees the smallest
-# outstanding target rather than a whole month's.
+# the rest of the week opens on the week. A day still short of its local
+# daily target names today's costs whichever rung it opened on, so a supporter
+# sees the smallest outstanding target rather than a whole month's.
 GOAL_MONTHLY_OPENING_DAYS = 3
 GOAL_MONTHLY_CLOSING_DAYS = 3
 
@@ -201,16 +201,26 @@ GOAL_DAILY_WEEKDAYS = (1, 2, 5)  # Tuesday, Wednesday, Saturday
 WEEKLY_GOAL_USD = MONTHLY_GOAL_USD / 4.0
 DAILY_GOAL_USD = MONTHLY_GOAL_USD / 20.0
 
-# A day is paid at $9.99, not the full $10: a one-cent shortfall is a rounding
-# artefact, and the next rung should take over before the line reads complete.
-GOAL_DAILY_REACHED_USD = 9.99
+# Ladder rungs are normally the dollar-equivalent converted into the reader's
+# currency. For decimal currencies within an order of magnitude of the dollar,
+# a nominal local floor makes more sense: £10/€10 for the day and £50/€50 for
+# the week, instead of converting the dollar rungs down to £7.45/€8.93 and
+# £37/€45. Highly inflated currencies (RUB, INR, …) and currencies without a
+# minor unit (JPY, KRW, …) keep the converted rungs, where the nominal floor
+# would be a tiny fraction of the real cost.
+GOAL_LOCAL_DAILY = 10.0
+GOAL_LOCAL_WEEKLY = 50.0
+GOAL_LOCAL_MONTHLY = 150.0
+GOAL_LOCAL_RATE_MIN = 0.4
+GOAL_LOCAL_RATE_MAX = 2.5
 
 # When neither the week nor the month is complete, the ask is randomly one of
-# the two. A strong rolling week ($60 in the last seven days) leans the display
-# towards the month, whose summary then has the more useful context. The roll
-# is kept for the calendar day so a rotating bar does not flip every refresh.
+# the two. A strong rolling week (1.2× the weekly target in the last seven
+# days) leans the display towards the month, whose summary then has the more
+# useful context. The roll is kept for the calendar day so a rotating bar does
+# not flip every refresh.
 GOAL_WEEK_MONTH_SHARE = 0.5
-GOAL_MONTHLY_BOOST_USD = 60.0
+GOAL_MONTHLY_BOOST_MULTIPLIER = 1.2
 GOAL_MONTHLY_BOOST_SHARE = 0.8
 _GOAL_MONTH_ROLLS = {}
 
@@ -239,8 +249,9 @@ def goal_scope(now=None) -> str:
 
     The first and last three days of a month summarise the month so far.
     Tuesday, Wednesday and Saturday open on the day's own costs; the rest of
-    the week opens on the week. A day that is still short of $9.99 names
-    today's costs whichever rung it opened on (see :func:`get_goal_stats`).
+    the week opens on the week. A day that is still short of its local daily
+    target names today's costs whichever rung it opened on (see
+    :func:`get_goal_stats`).
     """
     now = now or datetime.now()
     if now.day <= GOAL_MONTHLY_OPENING_DAYS:
@@ -287,6 +298,32 @@ def weekly_goal_usd(now=None) -> float:
 
 def daily_goal_usd(now=None) -> float:
     return DAILY_GOAL_USD
+
+
+def goal_targets(code=None) -> dict:
+    """Daily, weekly and monthly targets in the reader's currency.
+
+    Decimal currencies near dollar parity keep a local nominal floor, so a UK
+    or EU supporter sees the daily goal until £/€10 has arrived and the weekly
+    goal until £/€50. Stronger currencies (CAD, AUD) and the dollar retain
+    whichever converted target is larger, so no reader gets a smaller ask than
+    before. Currencies without a minor unit, or with a highly inflated rate,
+    stay on the converted dollar-equivalent targets.
+    """
+    if not code:
+        _symbol, code = fx.pair()
+    code = (code or "USD").upper()
+    targets = {
+        "daily": float(fx.goal(DAILY_GOAL_USD, code)),
+        "weekly": float(fx.goal(WEEKLY_GOAL_USD, code)),
+        "monthly": float(fx.goal(MONTHLY_GOAL_USD, code)),
+    }
+    rate = fx.rate(code)
+    if fx.decimal_currency(code) and GOAL_LOCAL_RATE_MIN <= rate <= GOAL_LOCAL_RATE_MAX:
+        targets["daily"] = max(targets["daily"], GOAL_LOCAL_DAILY)
+        targets["weekly"] = max(targets["weekly"], GOAL_LOCAL_WEEKLY)
+        targets["monthly"] = max(targets["monthly"], GOAL_LOCAL_MONTHLY)
+    return targets
 
 
 def format_goal_amount(amount) -> str:
@@ -346,34 +383,39 @@ def get_goal_stats(donations, now=None, monthly_roll=None):
     """Raised against the target this day's display should name.
 
     The ladder follows the website's funding bar: a month-edge day always
-    names the month; a day short of $9.99 names today; after that a completed
-    week names the month, and while both week and month are open the display
-    picks one of them for the day. A finished month is silent.
+    names the month; a day short of its local daily target names today; after
+    that a completed week names the month, and while both week and month are
+    open the display picks one of them for the day. A finished month is
+    silent.
     """
     now = now or datetime.now()
     day_raised, week_raised, month_raised, rolling_raised = _goal_raised_by_window(donations, now)
     sym, code = fx.pair()
-    targets = {
-        "daily": float(DAILY_GOAL_USD),
-        "weekly": float(WEEKLY_GOAL_USD),
-        "monthly": float(MONTHLY_GOAL_USD),
-    }
-    raised_by = {"daily": day_raised, "weekly": week_raised, "monthly": month_raised}
-    month_reached = month_raised >= MONTHLY_GOAL_USD
+    targets = goal_targets(code)
+    # Donations arrive in dollars, but the ladder is judged in the reader's own
+    # currency so a nominal £10/€10 day hands over at the same figure shown on
+    # screen rather than at the converted value of $10.
+    shown_day = fx.local(day_raised, code)
+    shown_week = fx.local(week_raised, code)
+    shown_month = fx.local(month_raised, code)
+    shown_rolling = fx.local(rolling_raised, code)
+    raised_by = {"daily": shown_day, "weekly": shown_week, "monthly": shown_month}
+    month_reached = shown_month >= targets["monthly"]
 
     scope = None
     if not month_reached:
         if goal_scope(now) == "monthly":
             scope = "monthly"
-        elif day_raised < GOAL_DAILY_REACHED_USD:
+        elif shown_day < targets["daily"]:
             scope = "daily"
-        elif week_raised >= WEEKLY_GOAL_USD:
+        elif shown_week >= targets["weekly"]:
             scope = "monthly"
         else:
             roll = _goal_monthly_roll(now) if monthly_roll is None else float(monthly_roll)
+            boost = targets["weekly"] * GOAL_MONTHLY_BOOST_MULTIPLIER
             monthly_share = (
                 GOAL_MONTHLY_BOOST_SHARE
-                if rolling_raised >= GOAL_MONTHLY_BOOST_USD
+                if shown_rolling >= boost
                 else GOAL_WEEK_MONTH_SHARE
             )
             scope = "monthly" if roll < monthly_share else "weekly"
@@ -403,8 +445,6 @@ def get_goal_stats(donations, now=None, monthly_roll=None):
 
     target = targets[scope]
     raised = raised_by[scope]
-    shown_raised = fx.local(raised, code)
-    shown_target = fx.goal(target, code)
     stats.update(
         raised=raised,
         remaining=max(0.0, target - raised),
@@ -412,9 +452,9 @@ def get_goal_stats(donations, now=None, monthly_roll=None):
         target=target,
         period_start=goal_period_start(now, scope),
         reached=raised >= target,
-        shown_raised=shown_raised,
-        shown_target=shown_target,
-        shown_percent=fx.share(shown_raised, shown_target),
+        shown_raised=raised,
+        shown_target=target,
+        shown_percent=fx.share(raised, target),
     )
     return stats
 

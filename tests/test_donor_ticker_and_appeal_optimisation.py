@@ -28,7 +28,7 @@ def _make_status_bar(donations):
 
 
 def test_donor_bought_us_a_coffee_single():
-    """Where the number of coffees donated is 1, displayed as 'bought us a coffee'."""
+    """Where one Ko-fi coffee was donated, the line names Ko-fi."""
     yesterday = datetime.datetime.now() - datetime.timedelta(days=1)
     donations = [
         {
@@ -43,13 +43,13 @@ def test_donor_bought_us_a_coffee_single():
     lines = sb._build_donor_lines()
     assert len(lines) == 1
     clean = clean_html(lines[0])
-    assert "bought us a coffee" in clean
+    assert "bought us a coffee on Ko-Fi" in clean
     assert "bought us 1 coffee" not in clean
-    assert "Alice bought us a coffee" in clean
+    assert "Alice bought us a coffee on Ko-Fi" in clean
 
 
 def test_donor_bought_us_multiple_coffees():
-    """Where coffees > 1, displayed as 'bought us {count} coffees'."""
+    """Where multiple Ko-fi coffees were donated, the line names Ko-fi."""
     yesterday = datetime.datetime.now() - datetime.timedelta(days=1)
     donations = [
         {
@@ -64,7 +64,27 @@ def test_donor_bought_us_multiple_coffees():
     lines = sb._build_donor_lines()
     assert len(lines) == 1
     clean = clean_html(lines[0])
+    assert "Derek M bought us 5 coffees on Ko-Fi" in clean
+
+
+def test_buy_me_a_coffee_line_stays_plain():
+    """A Buy Me a Coffee gift uses the plain coffees wording."""
+    yesterday = datetime.datetime.now() - datetime.timedelta(days=1)
+    donations = [
+        {
+            "name": "Derek M",
+            "amount": 5.0,
+            "method": "Buy Me a Coffee",
+            "dt": yesterday,
+            "url": "",
+        }
+    ]
+    sb = _make_status_bar(donations)
+    lines = sb._build_donor_lines()
+    assert len(lines) == 1
+    clean = clean_html(lines[0])
     assert "Derek M bought us 5 coffees" in clean
+    assert "on Ko-Fi" not in clean
 
 
 @pytest.mark.parametrize("generic_name", ["", "   ", "Unknown", "unknown", "Supporter", "supporter", "Anonymous", "anonymous", "null", "NULL"])
@@ -86,7 +106,7 @@ def test_generic_supporter_naming(generic_name):
     lines_std = sb_std._build_donor_lines()
     assert len(lines_std) == 1
     clean_std = clean_html(lines_std[0])
-    assert "A supporter bought us a coffee" in clean_std
+    assert "A supporter bought us a coffee on Ko-Fi" in clean_std
     assert "Top supporter" not in clean_std
 
     # 2. Standard donation multiple coffees: "A supporter bought us 7 coffees"
@@ -102,7 +122,7 @@ def test_generic_supporter_naming(generic_name):
     sb_7 = _make_status_bar(donations_7)
     lines_7 = sb_7._build_donor_lines()
     clean_7 = clean_html(lines_7[0])
-    assert "A supporter bought us 7 coffees" in clean_7
+    assert "A supporter bought us 7 coffees on Ko-Fi" in clean_7
 
     # 3. Standard donation dollar amount: "A supporter donated $10"
     donations_dollar = [
