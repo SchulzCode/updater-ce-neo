@@ -23,14 +23,29 @@ def _forget_dismissed_install_hints():
 
     The paperclip, microSD and keep-data tips keep their "Got it." in
     QSettings, so a developer who dismissed one while looking at the app would
-    otherwise hide the tip from every test that expects to see it.
+    otherwise hide the tip from every test that expects to see it. The saved
+    values go back afterwards: running the suite must never rewrite which
+    hints the developer has already read.
     """
+    settings = None
+    saved = {}
     try:
         from PySide6.QtCore import QSettings
 
         settings = QSettings("innioasis", "updater")
         for name in ("paperclip", "microsd", "keep_data_warning"):
-            settings.remove(f"dismissed_install_hints/{name}")
+            key = f"dismissed_install_hints/{name}"
+            if settings.contains(key):
+                saved[key] = bool(settings.value(key, False, type=bool))
+            settings.remove(key)
+        settings.sync()
     except Exception:
-        pass
+        settings = None
     yield
+    if settings is not None:
+        try:
+            for key, value in saved.items():
+                settings.setValue(key, value)
+            settings.sync()
+        except Exception:
+            pass

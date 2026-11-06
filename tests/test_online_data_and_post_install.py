@@ -985,7 +985,9 @@ def test_guided_power_off_and_keep_data_flow(qapp):
         assert fp._wait_cancel_btn._symbol == "cancel"
         assert not fp._keep_data_cb.isHidden()
         assert not fp._keep_data_cb.isChecked()
-        assert not fp._keep_data_microsd_note.isHidden()
+        # The microSD footnote belongs to the power-off explanation, not to
+        # the "which software is running" question.
+        assert fp._keep_data_microsd_note.isHidden()
         assert fp._keep_data_choice.isHidden()
 
         # Next without Keep Data: directly proceeds

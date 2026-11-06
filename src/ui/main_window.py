@@ -4051,6 +4051,38 @@ class MainWindow(QMainWindow):
         except Exception:
             logger.debug("Select content fit failed", exc_info=True)
 
+    def _refit_catalogue_after_install(self) -> None:
+        """Give Select Software its own height back after an install card.
+
+        The install card hugs itself with a fixed minimum, and the catalogue
+        measures itself from a layout that only runs once it is on screen. A
+        fit made while the card is being torn down therefore measures the
+        hidden page and keeps the card's compact frame — the catalogue came
+        back as a strip too short to read after a cancel or a run that ended
+        without a completion card. The floor is applied now, so the frame can
+        never be shorter than the catalogue needs, and the content fit runs
+        again once the page has been laid out at that size.
+        """
+        stack = getattr(self, "_stack", None)
+        page = getattr(self, "_select_page", None)
+        if stack is None or page is None or stack.currentWidget() is not page:
+            return
+        self._hugging_install = False
+        self._release_select_window_size()
+        if not (
+            self.isMinimized()
+            or self.isMaximized()
+            or self.isFullScreen()
+            or bool(self.windowState() & (Qt.WindowMaximized | Qt.WindowFullScreen))
+        ):
+            self.setMinimumSize(
+                self._minimum_window_width(), self._content_floor_height()
+            )
+        # One turn later: the page's rows and cards report their real heights
+        # only after the layout that the navigation itself triggered.
+        QTimer.singleShot(0, self._fit_window_to_select_content)
+        QTimer.singleShot(0, self._fit_window_to_page)
+
     def _fit_window_to_select_content(self):
         """Deferred half of _on_select_content_changed: measure and grow."""
         self._select_fit_queued = False
@@ -7485,6 +7517,7 @@ class MainWindow(QMainWindow):
         self.service.stop_device_monitor()
         self._sync_install_nav_entry()
         self._nav_to_page(_PAGE_SELECT)
+        self._refit_catalogue_after_install()
         QTimer.singleShot(0, self._maybe_offer_deferred_app_update)
 
     def _tick_elapsed(self):

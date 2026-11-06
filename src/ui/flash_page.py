@@ -2814,14 +2814,21 @@ class FlashPage(QWidget):
         self._apply_stop_hold()
 
     def show_connect_search(self) -> None:
-        """Connect sentence only while the flasher is searching for USB."""
+        """Connect sentence only while the flasher is searching for USB.
+
+        "Please connect your Y1" is the same kind of ask as "power it off":
+        the reader has one thing to do and no percentage to watch yet, so it
+        gets the same prompt-only card — no software title above it and no bar
+        frozen at 0%. The title returns with the bar once the run is writing.
+        """
         self._failed = False
         self._complete = False
-        self._prompt_only = False
+        self._prompt_only = True
         self._wait_copy = "connect"
         self._switch_view(self._waiting_view)
         self.set_waiting_device()
         self._set_determinate(self._wait_progress_bar, 0)
+        self._sync_wait_band_page()
         if hasattr(self, "_wait_continue_btn"):
             self._wait_continue_btn.setVisible(True)
             self._wait_continue_btn.setEnabled(False)
@@ -2860,14 +2867,20 @@ class FlashPage(QWidget):
     def _connect_device_prompt_text(self) -> str:
         prompt = tr("flash_connect_device_prompt").format(model=self._connect_model_text())
         remaining = getattr(self, "_attempt_remaining", 0)
-        if remaining > 0 and not getattr(self, "_prompt_only", False):
+        if remaining > 0 and getattr(self, "_wait_copy", "") in (
+            "connect",
+            "please_wait_connecting",
+        ):
             return f"{prompt} ({remaining}s)"
         return prompt
 
     def _wait_connecting_prompt_text(self) -> str:
         prompt = tr("flash_wait_connecting_prompt").format(model=self._connect_model_text())
         remaining = getattr(self, "_attempt_remaining", 0)
-        if remaining > 0 and not getattr(self, "_prompt_only", False):
+        if remaining > 0 and getattr(self, "_wait_copy", "") in (
+            "connect",
+            "please_wait_connecting",
+        ):
             return f"{prompt} ({remaining}s)"
         return prompt
 
@@ -2888,7 +2901,7 @@ class FlashPage(QWidget):
             label.setVisible(False)
         if hasattr(self, "_wait_prompt_label"):
             copy = getattr(self, "_wait_copy", "")
-            if not getattr(self, "_prompt_only", False) and copy not in ("power_off", "stage"):
+            if copy not in ("power_off", "stage"):
                 if copy == "please_wait_connecting":
                     text = self._wait_connecting_prompt_text()
                 else:
@@ -2905,6 +2918,9 @@ class FlashPage(QWidget):
                             self._stop_saved = (text, saved[1], saved[2], saved[3], saved[4])
                     else:
                         self._wait_prompt_label.setText(text)
+                # On a prompt-only card the band carries this sentence, so a
+                # ticked-down countdown has to reach it too.
+                self._sync_wait_band_page()
 
     def show_real_stage(self, text: str) -> None:
         """Drop the connect sentence and the throbber once the tool moves on."""
@@ -2915,6 +2931,7 @@ class FlashPage(QWidget):
             self._wait_prompt_label.setText(text or "")
         if self._wait_progress_bar.maximum() == 0 and self._wait_progress_bar.minimum() == 0:
             self._set_determinate(self._wait_progress_bar, 0)
+        self._sync_wait_band_page()
         self._apply_stop_hold()
 
     def _hide_theme_wizard_chips(self) -> None:
@@ -2943,6 +2960,8 @@ class FlashPage(QWidget):
             if hasattr(self, "_wait_prompt_label"):
                 self._wait_prompt_label.setText(self._step_label.text())
         self._wait_copy = "stage"
+        self._prompt_only = False
+        self._sync_wait_band_page()
         self._sync_keep_data_visibility()
         self._switch_view(self._flashing_view)
         failed = self._failed
@@ -4250,11 +4269,13 @@ class FlashPage(QWidget):
                 note.setText(note_text)
             note.setVisible(bool(note_text))
         if microsd_note is not None:
-            # The format-all warning already says what happens to microSD
-            # media; the standalone reassurance would repeat it. A user who
-            # put it away with its Got it link keeps it away.
+            # The microSD reassurance is part of the "if you continue without
+            # this" explanation, not a line the card owes every reader: it is
+            # only contextually relevant once that explanation is on screen.
+            # The format-all warning already speaks for microSD media, and a
+            # reader who put the reassurance away keeps it away.
             microsd_note.setVisible(
-                bool(text) and not format_visible and not _hint_dismissed("microsd")
+                revealed and not format_visible and not _hint_dismissed("microsd")
             )
         self._notify_geometry_change()
 
@@ -4284,7 +4305,10 @@ class FlashPage(QWidget):
         self._keep_data_hint.setText(hint or "")
         self._keep_data_hint.setVisible(bool(hint))
         if hasattr(self, "_keep_data_microsd_note"):
-            self._keep_data_microsd_note.setVisible(True)
+            # This question is about which software is on the player, not
+            # about what an erase keeps; the reassurance belongs with the
+            # explanation behind the power-off card's help link.
+            self._keep_data_microsd_note.setVisible(False)
         # If there are dropdown choices, use Cancel (X) and Next (Arrow);
         # if a single Yes/No question, use No (X) and Yes (Checkmark ✓).
         self._set_yes_no_glyphs(len(names) <= 1)
@@ -4313,10 +4337,17 @@ class FlashPage(QWidget):
         self._show_wait_question(question or "")
         if hasattr(self, "_keep_data_warning"):
             self._keep_data_warning.setVisible(False)
+        if hasattr(self, "_keep_data_note"):
+            # Nothing is being kept on this path, so the tick's "keeps your
+            # settings and media" line would flatly contradict the question.
+            self._keep_data_note.setText("")
+            self._keep_data_note.setVisible(False)
         self._keep_data_hint.setText(explainer or "")
         self._keep_data_hint.setVisible(bool(explainer))
         if hasattr(self, "_keep_data_microsd_note"):
-            self._keep_data_microsd_note.setVisible(True)
+            # The erase explainer below already says media on the microSD is
+            # retained, so the standalone reassurance would only repeat it.
+            self._keep_data_microsd_note.setVisible(False)
         self._set_yes_no_glyphs(True)
         self._wait_continue_btn.setVisible(True)
         self._wait_continue_btn.setEnabled(True)
@@ -4362,6 +4393,9 @@ class FlashPage(QWidget):
         self._wait_prompt_label.setVisible(False)
         self._keep_data_cb.setVisible(False)
         self._keep_data_warning.setVisible(False)
+        if hasattr(self, "_keep_data_note"):
+            self._keep_data_note.setText("")
+            self._keep_data_note.setVisible(False)
         self._show_keep_data_choice(False)
         self._show_wait_question(question)
         self._keep_data_hint.setText(body.replace("\n", "<br>"))
@@ -5434,6 +5468,11 @@ class FlashPage(QWidget):
         ):
             self._set_indeterminate(self._wait_progress_bar)
             return
+        if val > 0 and getattr(self, "_prompt_only", False):
+            # The run is writing now, so the bar has something to report and the
+            # card gets its software title back with it.
+            self._prompt_only = False
+            self._sync_wait_band_page()
         if val > 0 and getattr(self, "_wait_copy", "") == "please_wait":
             self._wait_copy = "stage"
         self._set_determinate(self._progress_bar, val)
@@ -5831,8 +5870,22 @@ class FlashPage(QWidget):
     def on_cancel_wait(self, callback):
         self._cancel_wait_callback = callback
 
+    def _nothing_written_yet(self) -> bool:
+        """True on a wait card that has not touched the player.
+
+        The power-off and USB-recovery cards are asking for a player to be
+        brought back; nothing has been written on either, so leaving them needs
+        no stop confirmation. The connect card is different: the flasher is
+        already running and watching for the port, so its cancel chip still
+        asks first. This used to be spelled ``_prompt_only``, which made the
+        connect card lose its confirmation once it became a prompt-only card.
+        """
+        return bool(getattr(self, "_prompt_only", False)) and getattr(
+            self, "_wait_copy", ""
+        ) in ("power_off", "usb_disconnected")
+
     def _on_cancel(self):
-        if getattr(self, "_failed", False) or getattr(self, "_prompt_only", False):
+        if getattr(self, "_failed", False) or self._nothing_written_yet():
             callback = getattr(self, "_cancel_callback", None) or getattr(self, "_cancel_wait_callback", None)
             if callable(callback):
                 callback()
@@ -5846,7 +5899,7 @@ class FlashPage(QWidget):
         straight back to Select Software. Once a run is under way the same
         chip asks first, because there the target is already mid-write.
         """
-        if getattr(self, "_prompt_only", False) or getattr(self, "_failed", False):
+        if self._nothing_written_yet() or getattr(self, "_failed", False):
             callback = getattr(self, "_cancel_wait_callback", None) or getattr(self, "_cancel_callback", None)
             if callable(callback):
                 callback()
