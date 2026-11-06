@@ -161,6 +161,24 @@ def _enable_native_crash_log():
         logger.debug("Native crash log unavailable", exc_info=True)
 
 
+def _mark_startup_complete() -> None:
+    """Create the launcher's ready marker once Qt is running the app.
+
+    The AppImage and tarball launchers retry a startup crash (SIGSEGV/SIGABRT)
+    once with the conservative Qt stack. That retry must never run after the
+    window is up: by then a flash or a themes transfer may be in progress.
+    """
+    import os
+
+    marker = os.environ.get("INNIOASIS_STARTUP_MARKER")
+    if not marker:
+        return
+    try:
+        Path(marker).write_text(f"{os.getpid()}\n", encoding="utf-8")
+    except OSError:
+        logger.debug("Startup marker could not be written", exc_info=True)
+
+
 def _running_threads() -> list:
     """Every live Python QThread, whichever module created it."""
     import gc
@@ -338,6 +356,11 @@ def _configure_qt_plugins() -> None:
     aborted with "Could not load the Qt platform plugin" before any window
     existed. Only a source checkout may borrow the host's plugin directory,
     where the distro is the installation that provides Qt at all.
+
+    Once the plugin directory is known, :mod:`linux_desktop` aligns the
+    session's platform, theme and input-method variables with what this build
+    actually ships, so an inherited value cannot abort the launch on another
+    desktop environment.
     """
     if not sys.platform.startswith("linux"):
         return
@@ -345,6 +368,9 @@ def _configure_qt_plugins() -> None:
 
     from PySide6.QtCore import QCoreApplication
 
+    from . import linux_desktop
+
+    plugin_dir = None
     if getattr(sys, "frozen", False) or os.environ.get("APPIMAGE") or os.environ.get("APPDIR"):
         for candidate in (
             paths.BUNDLE_DIR / "PySide6" / "Qt" / "plugins",
@@ -353,24 +379,28 @@ def _configure_qt_plugins() -> None:
             paths.INSTALL_DIR / "_internal" / "PySide6" / "plugins",
         ):
             if (candidate / "platforms").is_dir():
+                plugin_dir = candidate
                 os.environ["QT_PLUGIN_PATH"] = str(candidate)
                 os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = str(candidate / "platforms")
-                return
-        # No bundled directory (a build that relies on PySide6's compiled-in
-        # path): drop a host value so it cannot outrank that path.
-        os.environ.pop("QT_PLUGIN_PATH", None)
-        os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH", None)
-        return
+                break
+        else:
+            # No bundled directory (a build that relies on PySide6's compiled-in
+            # path): drop a host value so it cannot outrank that path.
+            os.environ.pop("QT_PLUGIN_PATH", None)
+            os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH", None)
+    else:
+        for host_plugin_dir in (
+            "/usr/lib/qt6/plugins",
+            "/usr/lib64/qt6/plugins",
+            "/usr/lib/x86_64-linux-gnu/qt6/plugins",
+            "/usr/lib/aarch64-linux-gnu/qt6/plugins",
+            "/usr/local/lib/qt6/plugins",
+        ):
+            if os.path.isdir(host_plugin_dir):
+                QCoreApplication.addLibraryPath(host_plugin_dir)
+        plugin_dir = linux_desktop.installed_plugin_dir()
 
-    for plugin_dir in (
-        "/usr/lib/qt6/plugins",
-        "/usr/lib64/qt6/plugins",
-        "/usr/lib/x86_64-linux-gnu/qt6/plugins",
-        "/usr/lib/aarch64-linux-gnu/qt6/plugins",
-        "/usr/local/lib/qt6/plugins",
-    ):
-        if os.path.isdir(plugin_dir):
-            QCoreApplication.addLibraryPath(plugin_dir)
+    linux_desktop.prepare_qt_environment(plugin_dir)
 
 
 def main():
@@ -462,6 +492,16 @@ def main():
         from .flash_service import FlashWorker
 
         cli_app = QCoreApplication(sys.argv)
+        # Say whether the child actually loaded libusb before it opens USB.
+        # This line reaches the install log through the parent's relay and
+        # turns "MTKClient did not work" into a concrete path or load failure.
+        from . import mtk_api
+        _libusb = mtk_api.libusb_status()
+        print(
+            f"[LIBUSB] path={_libusb.get('path') or 'not found'} "
+            f"loaded={int(bool(_libusb.get('loaded')))}",
+            flush=True,
+        )
         # Positional values are read from the arguments that are not switches, so
         # a trailing ``--keep-data`` can never be mistaken for the model (the
         # last position is omitted when the caller has nothing to put there).
@@ -974,6 +1014,16 @@ def main():
             player_update_check.sync_sp_donation_marker()
         except Exception:
             logging.getLogger(__name__).debug("Donation marker check failed", exc_info=True)
+        try:
+            from . import theme_pack
+
+            # The 360p themes archive is no longer bundled: warm the cache once
+            # a week so the first themes install has a current pack to merge.
+            theme_pack.refresh_theme_pack_if_due_async()
+        except Exception:
+            logging.getLogger(__name__).debug(
+                "Weekly theme pack refresh could not start", exc_info=True
+            )
 
     QTimer.singleShot(0, _deferred_startup)
 
@@ -1006,6 +1056,10 @@ def main():
             # Keep a reference for the lifetime of the app; the watcher owns
             # timers and an event filter on the QApplication itself.
             app._theme_watcher = theme_watcher
+
+    # One event-loop turn is not enough: let the first page paint before the
+    # launcher's startup-crash window closes.
+    QTimer.singleShot(1500, _mark_startup_complete)
 
     exit_code = app.exec()
     _leave_cleanly(holder["window"], exit_code)

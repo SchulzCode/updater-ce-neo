@@ -11,6 +11,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libegl1 \
     libxkbcommon0 \
+    libxkbcommon-x11-0 \
+    libxcb-cursor0 \
+    libxcb-image0 \
+    libxcb-render-util0 \
+    libxcb-util1 \
     libfreetype6 \
     libfontconfig1 \
     libdbus-1-3 \

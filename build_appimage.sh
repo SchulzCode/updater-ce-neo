@@ -334,6 +334,83 @@ if [ ! -d "$DIST_DIR/$APP_NAME" ] || [ ! -f "$DIST_DIR/$APP_NAME/$APP_NAME" ]; t
     exit 1
 fi
 
+# MTKClient is the default Linux flash engine, so its libusb must be a real
+# file inside every artifact. A copy of a build-host symlink would be dangling
+# on the user's machine, and the fork asks pyusb for the unversioned soname
+# that distributions do not ship. Normalise both names here, before the
+# AppImage and tarball are assembled.
+stage_libusb_payload() {
+    _internal="$DIST_DIR/$APP_NAME/_internal"
+    [ -d "$_internal" ] || return 0
+    _dest="$_internal/libusb-1.0.so.0"
+
+    if [ -e "$_dest" ]; then
+        # Dereference whatever PyInstaller or the container left behind.
+        cp -L "$_dest" "$_dest.tmp"
+        mv -f "$_dest.tmp" "$_dest"
+    else
+        for _cand in /usr/lib/*-linux-gnu/libusb-1.0.so.0 /usr/lib64/libusb-1.0.so.0 /usr/lib/libusb-1.0.so.0; do
+            if [ -f "$_cand" ]; then
+                cp -L "$_cand" "$_dest"
+                break
+            fi
+        done
+    fi
+
+    if [ ! -s "$_dest" ]; then
+        echo "ERROR: libusb-1.0.so.0 is required for MTKClient (the default Linux flash engine) but was not found."
+        echo "       Install the libusb runtime package (libusb-1.0-0 on Debian/Ubuntu) and rebuild."
+        exit 1
+    fi
+
+    chmod 0644 "$_dest"
+    ln -sfn libusb-1.0.so.0 "$_internal/libusb-1.0.so"
+    echo "  -> Bundled libusb for MTKClient: $_dest"
+}
+stage_libusb_payload
+
+# The Rockbox 360p themes archive is ~62 MB and is now fetched on demand and
+# refreshed weekly by the app; only the small fonts pack ships. Prune a dist/
+# produced before this rule too (the --no-pyinstaller path packages an existing
+# build as-is).
+rm -f "$DIST_DIR/$APP_NAME/assets/360p/themes-themepack.zip"
+rm -rf "$DIST_DIR/$APP_NAME/assets/360p/themes-themepack"
+
+# --- Step 2b: Bundle Qt's XCB client dependencies -----------------------------
+# Qt 6.5+ loads libqxcb.so only when libxcb-cursor0 and its helper libraries
+# are present. Minimal desktops and some derivatives do not install them, and
+# Qt then aborts with "Could not load the Qt platform plugin xcb" before a
+# window exists. The build host (the Debian container or the CI runner) has
+# them; ship the client-side copies beside the other bundled libraries. The
+# core libxcb/X11 libraries stay the host's, since they must match the running
+# X server.
+bundle_xcb_client_libs() {
+    _internal="$DIST_DIR/$APP_NAME/_internal"
+    [ -d "$_internal" ] || return 0
+    for _so in \
+        libxcb-cursor.so.0 \
+        libxcb-image.so.0 \
+        libxcb-render-util.so.0 \
+        libxcb-util.so.1 \
+        libxkbcommon-x11.so.0 \
+        libxkbcommon.so.0; do
+        _src=""
+        for _libdir in /usr/lib/*-linux-gnu /usr/lib64 /usr/lib; do
+            if [ -e "$_libdir/$_so" ]; then
+                _src="$_libdir/$_so"
+                break
+            fi
+        done
+        if [ -z "$_src" ]; then
+            echo "  -> Note: $_so is not installed on this build host; the target distro must provide it."
+        elif [ ! -e "$_internal/$_so" ]; then
+            cp -L "$_src" "$_internal/$_so"
+            echo "  -> Bundled Qt XCB dependency: $_so"
+        fi
+    done
+}
+bundle_xcb_client_libs
+
 # --- Step 3: Stage the bundled SP Flash Tool Linux payload --------------------
 log_step 3 "$TOTAL_STEPS" "Bundling SP Flash Tool Linux Payload" "Copying flash_tool executable, helper scripts, and libraries into package..."
 SP_TOOL_SRC="tools/linux/SP_Flash_Tool_v5.1904_Linux"
@@ -376,10 +453,14 @@ esac
 
 if [ -n "$ADB_BIN" ] && [ -f "$ADB_BIN" ]; then
     chmod 0755 "$ADB_BIN"
+    # The spec already stages tools/adb/<platform>/adb. Add the flat copy only
+    # for a --no-pyinstaller dist that predates that layout, and never a second
+    # root copy: the resolver checks the per-platform path first.
     mkdir -p "$DIST_DIR/$APP_NAME/tools/adb"
-    cp "$ADB_BIN" "$DIST_DIR/$APP_NAME/tools/adb/adb"
-    cp "$ADB_BIN" "$DIST_DIR/$APP_NAME/adb"
-    echo "  -> Bundled ADB ($ARCH) at $DIST_DIR/$APP_NAME/tools/adb/adb and $DIST_DIR/$APP_NAME/adb"
+    if [ ! -f "$DIST_DIR/$APP_NAME/tools/adb/adb" ]; then
+        cp "$ADB_BIN" "$DIST_DIR/$APP_NAME/tools/adb/adb"
+    fi
+    echo "  -> ADB ($ARCH) staged under tools/adb"
 fi
 
 # Stage portable unrar / unar for RAR unpacking compatibility across Linux architectures
@@ -448,18 +529,18 @@ if [ -n "$UNRAR_BIN" ] && [ -f "$UNRAR_BIN" ]; then
     echo "  -> Bundled unrar executable placed on PATH at $APPDIR/usr/bin/unrar"
 fi
 
-# Bundle libusb-1.0 into AppDir/usr/lib:
-# Prefer the baseline libusb-1.0 bundled in _internal, otherwise look on the build system
+# MTKClient is the default Linux engine and loads libusb from the AppImage.
+# Keep a real file (not a build-host symlink) and the unversioned name the
+# bundled mtkclient fork asks pyusb for.
 mkdir -p "$APPDIR/usr/lib"
-if compgen -G "$APPDIR/usr/bin/_internal/libusb-1.0.so*" > /dev/null; then
-    cp -d "$APPDIR/usr/bin/_internal"/libusb-1.0.so* "$APPDIR/usr/lib/" 2>/dev/null || true
-else
-    for libusb_cand in /usr/lib/*/libusb-1.0.so* /usr/lib64/libusb-1.0.so* /usr/lib/libusb-1.0.so*; do
-        if [ -f "$libusb_cand" ]; then
-            cp -d "$libusb_cand" "$APPDIR/usr/lib/" 2>/dev/null || true
-        fi
-    done
+LIBUSB_PAYLOAD="$APPDIR/usr/bin/_internal/libusb-1.0.so.0"
+if [ ! -s "$LIBUSB_PAYLOAD" ]; then
+    echo "ERROR: libusb-1.0.so.0 missing from the PyInstaller payload; MTKClient cannot work."
+    exit 1
 fi
+cp -L "$LIBUSB_PAYLOAD" "$APPDIR/usr/lib/libusb-1.0.so.0"
+ln -sfn libusb-1.0.so.0 "$APPDIR/usr/lib/libusb-1.0.so"
+echo "  -> AppImage libusb payload: $APPDIR/usr/lib/libusb-1.0.so.0"
 
 # Copy / generate desktop integration
 DESKTOP_SRC="assets/innioasis-updater.desktop"
@@ -551,8 +632,29 @@ else
 fi
 
 # Hand off execution to the brand's binary (InnioasisUpdater or
-# MediaTekInstaller — both come from the same spec).
-exec "${HERE}/usr/bin/InnioasisUpdater" "$@"
+# MediaTekInstaller — both come from the same spec). If it dies with a native
+# crash before reporting the window up, retry once with the conservative Qt
+# stack (see src/linux_desktop.py): another compositor, GPU driver or input
+# method setup then gets a working launch instead of the same abort.
+APP_BIN="${HERE}/usr/bin/InnioasisUpdater"
+RUN_MARKER="${TMPDIR:-/tmp}/innioasis-updater-start-$$"
+rm -f "$RUN_MARKER"
+trap 'rm -f "$RUN_MARKER"' EXIT HUP INT TERM
+INNIOASIS_STARTUP_MARKER="$RUN_MARKER"
+export INNIOASIS_STARTUP_MARKER
+
+set +e
+"$APP_BIN" "$@"
+_status=$?
+set -e
+if [ -z "${INNIOASIS_SAFE_MODE:-}" ] && [ ! -e "$RUN_MARKER" ] && \
+   { [ "$_status" -eq 134 ] || [ "$_status" -eq 139 ] || [ "$_status" -eq 132 ] || [ "$_status" -eq 135 ]; }; then
+    echo "The Qt front end stopped during startup; retrying once in safe mode." >&2
+    INNIOASIS_SAFE_MODE=1
+    export INNIOASIS_SAFE_MODE
+    exec "$APP_BIN" "$@"
+fi
+exit "$_status"
 EOF
 chmod +x "$APPDIR/AppRun"
 # ...and point it at this brand's executable.

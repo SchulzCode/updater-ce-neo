@@ -11,6 +11,8 @@ import logging
 import os
 import shutil
 import sys
+import threading
+import time
 import zipfile
 from pathlib import Path
 from typing import Callable, Optional
@@ -34,8 +36,9 @@ from .ui.dark import T
 logger = logging.getLogger(__name__)
 
 #: Upstream Rockbox 360p themes release asset. The themes archive is no longer
-#: shipped inside the macOS app (it was 62 MB of every build); it is downloaded
-#: on first themes install and merged over the small bundled fonts pack.
+#: shipped inside the builds (it was 62 MB of every artifact); it is downloaded
+#: on first themes install, refreshed weekly, and merged over the small bundled
+#: fonts pack.
 THEME_PACK_URL = "https://github.com/rockbox-y1/themes/releases/download/for_the_gays_and_the_theys/themepack.zip"
 
 #: Theme sources tried in order; the first one that answers is merged. The
@@ -58,6 +61,77 @@ THEME_PACK_URLS = THEME_PACK_THEME_URLS + THEME_PACK_FONT_URLS
 
 #: Remote/merged themepack archive name (downloads dir or bundled zip).
 THEME_PACK_ZIP_NAME = "rockbox_360p_themepack.zip"
+
+#: How often a launch refreshes the cached pack from the remote source. A
+#: successful refresh resets the window; the archive is no longer bundled.
+THEME_PACK_REFRESH_INTERVAL_SECONDS = 7 * 24 * 60 * 60
+THEME_PACK_REFRESH_STAMP_NAME = "themepack_refresh.stamp"
+
+_refresh_thread: Optional[threading.Thread] = None
+_download_lock = threading.Lock()
+
+
+def theme_pack_refresh_stamp_path() -> Path:
+    """Timestamp file recording the last successful remote refresh."""
+    return downloads_dir() / THEME_PACK_REFRESH_STAMP_NAME
+
+
+def theme_pack_refresh_due(now: Optional[float] = None) -> bool:
+    """Whether the cached pack needs a refresh (missing, stale or corrupt)."""
+    now = time.time() if now is None else now
+    cached = downloads_dir() / THEME_PACK_ZIP_NAME
+    try:
+        if not cached.is_file() or cached.stat().st_size <= 1024:
+            return True
+    except OSError:
+        return True
+    try:
+        last = float(theme_pack_refresh_stamp_path().read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return True
+    return now - last >= THEME_PACK_REFRESH_INTERVAL_SECONDS
+
+
+def mark_theme_pack_refreshed(now: Optional[float] = None) -> None:
+    """Record a successful refresh so the next one waits a week."""
+    stamp = theme_pack_refresh_stamp_path()
+    stamp.parent.mkdir(parents=True, exist_ok=True)
+    tmp = stamp.with_suffix(".tmp")
+    tmp.write_text(f"{time.time() if now is None else now:.0f}\n", encoding="utf-8")
+    os.replace(tmp, stamp)
+
+
+def refresh_theme_pack_if_due_async(now: Optional[float] = None) -> bool:
+    """Start the weekly pack refresh in the background when it is due.
+
+    Called once after launch. It never blocks the UI; a failed download leaves
+    the stamp untouched so the next launch tries again, while a successful one
+    starts the seven-day window. Offline mode and an already-running refresh
+    are no-ops.
+    """
+    global _refresh_thread
+    from . import config
+
+    if config.is_offline_mode() or not theme_pack_refresh_due(now):
+        return False
+    active = _refresh_thread
+    if active is not None and active.is_alive():
+        return False
+
+    def _run() -> None:
+        try:
+            _ok, status, count = download_and_merge_theme_pack(timeout=10.0)
+            logger.info(
+                "[Rockbox Themes] Weekly refresh: %s (%d entries).", status, count
+            )
+        except Exception:
+            logger.warning("[Rockbox Themes] Weekly refresh failed", exc_info=True)
+
+    _refresh_thread = threading.Thread(
+        target=_run, name="themepack-weekly-refresh", daemon=True
+    )
+    _refresh_thread.start()
+    return True
 
 
 def normalize_rockbox_rel_path(filename: str) -> str:
@@ -139,18 +213,19 @@ def merge_remote_theme_pack_into_zip(
     return len(merged)
 
 
-def download_and_merge_theme_pack(
+def _download_and_merge_theme_pack(
     target_zip_path: Optional[Path | str] = None,
     timeout: float = 30.0,
     progress_cb: Optional[Callable[[int, int], None]] = None,
 ) -> tuple[bool, str, int]:
     """Download the latest themes and merge them over the bundled fonts pack.
 
-    The themes archive is no longer shipped inside the macOS app, so the release
-    asset is fetched on first use. Only the first theme source that answers is
-    merged; the others are fallbacks. The font-only sources are always merged so
-    a themes-only archive cannot drop the bundled Rockbox fonts. Existing
-    destination entries are preserved, so a cached pack keeps its other files.
+    The themes archive is not shipped in the builds, so the release asset is
+    fetched on first use and refreshed weekly. Only the first theme source that
+    answers is merged; the others are fallbacks. The font-only sources are
+    always merged so a themes-only archive cannot drop the bundled Rockbox
+    fonts. Existing destination entries are preserved, so a cached pack keeps
+    its other files.
 
     In offline mode, immediately skips downloading and returns (True, "offline", 0).
     If every source fails, logs a warning and returns (True, "offline_fallback", 0)
@@ -211,9 +286,23 @@ def download_and_merge_theme_pack(
             merge_count = count
 
     if themes_merged:
+        try:
+            mark_theme_pack_refreshed()
+        except OSError:
+            logger.debug("Could not record the theme pack refresh", exc_info=True)
         return True, "merged", merge_count
     logger.warning("[Rockbox Themes] All theme sources failed; keeping the cached/bundled payload.")
     return True, "offline_fallback", merge_count
+
+
+def download_and_merge_theme_pack(
+    target_zip_path: Optional[Path | str] = None,
+    timeout: float = 30.0,
+    progress_cb: Optional[Callable[[int, int], None]] = None,
+) -> tuple[bool, str, int]:
+    """Download and merge the pack, serialized with the weekly refresh."""
+    with _download_lock:
+        return _download_and_merge_theme_pack(target_zip_path, timeout, progress_cb)
 
 
 class ThemePackUpdateWorker(QThread):
@@ -702,11 +791,10 @@ def ensure_normalized_theme_pack_zip(
 
 
 def bundled_rockbox_dir() -> Path:
-    """The app's own ``.rockbox`` content: themes plus the fonts pack.
+    """The app's own ``.rockbox`` content: the bundled fonts pack.
 
-    The remote themepack zip carries themes only, so the bundled copy (which
-    includes the Rockbox fonts pack) is always the merge base: remote files
-    overlay it, never the other way round.
+    The remote themepack zip carries themes only, so the bundled fonts copy is
+    always the merge base: remote files overlay it, never the other way round.
     """
     from . import paths as _paths
 

@@ -117,6 +117,21 @@ chmod +x build_appimage.sh
 - `dist/UpdaterCE-2.5.0-x86_64.AppImage`
 - `dist/MediaTekInstaller-2.5.0-x86_64.AppImage`
 
+**X11, Wayland and desktop environments:** the AppImage and tarball carry their
+own Qt and start under GNOME, KDE Plasma, Xfce, Cinnamon, MATE, LXQt, Budgie and
+tiling compositors. If the front end stops before its window appears, the
+launcher retries once with a conservative display/input stack. To choose it
+yourself, launch with `INNIOASIS_SAFE_MODE=1`; to leave your session's Qt plugin
+selection untouched, use `INNIOASIS_NO_QT_ENV_FIX=1`. The retry never runs once
+the window is up, so an install already in progress is not restarted.
+
+**MTKClient and USB access:** MTKClient is the default Linux flash engine. The
+AppImage and tarball bundle `libusb-1.0.so.0`, so no system libusb package is
+needed. The first install asks once for your password to add MediaTek udev
+rules; those rules give the logged-in desktop user access to the player and
+also cover SP Flash Tool. Subsequent installs use the saved rule and do not
+prompt again.
+
 ---
 
 ## 3. Brand Switching & Development Flags
@@ -147,7 +162,7 @@ python scripts/set_build_brand.py --reset
 | :--- | :--- | :--- | :--- |
 | **Windows** | **SP Flash Tool** | **MTKClient** (press `M` to unlock) | `tools/windows/SP_Flash_Tool_v5.1904_Win` |
 | **macOS** | **MTKClient** (in-process) | None | `vendor/mtkclient` + `libusb-1.0.dylib` |
-| **Linux** | **SP Flash Tool** | **MTKClient** | `tools/linux/SP_Flash_Tool_v5.1904_Linux` |
+| **Linux** | **MTKClient** | **SP Flash Tool** | `vendor/mtkclient` + bundled `libusb-1.0.so.0`; SP Flash Tool payload as fallback |
 
 ---
 

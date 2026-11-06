@@ -5088,13 +5088,28 @@ class MainWindow(QMainWindow):
         self._flash_page.update_prep_progress(1)
         self._flash_page.set_prep_eta_seconds(0)
         self._append_log(tr(prep_copy))
+        self._linux_permission_pending = False
         if backend_method(self._flash_method) == METHOD_MTK:
-            # MTKClient talks to the player through libusb as the normal user:
-            # there is nothing to elevate and no system change to make, so no
-            # SP Flash Tool preparation, password prompt or tool sweep runs for
-            # an MTKClient install. SP Flash Tool gets its own setup only when
-            # it is the selected engine.
-            self._linux_permission_pending = False
+            # MTKClient talks to the player through libusb as the normal user,
+            # but raw USB device nodes are not writable without a MediaTek
+            # udev rule. Install that rule once here instead of starting the
+            # flash and failing with "Access denied". The rule is persistent
+            # and is the same one SP Flash Tool uses. A copy launched with
+            # root already has access and needs no rule.
+            if hasattr(os, "geteuid") and os.geteuid() == 0:
+                return True
+            try:
+                access_ok, access_msg = linux_sp_flash.check_udev_rules()
+            except Exception as exc:
+                logger.info("Could not check MediaTek USB access: %s", exc)
+                access_ok, access_msg = True, ""
+            if not access_ok and not getattr(self, "_linux_permission_confirmed", False):
+                logger.info("MediaTek USB access is not configured: %s", access_msg)
+                self._linux_permission_pending = True
+                self._show_device_prep(permission=True)
+                return False
+            if access_ok:
+                self._linux_permission_confirmed = False
             return True
         try:
             # Ordinary user-space pieces never need elevation.
@@ -5133,8 +5148,8 @@ class MainWindow(QMainWindow):
         self._linux_permission_confirmed = True
         # The system password dialog opens over this card, so say what it is
         # for instead of leaving the generic "please wait" line up while the
-        # user is being asked to authenticate. This is the SP Flash Tool setup
-        # step only; MTKClient installs never reach it.
+        # user is being asked to authenticate. This is the USB-access setup
+        # step; MTKClient installs reach it only when the rules are missing.
         self._flash_page.show_entering_password()
         try:
             from PySide6.QtWidgets import QApplication
@@ -5143,10 +5158,19 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         try:
-            fixed, detail = linux_sp_flash.auto_fix_permissions()
+            if backend_method(self._flash_method) == METHOD_MTK:
+                # The udev rule alone is enough for MTKClient; do not stage
+                # or verify the SP Flash Tool payload for an MTK install.
+                fixed, detail = linux_sp_flash.install_udev_rules()
+            else:
+                fixed, detail = linux_sp_flash.auto_fix_permissions()
         except Exception as exc:
             logger.info("Linux access setup failed: %s", exc)
             fixed, detail = False, str(exc)
+        if not fixed:
+            # Let a later retry offer the access step again; a cancelled or
+            # failed password prompt must not become a permanent "confirmed".
+            self._linux_permission_confirmed = False
         self._append_log(
             tr("install_linux_prep_pending_friendly") if fixed else (detail or tr("install_without_admin"))
         )
@@ -5164,9 +5188,10 @@ class MainWindow(QMainWindow):
         """
         from .. import elevation
 
-        # Linux never restarts the whole app under pkexec: the SP Flash Tool
-        # elevates its own launch when the switch is on, and MTKclient never
-        # needs root. A whole-app restart would prompt for MTKclient installs.
+        # Linux never restarts the whole app: the SP Flash Tool elevates its
+        # own launch when the switch is on, and MTKClient uses a persistent
+        # udev rule instead of root. A whole-app restart would prompt for
+        # every MTKClient install.
         if platform.system() == "Linux":
             return True
         if not elevation.run_as_admin_enabled(self.settings) or elevation.is_elevated():
@@ -5377,11 +5402,10 @@ class MainWindow(QMainWindow):
             return
         if not self._ensure_elevated_for_install():
             return
-        if self._needs_linux_device_prep() and backend_method(self._flash_method) != METHOD_MTK:
+        if self._needs_linux_device_prep():
             if not self._start_linux_install_prep():
                 return
         else:
-            # MTKClient never runs the SP Flash Tool access step.
             self._linux_permission_pending = False
         if not getattr(self, "_fallback_attempted", False):
             self._flash_method = self._preferred_flash_method()

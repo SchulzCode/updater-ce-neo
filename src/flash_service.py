@@ -5655,12 +5655,21 @@ class FlashWorker(QThread):
         self._tool_tag = "MTK"
         if sys.platform.startswith("linux") or (os.name == "posix" and not sys.platform.startswith("darwin")):
             try:
+                from . import mtk_api
+                status = mtk_api.libusb_status()
+                self._log(
+                    f"MTKClient libusb: {status.get('path') or 'not found'} "
+                    f"({'loaded' if status.get('loaded') else 'NOT loaded'})"
+                )
+            except Exception as e:
+                logger.debug("libusb status check skipped: %s", e)
+            try:
                 from . import linux_sp_flash
                 readiness = linux_sp_flash.verify_linux_flashing_readiness()
                 if not readiness.get("udev_ok"):
                     self._log(
-                        f"Warning: {readiness.get('udev_msg')}. "
-                        f"If device is not detected, run: sudo bash {readiness.get('setup_script_path')}"
+                        f"Warning: {readiness.get('udev_msg')}. MTKClient cannot open the player "
+                        f"without this access; run: sudo bash {readiness.get('setup_script_path')}"
                     )
                 for conf in readiness.get("service_conflicts", []):
                     self._log(f"Notice: {conf.get('message')}")

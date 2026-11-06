@@ -553,9 +553,9 @@ def test_linux_access_is_a_wizard_stage_before_the_password_and_connect_prompt(m
     assert not started, "flash waits for the connect guidance Next"
 
 
-def test_mtkclient_run_never_asks_for_a_system_password(monkeypatch):
-    """Linux defaults to MTKClient, which needs no root rights and so must not
-    show the Linux access/wizard stage or open a password prompt."""
+def test_mtkclient_run_with_udev_access_needs_no_password(monkeypatch):
+    """Once the MediaTek udev rule exists, MTKClient runs as the normal user:
+    no access wizard, no password prompt and no SP Flash Tool preparation."""
     from PySide6.QtWidgets import QApplication
 
     import src.linux_sp_flash as linux
@@ -566,6 +566,7 @@ def test_mtkclient_run_never_asks_for_a_system_password(monkeypatch):
     translator().set_language("en")
     calls = {"fix": 0, "checked": 0}
 
+    monkeypatch.setattr(linux, "check_udev_rules", lambda: (True, "configured"))
     monkeypatch.setattr(linux, "silent_system_prep", lambda: None)
     monkeypatch.setattr(
         linux,
@@ -601,6 +602,71 @@ def test_mtkclient_run_never_asks_for_a_system_password(monkeypatch):
         assert calls["fix"] == 0, "MTKClient never opens the system password dialog"
         assert calls["checked"] == 0, "the SP Flash Tool checker is not part of an MTKClient run"
         assert started, "the MTKClient install starts without an access step"
+    finally:
+        window.settings.setValue("flash_method", "auto")
+        window.close()
+        app.processEvents()
+
+
+def test_mtkclient_without_udev_access_offers_the_access_step(monkeypatch):
+    """Without the MediaTek rule MTKClient cannot open USB, so the wizard
+    offers the rule install and does not stage SP Flash Tool."""
+    from PySide6.QtWidgets import QApplication
+
+    import src.linux_sp_flash as linux
+    from src.i18n import translator
+    from src.ui.main_window import MainWindow
+
+    app = QApplication.instance() or QApplication(["--platform", "offscreen"])
+    translator().set_language("en")
+    calls = {"udev_fix": 0, "sp_fix": 0, "checked": 0}
+
+    monkeypatch.setattr(linux, "check_udev_rules", lambda: (False, "missing"))
+    monkeypatch.setattr(linux, "silent_system_prep", lambda: None)
+    monkeypatch.setattr(
+        linux,
+        "run_system_checker",
+        lambda *a, **k: calls.__setitem__("checked", calls["checked"] + 1) or {"items": []},
+    )
+
+    def fake_udev():
+        calls["udev_fix"] += 1
+        return True, "fixed"
+
+    def fake_sp():
+        calls["sp_fix"] += 1
+        return True, "fixed"
+
+    monkeypatch.setattr(linux, "install_udev_rules", fake_udev)
+    monkeypatch.setattr(linux, "auto_fix_permissions", fake_sp)
+    monkeypatch.setattr(MainWindow, "_needs_linux_device_prep", lambda self: True)
+    monkeypatch.setattr(MainWindow, "_needs_device_prep", lambda self: True)
+
+    window = MainWindow()
+    window.show()
+    started = []
+    window.service.start_flash = lambda *a, **k: started.append(True)
+    window.service.start_device_monitor = lambda *a, **k: None
+    window._package_path = "/fake/rom.zip"
+    window._package_name = "Original Software 3.2.1"
+    window._package_model = "Y2"
+    window.settings.setValue("flash_method", "mtk")
+    window.settings.sync()
+    window._flash_method = "mtk"
+
+    try:
+        window._begin_flash_flow()
+        assert window._linux_permission_pending
+        assert window._flash_page._permission_prompt
+        assert calls["udev_fix"] == 0, "no password prompt before Next"
+        assert not started
+
+        window._on_linux_permission_next()
+        assert calls["udev_fix"] == 1
+        assert calls["sp_fix"] == 0, "MTKClient must not stage SP Flash Tool"
+        assert calls["checked"] == 0, "the SP Flash Tool checker is not part of an MTKClient run"
+        assert not window._linux_permission_pending
+        assert not started, "the connect guidance follows the access step"
     finally:
         window.settings.setValue("flash_method", "auto")
         window.close()
@@ -662,10 +728,11 @@ def test_linux_setup_wizard_asks_to_reboot_after_group_fix_and_quits_on_decline(
 
 
 def test_linux_prep_card_needs_advanced_settings_and_sp_flash_tool(monkeypatch):
-    """The Linux preparation card is an SP Flash Tool tool, not a first-run gate.
+    """The Linux preparation card is the SP Flash Tool settings card.
 
-    MTKClient is the Linux default and needs no system preparation, so the card
-    stays hidden until Advanced Settings is on and SP Flash Tool is selected.
+    MTKClient's one-time udev access step lives in the install wizard, so this
+    settings card stays hidden until Advanced Settings is on and SP Flash Tool
+    is selected.
     """
     from PySide6.QtCore import QSettings
     from PySide6.QtWidgets import QApplication
@@ -691,7 +758,7 @@ def test_linux_prep_card_needs_advanced_settings_and_sp_flash_tool(monkeypatch):
 
         page.reveal_advanced_methods()
         page.set_method("mtk")
-        assert page._prep_card.isHidden(), "MTKClient needs no preparation"
+        assert page._prep_card.isHidden(), "MTKClient's access step is in the install wizard"
 
         page.set_method("sp")
         page._on_method_changed()

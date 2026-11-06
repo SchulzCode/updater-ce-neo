@@ -74,8 +74,7 @@ if ASSETS.exists():
 if VENDOR_MTK.exists():
     compile_tree_if_stale([VENDOR_MTK], MTK_PRECOMPILED, strict=False)
     datas.append((str(MTK_PRECOMPILED), "mtkclient"))
-if ADB_TOOLS.exists():
-    datas.append((str(ADB_TOOLS), "tools/adb"))
+
 
 # The SP Flash Tool payload is placed next to the exe by a post-build copy
 # step (below), not by PyInstaller datas, because datas always land under
@@ -109,6 +108,25 @@ if SP_FLASH_SRC is None and not HOST_IS_X86:
         f"[spec] {platform.machine()}: SP Flash Tool is x86-only; "
         "packaging MTKClient as the only flash engine"
     )
+
+# ADB is only needed for the host platform this build runs on. Copying the
+# whole tools/adb tree put roughly 49 MB of Windows, macOS and other-arch
+# binaries into every artifact. macOS is the one exception because the app is
+# universal2 and launches whichever binary matches the machine it runs on.
+if ADB_TOOLS.exists():
+    if sys.platform == "darwin":
+        _adb_dirs = ["macos-x64", "macos-arm64"]
+    elif sys.platform.startswith("win"):
+        _adb_dirs = ["windows-x64"]
+    else:
+        _adb_dirs = ["linux-x64"] if HOST_IS_X86 else ["linux-arm64"]
+    for _adb_dir in _adb_dirs:
+        _adb_src = ADB_TOOLS / _adb_dir
+        if _adb_src.is_dir():
+            datas.append((str(_adb_src), f"tools/adb/{_adb_dir}"))
+            print(f"[spec] bundling {_adb_dir} ADB payload")
+        else:
+            print(f"[spec] WARNING: ADB payload missing: {_adb_src}")
 
 
 def _mtkclient_runtime_imports():
@@ -277,6 +295,17 @@ coll = COLLECT(
 
 try:
     _app_dir = _dist_root / APP_SLUG
+    # The 360p themes archive is ~62 MB and is refreshed weekly from the remote
+    # pack; only the small fonts pack stays in the build. The macOS builder
+    # already did this, and the Linux/Windows spec used to ship the archive.
+    _themes_zip = _app_dir / "assets" / "360p" / "themes-themepack.zip"
+    if _themes_zip.is_file():
+        _themes_zip.unlink()
+        print("[spec] removed the bundled 360p themes archive")
+    _themes_dir = _app_dir / "assets" / "360p" / "themes-themepack"
+    if _themes_dir.exists():
+        shutil.rmtree(_themes_dir, ignore_errors=True)
+
     _sp_target = _app_dir / "SP_Flash_Tool"
     if SP_FLASH_SRC and SP_FLASH_SRC.exists():
         if _sp_target.exists():

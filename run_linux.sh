@@ -393,7 +393,22 @@ main() {
     cat > "$LAUNCHER" <<EOF
 #!/bin/sh
 # Launches $DISPLAY_NAME (installed by run_linux.sh).
-exec $quoted_app "\$@"
+APP_BIN=$quoted_app
+RUN_MARKER="\${TMPDIR:-/tmp}/innioasis-updater-start-\$\$"
+rm -f "\$RUN_MARKER"
+trap 'rm -f "\$RUN_MARKER"' EXIT HUP INT TERM
+INNIOASIS_STARTUP_MARKER="\$RUN_MARKER"
+export INNIOASIS_STARTUP_MARKER
+"\$APP_BIN" "\$@"
+_status=\$?
+if [ -z "\${INNIOASIS_SAFE_MODE:-}" ] && [ ! -e "\$RUN_MARKER" ] && \\
+   { [ "\$_status" -eq 134 ] || [ "\$_status" -eq 139 ] || [ "\$_status" -eq 132 ] || [ "\$_status" -eq 135 ]; }; then
+    echo "The Qt front end stopped during startup; retrying once in safe mode." >&2
+    INNIOASIS_SAFE_MODE=1
+    export INNIOASIS_SAFE_MODE
+    exec "\$APP_BIN" "\$@"
+fi
+exit "\$_status"
 EOF
     chmod 0755 "$LAUNCHER"
     if [ -f "$APP_DIR/innioasis-updater.png" ]; then

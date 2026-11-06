@@ -79,6 +79,13 @@ def find_cross_platform_libusb() -> str | None:
                 os.path.join(appdir, "usr", "lib", "x86_64-linux-gnu", "libusb-1.0.so.0"),
                 os.path.join(appdir, "usr", "lib", "aarch64-linux-gnu", "libusb-1.0.so.0"),
                 os.path.join(appdir, "usr", "lib", "libusb-1.0.so"),
+                # The PyInstaller payload sits under usr/bin/_internal in the
+                # AppImage; keep these as a fallback for a child whose
+                # sys._MEIPASS is not the usual location.
+                os.path.join(appdir, "usr", "bin", "_internal", "libusb-1.0.so.0"),
+                os.path.join(appdir, "usr", "bin", "_internal", "libusb-1.0.so"),
+                os.path.join(appdir, "usr", "bin", "libusb-1.0.so.0"),
+                os.path.join(appdir, "usr", "bin", "libusb-1.0.so"),
             ])
         if getattr(paths, "BUNDLE_DIR", None):
             candidates.extend([
@@ -86,6 +93,14 @@ def find_cross_platform_libusb() -> str | None:
                 str(paths.BUNDLE_DIR / "libusb-1.0.so"),
                 str(paths.BUNDLE_DIR / "_internal" / "libusb-1.0.so.0"),
                 str(paths.BUNDLE_DIR / "_internal" / "libusb-1.0.so"),
+            ])
+        if sys.executable:
+            exe_dir = Path(sys.executable).resolve().parent
+            candidates.extend([
+                str(exe_dir / "libusb-1.0.so.0"),
+                str(exe_dir / "libusb-1.0.so"),
+                str(exe_dir / "_internal" / "libusb-1.0.so.0"),
+                str(exe_dir / "_internal" / "libusb-1.0.so"),
             ])
         candidates.extend([
             "/usr/lib/x86_64-linux-gnu/libusb-1.0.so.0",
@@ -97,7 +112,9 @@ def find_cross_platform_libusb() -> str | None:
             "libusb-1.0.so",
         ])
         for c in candidates:
-            if c and os.path.exists(c):
+            # isfile rejects a dangling symlink, which a distro package or an
+            # older AppDir copy could leave behind; CDLL would then fail later.
+            if c and os.path.isfile(c):
                 return c
         try:
             import ctypes.util
@@ -123,10 +140,17 @@ def _create_libusb_backend():
             try:
                 backend = usb.backend.libusb1.get_backend(find_library=lambda x: lib_path)
                 if backend is not None:
+                    logger.info("MTKClient libusb library: %s", lib_path)
                     return backend
             except Exception as e:
                 logger.debug("Failed loading libusb with %s: %s", lib_path, e)
-        return usb.backend.libusb1.get_backend()
+        backend = usb.backend.libusb1.get_backend()
+        if backend is None:
+            logger.warning(
+                "Could not load a libusb backend; MTKClient cannot reach USB devices. "
+                "Expected libusb-1.0.so.0 beside the app or in the system library path."
+            )
+        return backend
     except Exception as e:
         logger.warning("Could not instantiate libusb backend: %s", e)
         return None
@@ -148,6 +172,57 @@ def get_cross_platform_libusb_backend():
         if _shared_backend is None:
             _shared_backend = _create_libusb_backend()
         return _shared_backend
+
+
+def libusb_status() -> dict:
+    """The resolved library path and whether this process loaded it.
+
+    Used in the install log so a report says whether MTKClient had a usable
+    libusb before it ever tried to open the player.
+    """
+    path = find_cross_platform_libusb()
+    try:
+        backend = get_cross_platform_libusb_backend()
+    except Exception as e:
+        logger.debug("libusb status check failed: %s", e)
+        backend = None
+    return {"path": path, "loaded": backend is not None}
+
+
+def install_pyusb_default_backend():
+    """Make the bundled libusb the default for every pyusb lookup.
+
+    The bundled mtkclient fork asks for the unversioned ``libusb-1.0.so``
+    inside its own ``UsbClass`` and also calls ``usb.core.find`` directly
+    (for example the kamakiri exploits). Stock distributions ship only
+    ``libusb-1.0.so.0``, so pyusb's host lookup can fail even though the
+    AppImage carries the library. Install a default once, before mtkclient
+    is imported, and let every backend-less find use the shared backend.
+    """
+    try:
+        import usb.core  # type: ignore
+    except Exception as e:
+        logger.warning("pyusb is unavailable: %s", e)
+        return None
+
+    backend = get_cross_platform_libusb_backend()
+    if backend is None:
+        return None
+
+    original_find = usb.core.find
+    if getattr(original_find, "_updater_libusb_default", False):
+        return backend
+
+    def find_with_bundled_backend(*args, **kwargs):
+        # ``find(find_all=False, backend=None, ...)``: the second positional
+        # argument is backend, so only fill the gap that was not supplied.
+        if len(args) < 2 and kwargs.get("backend") is None:
+            kwargs["backend"] = get_cross_platform_libusb_backend()
+        return original_find(*args, **kwargs)
+
+    find_with_bundled_backend._updater_libusb_default = True
+    usb.core.find = find_with_bundled_backend
+    return backend
 
 
 def dispose_libusb_backend():
@@ -617,6 +692,9 @@ def _ensure_imports():
     sys.stderr = _DetachShield(orig_stderr)
 
     try:
+        # Load the bundled library and install the default before mtkclient's
+        # own backend lookup can fall back to the host's unversioned soname.
+        install_pyusb_default_backend()
         _apply_runtime_patches()
 
         from mtkclient.Library.DA.mtk_da_handler import DaHandler  # type: ignore
