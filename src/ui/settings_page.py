@@ -273,6 +273,37 @@ class SettingsPage(QWidget):
         """False for every card but the focused one, while one is focused."""
         return self._solo_card is None or self._solo_card is card
 
+    def _sp_prep_card_available(self) -> bool:
+        """Whether the platform preparation card belongs in Settings.
+
+        Windows always offers its MediaTek USB driver card. macOS has no SP
+        Flash Tool. On Linux the card prepares the optional SP Flash Tool
+        backend only, so it stays out of the way unless Show Advanced Settings
+        is on and SP Flash Tool is the selected method; MTKClient is the
+        default there and needs no system preparation.
+        """
+        if paths.IS_MAC:
+            return False
+        if paths.IS_WINDOWS:
+            return True
+        if not self._advanced_shown():
+            return False
+        return normalise_method(self.current_method()) == METHOD_SP
+
+    def _update_prep_card_visibility(self) -> None:
+        """Apply the platform preparation card's own visibility rules.
+
+        A focused card belongs to an explicit journey (Linux setup), not to
+        the ordinary Settings column, so it stays up until the journey ends.
+        """
+        card = getattr(self, "_prep_card", None)
+        if card is None:
+            return
+        if self._solo_card is not None:
+            card.setVisible(self._solo_card is card)
+            return
+        card.setVisible(self._sp_prep_card_available())
+
     def content_height_hint(self) -> int:
         """Height needed by the Settings page, hugging a solo card when focused."""
         card = getattr(self, "_solo_card", None)
@@ -998,7 +1029,7 @@ class SettingsPage(QWidget):
         self._card_layout = layout
 
         self._sync_advanced_visibility()
-        self._prep_card.setVisible(self._may_show_card(self._prep_card) and not paths.IS_MAC)
+        self._update_prep_card_visibility()
 
         layout.addStretch()
         scroll.setWidget(container)
@@ -1241,6 +1272,7 @@ class SettingsPage(QWidget):
         if hasattr(self, "_rockbox_card"):
             self._update_rockbox_visibility()
         self._sync_shortcut_row_visibility()
+        self._update_prep_card_visibility()
 
     def _sync_shortcut_row_visibility(self) -> None:
         """Show the tool's shortcut rows only behind Show Advanced Settings.
@@ -1396,6 +1428,7 @@ class SettingsPage(QWidget):
         self._method_combo.setCurrentIndex(idx if idx >= 0 else 0)
         self._method_combo.blockSignals(False)
         self._update_method_note()
+        self._update_prep_card_visibility()
 
     def _persisted_method(self) -> str:
         return normalise_method(QSettings("innioasis", "updater").value("flash_method", ""))
@@ -1414,6 +1447,7 @@ class SettingsPage(QWidget):
             self._method_combo.blockSignals(False)
         self._update_method_note()
         self._update_sp_auth_visibility()
+        self._update_prep_card_visibility()
         self._method_before = self.current_method()
 
     def set_method_enabled(self, enabled: bool):
@@ -1426,6 +1460,7 @@ class SettingsPage(QWidget):
         self._method_before = method
         self._update_method_note()
         self._update_sp_auth_visibility()
+        self._update_prep_card_visibility()
         self.flash_method_changed.emit(method)
 
     # ------------------------------------------------------------------
@@ -1891,7 +1926,7 @@ class SettingsPage(QWidget):
             self._revert_advanced_settings()
         self._sync_advanced_visibility()
         self._sync_linux_prep_copy()
-        self._prep_card.setVisible(self._may_show_card(self._prep_card) and not paths.IS_MAC)
+        self._update_prep_card_visibility()
         self._reminders_card.setVisible(
             self._may_show_card(self._reminders_card) and not is_mediatek_installer()
         )

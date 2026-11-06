@@ -25,7 +25,7 @@ from PySide6.QtCore import QThread, Signal
 
 from .config import GITHUB_API
 from .network import requests_module
-from .paths import COMPAT_DIR, INSTALL_DIR, REPO_ROOT, get_appimage_dir
+from .paths import BUNDLE_DIR, COMPAT_DIR, INSTALL_DIR, REPO_ROOT, get_appimage_dir
 
 logger = logging.getLogger(__name__)
 
@@ -209,6 +209,51 @@ def make_tree_writable(root) -> bool:
             except OSError:
                 ok = False
     return ok
+
+
+def _app_runtime_root(path) -> bool:
+    """True when ``path`` belongs to this app's packaged runtime."""
+    raw_parts = Path(str(path)).parts
+    if "_internal" in raw_parts:
+        return True
+    try:
+        resolved = Path(path).resolve()
+    except (OSError, ValueError):
+        return False
+    for root in (BUNDLE_DIR, INSTALL_DIR):
+        try:
+            resolved_root = Path(root).resolve()
+        except (OSError, ValueError):
+            continue
+        if resolved == resolved_root or resolved_root in resolved.parents:
+            return True
+    return False
+
+
+def host_env(base=None) -> dict:
+    """Environment for host system tools (pkexec, sudo, systemctl, udevadm).
+
+    A frozen build runs with its own ``_internal`` directory on
+    ``LD_LIBRARY_PATH``, and PyInstaller exports that path to every child. A
+    distro binary then loads the app's private glib or libstdc++ instead of its
+    own; on Fedora this made ``pkexec`` exit with "undefined symbol:
+    g_fdwalk_set_cloexec", so the setup stage could never finish. Host tools
+    must only see the host's libraries.
+    """
+    env = dict(os.environ if base is None else base)
+    for key, sep in (("LD_LIBRARY_PATH", ":"), ("LD_PRELOAD", " ")):
+        value = env.get(key, "")
+        if not value:
+            continue
+        kept = [entry for entry in value.split(sep) if entry and not _app_runtime_root(entry)]
+        if kept:
+            env[key] = sep.join(kept)
+        else:
+            env.pop(key, None)
+    # These would make a host interpreter import this build's Python tree.
+    env.pop("PYTHONHOME", None)
+    env.pop("PYTHONPATH", None)
+    return env
 
 
 def stage_dir() -> Path:
@@ -645,6 +690,7 @@ def check_service_conflicts() -> list:
             capture_output=True,
             text=True,
             timeout=2,
+            env=host_env(),
         )
         if res.stdout.strip() == "active":
             conflicts.append({
@@ -666,6 +712,7 @@ def check_service_conflicts() -> list:
             capture_output=True,
             text=True,
             timeout=2,
+            env=host_env(),
         )
         if res.stdout.strip() == "active":
             conflicts.append({
@@ -721,7 +768,7 @@ def check_cdc_acm() -> tuple:
     except Exception:
         pass
     try:
-        res = subprocess.run(["modinfo", "cdc_acm"], capture_output=True, text=True, timeout=2)
+        res = subprocess.run(["modinfo", "cdc_acm"], capture_output=True, text=True, timeout=2, env=host_env())
         if res.returncode == 0:
             return True, "Kernel module 'cdc_acm' is available (will load on demand)."
     except Exception:
@@ -830,13 +877,14 @@ def refresh_connected_mtk_device() -> bool:
         connected, _detail = check_connected_mtk_device()
         if not connected:
             return False
-        subprocess.run(["udevadm", "control", "--reload-rules"], check=False, timeout=5)
+        subprocess.run(["udevadm", "control", "--reload-rules"], check=False, timeout=5, env=host_env())
         subprocess.run(
             ["udevadm", "trigger", "--action=change", "--subsystem-match=usb", "--attr-match=idVendor=0e8d"],
             check=False,
             timeout=10,
+            env=host_env(),
         )
-        subprocess.run(["udevadm", "settle", "--timeout=5"], check=False, timeout=7)
+        subprocess.run(["udevadm", "settle", "--timeout=5"], check=False, timeout=7, env=host_env())
         return True
     except Exception:
         logger.debug("Could not refresh connected MediaTek udev state", exc_info=True)
@@ -967,8 +1015,8 @@ def install_udev_rules() -> tuple:
             (rules_dir / UDEV_RULE_FILENAME).chmod(0o644)
             (rules_dir / UDEV_COMPANION_FILENAME).write_text(generate_ttyacms_rule_content(), encoding="utf-8")
             (rules_dir / UDEV_COMPANION_FILENAME).chmod(0o644)
-            subprocess.run(["udevadm", "control", "--reload-rules"], check=False)
-            subprocess.run(["udevadm", "trigger"], check=False)
+            subprocess.run(["udevadm", "control", "--reload-rules"], check=False, env=host_env())
+            subprocess.run(["udevadm", "trigger"], check=False, env=host_env())
             fix_option_ini()
             return True, "Udev rules installed and reloaded."
         except OSError as e:
@@ -983,14 +1031,14 @@ def install_udev_rules() -> tuple:
         try:
             if tool == "doas":
                 # Check nopass first
-                chk = subprocess.run(["doas", "-n", "true"], capture_output=True, timeout=1)
+                chk = subprocess.run(["doas", "-n", "true"], capture_output=True, timeout=1, env=host_env())
                 if chk.returncode == 0:
-                    res = subprocess.run(["doas", "bash", str(script_path)], capture_output=True, text=True, timeout=30)
+                    res = subprocess.run(["doas", "bash", str(script_path)], capture_output=True, text=True, timeout=30, env=host_env())
                 else:
                     askpass = get_askpass_helper()
                     if not askpass:
                         continue
-                    pw_res = subprocess.run([str(askpass)], stdout=subprocess.PIPE, text=True, timeout=60)
+                    pw_res = subprocess.run([str(askpass)], stdout=subprocess.PIPE, text=True, timeout=60, env=host_env())
                     pw = pw_res.stdout.rstrip("\r\n")
                     if pw_res.returncode != 0 or not pw:
                         return False, "Authentication cancelled by user."
@@ -1002,6 +1050,7 @@ def install_udev_rules() -> tuple:
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
                         text=True,
+                        env=host_env(),
                     )
                     os.close(s_fd)
                     os.write(m_fd, f"{pw}\n".encode())
@@ -1016,10 +1065,11 @@ def install_udev_rules() -> tuple:
                     capture_output=True,
                     text=True,
                     timeout=30,
+                    env=host_env(),
                 )
             elif tool == "sudo":
                 askpass = get_askpass_helper()
-                s_env = os.environ.copy()
+                s_env = host_env()
                 if askpass:
                     s_env["SUDO_ASKPASS"] = str(askpass)
                 res = subprocess.run(
@@ -1035,6 +1085,7 @@ def install_udev_rules() -> tuple:
                     capture_output=True,
                     text=True,
                     timeout=30,
+                    env=host_env(),
                 )
             elif tool == "lxqt-sudo":
                 res = subprocess.run(
@@ -1042,6 +1093,7 @@ def install_udev_rules() -> tuple:
                     capture_output=True,
                     text=True,
                     timeout=30,
+                    env=host_env(),
                 )
             elif tool in ("kdesu", "kdesudo"):
                 res = subprocess.run(
@@ -1049,6 +1101,7 @@ def install_udev_rules() -> tuple:
                     capture_output=True,
                     text=True,
                     timeout=30,
+                    env=host_env(),
                 )
             else:
                 continue
@@ -1205,8 +1258,8 @@ def silent_system_prep(stage: Path = None) -> bool:
                     rule_file.chmod(0o644)
                     (rules_dir / UDEV_COMPANION_FILENAME).write_text(generate_ttyacms_rule_content(), encoding="utf-8")
                     (rules_dir / UDEV_COMPANION_FILENAME).chmod(0o644)
-                    subprocess.run(["udevadm", "control", "--reload-rules"], check=False)
-                    subprocess.run(["udevadm", "trigger"], check=False)
+                    subprocess.run(["udevadm", "control", "--reload-rules"], check=False, env=host_env())
+                    subprocess.run(["udevadm", "trigger"], check=False, env=host_env())
                 except Exception:
                     pass
         return True
@@ -1301,7 +1354,7 @@ def _launch_with_doas(
 
     # Check if doas can execute without password (nopass rule or active persist)
     try:
-        check = subprocess.run([doas_bin, "-n", "true"], capture_output=True, timeout=1)
+        check = subprocess.run([doas_bin, "-n", "true"], capture_output=True, timeout=1, env=host_env())
         if check.returncode == 0:
             if log_cb:
                 log_cb("doas running in non-interactive / passwordless mode...")
@@ -1312,7 +1365,7 @@ def _launch_with_doas(
                 text=True,
                 bufsize=1,
                 cwd=str(cwd),
-                env=env,
+                env=host_env(env),
             )
             return proc, False
     except Exception:
@@ -1327,7 +1380,7 @@ def _launch_with_doas(
         log_cb("Requesting superuser privileges via doas...")
 
     try:
-        res = subprocess.run([str(askpass)], stdout=subprocess.PIPE, text=True, timeout=60)
+        res = subprocess.run([str(askpass)], stdout=subprocess.PIPE, text=True, timeout=60, env=host_env())
         password = res.stdout.rstrip("\r\n")
         if res.returncode != 0 or not password:
             if log_cb:
@@ -1350,7 +1403,7 @@ def _launch_with_doas(
             text=True,
             bufsize=1,
             cwd=str(cwd),
-            env=env,
+            env=host_env(env),
         )
         os.close(slave_fd)
         os.write(master_fd, f"{password}\n".encode())
@@ -1378,14 +1431,14 @@ def _attempt_escalation(
         return _launch_with_doas(runner, cmd_args, cwd, env, log_cb)
 
     escalation_cmd = None
-    escalation_env = os.environ.copy()
+    escalation_env = host_env()
 
     if tool == "pkexec":
         escalation_cmd = ["pkexec", str(runner)] + cmd_args
     elif tool == "sudo":
         # Check if sudo can run passwordless first
         try:
-            chk = subprocess.run(["sudo", "-n", "true"], capture_output=True, timeout=1)
+            chk = subprocess.run(["sudo", "-n", "true"], capture_output=True, timeout=1, env=host_env())
             if chk.returncode == 0:
                 escalation_cmd = ["sudo", "-n", str(runner)] + cmd_args
         except Exception:

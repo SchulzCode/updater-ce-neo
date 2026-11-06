@@ -212,18 +212,6 @@ def _leave_cleanly(window, exit_code) -> None:
         pass
 
 
-def _linux_sp_selected() -> bool:
-    """True when the user's saved engine is SP Flash Tool.
-
-    Mirrors MainWindow._preferred_flash_method: an unset or legacy value resolves
-    to the platform default (MTKclient on Linux), so SP prep only runs on request.
-    """
-    from .flash_service import METHOD_SP, backend_method, normalise_method
-
-    stored = QSettings("innioasis", "updater").value("flash_method", "")
-    return backend_method(normalise_method(stored)) == METHOD_SP
-
-
 def _portable_package_ini():
     """The bundled ``fw_package.ini`` this launch runs from, if any.
 
@@ -308,94 +296,6 @@ def _reveal_launched_window(window, splash) -> None:
         logger.debug("Splash could not close", exc_info=True)
 
 
-def _prepare_linux_sp_flash_tool() -> None:
-    """Prepare Linux system for SP Flash Tool USB access.
-
-    This ensures the SP Flash Tool can communicate with MediaTek devices
-    on Linux by staging its own user-space files and reporting what the system
-    still lacks. Nothing here asks for a password: udev rules, group changes
-    and service stops are done by the SP Flash Tool install's own prep step,
-    behind the one prompt the user starts with Next.
-    """
-    try:
-        from . import linux_sp_flash
-        from . import process_guard
-
-        # Free any COM ports held by stale processes
-        try:
-            process_guard.free_com_ports()
-            logger.debug("Freed COM ports on Linux startup")
-        except Exception as e:
-            logger.debug("Failed to free COM ports: %s", e)
-
-        # Check for and report conflicting services
-        try:
-            conflicts = process_guard.check_service_conflicts()
-            for conflict in conflicts:
-                logger.warning(
-                    "Conflicting service on Linux: %s - %s",
-                    conflict["severity"],
-                    conflict["message"],
-                )
-        except Exception as e:
-            logger.debug("Could not check service conflicts: %s", e)
-
-        # Report udev rules status only. Installing them needs root, which
-        # would prompt for a password on every launch while the rules are
-        # missing; that happens in the SP Flash Tool install's own prep step.
-        try:
-            udev_ok, udev_msg = linux_sp_flash.check_udev_rules()
-            logger.info("Udev rules status: %s", udev_msg)
-        except Exception as e:
-            logger.debug("Could not check udev rules: %s", e)
-
-        # Check user permissions and add to group if needed
-        try:
-            serial_group = "dialout"  # default, will be detected per distro
-            perm_ok, perm_msg = linux_sp_flash.check_user_permissions(serial_group)
-            logger.info("User permissions: %s", perm_msg)
-            if not perm_ok:
-                logger.warning(
-                    "User not in '%s' group. This may prevent SP Flash Tool from "
-                    "accessing MediaTek USB devices. Ensure group membership "
-                    "and restart the application.",
-                    serial_group,
-                )
-        except Exception as e:
-            logger.debug("Could not check user permissions: %s", e)
-
-        # Conflicting services (ModemManager, brltty) are reported above and
-        # left running here. Stopping one is a polkit action, so doing it at
-        # launch asked every user for a password before the window was even up,
-        # and the short timeout on the call closed the dialog again before it
-        # could be answered. The SP Flash Tool setup script stops them as root
-        # inside the one prompt an SP Flash Tool install raises.
-
-        # Run silent system prep (stages libpng12, option.ini, etc.)
-        try:
-            ok = linux_sp_flash.silent_system_prep()
-            if ok:
-                logger.info("Linux system preparation completed successfully")
-            else:
-                logger.warning("Linux system preparation had non-fatal issues")
-        except Exception as e:
-            logger.debug("Linux system preparation exception: %s", e)
-
-        # Check cdc_acm kernel module availability
-        try:
-            cdc_ok, cdc_msg = linux_sp_flash.check_cdc_acm()
-            logger.info("cdc_acm kernel module: %s", cdc_msg)
-        except Exception as e:
-            logger.debug("Could not check cdc_acm: %s", e)
-
-        logger.info("Linux SP Flash Tool preparation complete")
-
-    except ImportError as e:
-        logger.debug("Linux SP Flash Tool preparation skipped: %s", e)
-    except Exception as e:
-        logger.warning("Linux SP Flash Tool preparation failed: %s", e)
-
-
 def _maybe_shed_redundant_payload():
     """On x86/x64 Windows with SP Flash Tool ready, MTKClient is redundant.
 
@@ -427,6 +327,50 @@ def _maybe_shed_redundant_payload():
                 logging.getLogger("innioasis.startup").info("Shed unneeded mtkclient payload: %s", c)
             except Exception:
                 pass
+
+
+def _configure_qt_plugins() -> None:
+    """Keep a packaged build on its own Qt plugins, never the host's.
+
+    The AppImage carries its own Qt. A distro's Qt 6 plugin directory is built
+    against a different Qt version, and putting it on the search path made
+    Fedora load the host ``libqxcb.so`` instead of the bundled one: Qt then
+    aborted with "Could not load the Qt platform plugin" before any window
+    existed. Only a source checkout may borrow the host's plugin directory,
+    where the distro is the installation that provides Qt at all.
+    """
+    if not sys.platform.startswith("linux"):
+        return
+    import os
+
+    from PySide6.QtCore import QCoreApplication
+
+    if getattr(sys, "frozen", False) or os.environ.get("APPIMAGE") or os.environ.get("APPDIR"):
+        for candidate in (
+            paths.BUNDLE_DIR / "PySide6" / "Qt" / "plugins",
+            paths.BUNDLE_DIR / "PySide6" / "plugins",
+            paths.INSTALL_DIR / "_internal" / "PySide6" / "Qt" / "plugins",
+            paths.INSTALL_DIR / "_internal" / "PySide6" / "plugins",
+        ):
+            if (candidate / "platforms").is_dir():
+                os.environ["QT_PLUGIN_PATH"] = str(candidate)
+                os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = str(candidate / "platforms")
+                return
+        # No bundled directory (a build that relies on PySide6's compiled-in
+        # path): drop a host value so it cannot outrank that path.
+        os.environ.pop("QT_PLUGIN_PATH", None)
+        os.environ.pop("QT_QPA_PLATFORM_PLUGIN_PATH", None)
+        return
+
+    for plugin_dir in (
+        "/usr/lib/qt6/plugins",
+        "/usr/lib64/qt6/plugins",
+        "/usr/lib/x86_64-linux-gnu/qt6/plugins",
+        "/usr/lib/aarch64-linux-gnu/qt6/plugins",
+        "/usr/local/lib/qt6/plugins",
+    ):
+        if os.path.isdir(plugin_dir):
+            QCoreApplication.addLibraryPath(plugin_dir)
 
 
 def main():
@@ -599,19 +543,7 @@ def main():
             os._exit(1)
         return
 
-    import sys as _sys
-    if _sys.platform.startswith("linux"):
-        import os as _os
-        from PySide6.QtCore import QCoreApplication
-        for _plugin_dir in (
-            "/usr/lib/qt6/plugins",
-            "/usr/lib64/qt6/plugins",
-            "/usr/lib/x86_64-linux-gnu/qt6/plugins",
-            "/usr/lib/aarch64-linux-gnu/qt6/plugins",
-            "/usr/local/lib/qt6/plugins",
-        ):
-            if _os.path.isdir(_plugin_dir):
-                QCoreApplication.addLibraryPath(_plugin_dir)
+    _configure_qt_plugins()
 
     app = QApplication(sys.argv)
     runtime_guard.report_binding_health()
@@ -1011,10 +943,11 @@ def main():
         QTimer.singleShot(0, _flush_external_drops)
 
     # Work the first screen does not need: the catalogue refresh, the donation
-    # marker, shedding the redundant payload and (on Linux) the SP Flash Tool
-    # system prep. None of it paints anything, and none of it may hold the
-    # window back, so it runs once the window is already up (or immediately in
-    # a background-only session).
+    # marker and shedding the redundant payload. None of it paints anything, and
+    # none of it may hold the window back, so it runs once the window is already
+    # up (or immediately in a background-only session). Linux needs no startup
+    # system preparation: MTKClient is the default there, and the optional SP
+    # Flash Tool is staged only when that backend is actually used.
     def _deferred_startup() -> None:
         _maybe_shed_redundant_payload()
         # A windowless session has no donation bar or release feed on screen:
@@ -1036,8 +969,6 @@ def main():
             player_update_check.sync_sp_donation_marker()
         except Exception:
             logging.getLogger(__name__).debug("Donation marker check failed", exc_info=True)
-        if _sys.platform.startswith("linux") and _linux_sp_selected():
-            _prepare_linux_sp_flash_tool()
 
     QTimer.singleShot(0, _deferred_startup)
 

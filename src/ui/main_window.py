@@ -947,9 +947,6 @@ class MainWindow(QMainWindow):
                 lambda: self._check_device_firmware_updates(manual=False),
             )
 
-        if platform.system() == "Linux" and not paths.IS_MAC:
-            # macOS has no SP Flash Tool or Linux setup wizard.
-            QTimer.singleShot(600, self._check_linux_first_run)
         self._sync_sp_gui_button_visibility()
         self._sync_settings_sp_gui_visibility()
 
@@ -8165,29 +8162,6 @@ class MainWindow(QMainWindow):
         self._force_quit = True
         logger.info("SP Flash Tool GUI is running; closing the updater")
         QApplication.quit()
-
-    def _check_linux_first_run(self):
-        """First run on Linux: automatically open the locked Linux setup screen
-        unless the host is already prepared (udev rules + serial group + engine).
-        """
-        if paths.IS_MAC or os.environ.get("QT_QPA_PLATFORM") == "offscreen" or os.environ.get("CI"):
-            return
-        from .. import linux_sp_flash
-
-        if not linux_sp_flash.arch_supported():
-            return
-        stage = linux_sp_flash.stage_dir()
-        files_ready = linux_sp_flash.files_ready(stage)
-        distro = linux_sp_flash.detect_linux_distro()
-        udev_ok, _ = linux_sp_flash.check_udev_rules()
-        user_perm_ok, _ = linux_sp_flash.check_user_permissions(distro.get("serial_group", "dialout"))
-
-        if files_ready and udev_ok and user_perm_ok:
-            self.settings.setValue("linux_first_run_completed", True)
-            self.settings.setValue("linux_setup_completed", True)
-            return
-
-        self._show_linux_setup()
 
     def _open_credits(self):
         from ..browser import open_browser

@@ -46,8 +46,10 @@ Install notes to state plainly:
 - **macOS**: no SP Flash Tool; the app uses MTKClient in-process. Drag the app
   to Applications, then launch it from there.
 - **Linux**: make the AppImage executable, or use the portable tar.gz if FUSE
-  is missing. The user needs `dialout`/`uucp` membership; the app stages SP
-  Flash Tool and the udev rules itself on first run.
+  is missing. Linux runs like macOS: MTKClient is the default and needs no
+  system setup. On x86-64, SP Flash Tool is an optional fallback under
+  Advanced Settings; only then does the app offer its preparation card and
+  ask for `dialout`/`uucp` access.
 
 ## 2. Choose the firmware the user actually wants
 

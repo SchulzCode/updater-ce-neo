@@ -149,7 +149,7 @@ def test_root_step_is_asked_on_the_card(monkeypatch):
         app.processEvents()
         assert calls["fix"] == 1
         assert calls["checked"] == 1
-        assert page._checker_status_lbl.text() == "Access granted — SP Flash Tool is ready."
+        assert page._checker_status_lbl.text() == tr("linux_prep_fixed")
 
         # Declining leaves the offer on the card instead of removing anything.
         calls["fix"] = 0
@@ -158,7 +158,7 @@ def test_root_step_is_asked_on_the_card(monkeypatch):
         page._btn_run_checker.click()
         app.processEvents()
         assert calls["fix"] == 0
-        assert page._checker_status_lbl.text() == "Access was not granted — flashing needs it."
+        assert page._checker_status_lbl.text() == tr("linux_prep_needs_access")
         assert calls["dialogs"] == 0
     finally:
         page.deleteLater()
@@ -659,3 +659,73 @@ def test_linux_setup_wizard_asks_to_reboot_after_group_fix_and_quits_on_decline(
     finally:
         page.deleteLater()
         app.processEvents()
+
+
+def test_linux_prep_card_needs_advanced_settings_and_sp_flash_tool(monkeypatch):
+    """The Linux preparation card is an SP Flash Tool tool, not a first-run gate.
+
+    MTKClient is the Linux default and needs no system preparation, so the card
+    stays hidden until Advanced Settings is on and SP Flash Tool is selected.
+    """
+    from PySide6.QtCore import QSettings
+    from PySide6.QtWidgets import QApplication
+
+    import src.paths as paths_mod
+    import src.ui.settings_page as settings_mod
+    from src.i18n import translator
+    from src.ui.settings_page import SettingsPage
+
+    app = QApplication.instance() or QApplication(["--platform", "offscreen"])
+    translator().set_language("en")
+    monkeypatch.setattr(paths_mod, "IS_MAC", False)
+    monkeypatch.setattr(paths_mod, "IS_WINDOWS", False)
+    monkeypatch.setattr(paths_mod, "IS_LINUX", True)
+    monkeypatch.setattr(settings_mod, "is_mediatek_installer", lambda: False)
+    settings = QSettings("innioasis", "updater")
+    settings.setValue("flash_method", "mtk")
+    settings.setValue("advanced_settings", False)
+    page = SettingsPage()
+    try:
+        page.refresh_settings()
+        assert page._prep_card.isHidden()
+
+        page.reveal_advanced_methods()
+        page.set_method("mtk")
+        assert page._prep_card.isHidden(), "MTKClient needs no preparation"
+
+        page.set_method("sp")
+        page._on_method_changed()
+        assert not page._prep_card.isHidden()
+
+        page.set_method("mtk")
+        page._on_method_changed()
+        assert page._prep_card.isHidden()
+    finally:
+        settings.setValue("flash_method", "mtk")
+        settings.setValue("advanced_settings", False)
+        page.deleteLater()
+        app.processEvents()
+
+
+def test_host_env_hides_the_packaged_runtime_from_host_tools(monkeypatch):
+    """Host tools must not load the app's private libraries.
+
+    Fedora's authentication helper failed with an undefined glib symbol
+    because the AppImage inherited ``_internal`` on LD_LIBRARY_PATH. The
+    sanitised environment keeps the host's own paths and drops this build's.
+    """
+    import src.linux_sp_flash as linux
+    from src.paths import BUNDLE_DIR, INSTALL_DIR
+
+    monkeypatch.setenv(
+        "LD_LIBRARY_PATH",
+        f"{BUNDLE_DIR}:{INSTALL_DIR / '_internal'}:/usr/local/lib",
+    )
+    monkeypatch.setenv("LD_PRELOAD", f"{BUNDLE_DIR}/libbundled.so")
+    monkeypatch.setenv("PYTHONPATH", str(BUNDLE_DIR))
+
+    env = linux.host_env()
+    assert "/usr/local/lib" in env["LD_LIBRARY_PATH"]
+    assert str(BUNDLE_DIR) not in env["LD_LIBRARY_PATH"]
+    assert "LD_PRELOAD" not in env
+    assert "PYTHONPATH" not in env

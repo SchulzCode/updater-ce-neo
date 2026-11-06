@@ -529,6 +529,27 @@ export PATH="${HERE}/usr/bin:${PATH}"
 export LD_LIBRARY_PATH="${HERE}/usr/bin/_internal:${HERE}/usr/lib:${LD_LIBRARY_PATH}"
 export XDG_DATA_DIRS="${HERE}/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 
+# Qt must use the plugins inside this build. A distro's Qt 6 plugin directory
+# is built against a different Qt and, when it is on the search path, Qt loads
+# the host libqxcb.so first and aborts with "Could not load the Qt platform
+# plugin ..." before any window appears (Fedora reports this on both Wayland
+# and X11). Pin the bundled copy and drop any inherited value when absent.
+QT_PLUGIN_DIR=""
+for _cand in "$HERE/usr/bin/_internal/PySide6/Qt/plugins" \
+             "$HERE/usr/bin/_internal/PySide6/plugins" \
+             "$HERE/usr/bin/PySide6/Qt/plugins"; do
+    if [ -d "$_cand/platforms" ]; then
+        QT_PLUGIN_DIR="$_cand"
+        break
+    fi
+done
+if [ -n "$QT_PLUGIN_DIR" ]; then
+    export QT_PLUGIN_PATH="$QT_PLUGIN_DIR"
+    export QT_QPA_PLATFORM_PLUGIN_PATH="$QT_PLUGIN_DIR/platforms"
+else
+    unset QT_PLUGIN_PATH QT_QPA_PLATFORM_PLUGIN_PATH
+fi
+
 # Hand off execution to the brand's binary (InnioasisUpdater or
 # MediaTekInstaller — both come from the same spec).
 exec "${HERE}/usr/bin/InnioasisUpdater" "$@"
