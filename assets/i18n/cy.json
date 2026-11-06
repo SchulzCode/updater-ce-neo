@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Tynnu'r Offer Llwyfan Android (ADB / Fastboot) hefyd? Dewiswch Cadw os ydych chi'n defnyddio ADB.",
  "legacy_cleanup_keep_btn": "Cadw",
  "legacy_cleanup_remove_btn": "Dileu",
- "legacy_cleanup_done_inline": "Wedi'i dynnu - tua {size} wedi'i ryddhau."
+ "legacy_cleanup_done_inline": "Wedi'i dynnu - tua {size} wedi'i ryddhau.",
+ "donate_completion_body_family": "Mae'r ap hwn yn waith un person, ac mae'n rhannu cartref gyda fy nheulu. Pe bai gosodiad heddiw yn gwneud pethau ychydig yn haws, mae coffi yn ffordd garedig o gefnogi'r oriau a'r galon y tu ôl iddo.",
+ "donate_completion_body_running_costs": "Telir am weinyddion, storfa a pharthau bob mis, p'un a yw unrhyw un yn gosod y diwrnod hwnnw ai peidio. Pe bai gosodiad heddiw yn un llyfn, mae coffi yn helpu i dalu'r costau rhedeg tawel hynny.",
+ "donate_completion_body_kindness": "Nid oes unrhyw danysgrifiad ac nid oes dim wedi'i gloi i ffwrdd. Pe bai'r app yn ddefnyddiol heddiw, mae talu coffi ymlaen yn garedigrwydd bach sy'n ei gadw'n rhydd i'r person nesaf.",
+ "donate_completion_body_small_hours": "Mae'r rhan fwyaf o'r prosiect hwn yn digwydd mewn oriau bach ar ôl y swydd bob dydd, ac mae coffi yn ffordd ysgafn o ddweud ei fod yn werth chweil. Diolch am fod yma.",
+ "donate_completion_signature": "- Ryan - Cynhaliwr y Diweddarwr CE",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} wedi prynu coffi i ni ar Ko-Fi {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} prynodd {count} goffi i ni ar Ko-Fi {when}.",
+ "donate_support_appeal_full": "Mae rhoddion yn uniongyrchol yn fy helpu i gefnogi fy nheulu ac ariannu'r dyfeisiau prawf sy'n gwneud y gwasanaeth rhad ac am ddim hwn yn bosibl i bawb. Pe bai'r offeryn hwn yn arbed amser i chi neu'n achub eich chwaraewr heddiw, ystyriwch rodd fach, mae'n wirioneddol yn golygu'r byd i ni."
 }

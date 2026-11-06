@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
@@ -381,6 +382,7 @@ class RuntimeTranslator(QObject):
         if not isinstance(text, str) or not text.strip():
             return
         if _looks_like_markup(text):
+            self._consider_markup(target, text)
             return
         if target.key in self._loading:
             return
@@ -400,6 +402,41 @@ class RuntimeTranslator(QObject):
             return
 
         self._queue(target, source)
+
+    def _consider_markup(self, target: _TextTarget, html: str) -> None:
+        """Translate the text runs of a rich-text label, never its markup.
+
+        The donations card builds its appeal as ``<b>lead</b> followup``, and
+        completion copy carries emphasis tags of its own. Passing that HTML to
+        a provider would translate tag names and attributes, so each text run
+        is matched against the English allow-list on its own and only that run
+        is replaced; the surrounding tags are put back byte for byte.
+        """
+        for index, part in enumerate(_markup_parts(html)):
+            if not part or _is_tag(part) or not part.strip():
+                continue
+            self._consider(self._segment_target(target, index))
+
+    def _segment_target(self, label_target: _TextTarget, index: int) -> _TextTarget:
+        """A target for one text run inside a rich-text label."""
+
+        def read() -> str:
+            parts = _markup_parts(label_target.read())
+            if index >= len(parts):
+                return ""
+            return parts[index].strip()
+
+        def write(value: str) -> None:
+            parts = _markup_parts(label_target.read())
+            if index >= len(parts):
+                return
+            chunk = parts[index]
+            prefix = chunk[: len(chunk) - len(chunk.lstrip())]
+            suffix = chunk[len(chunk.rstrip()) :]
+            parts[index] = f"{prefix}{str(value).strip()}{suffix}"
+            label_target.write("".join(parts))
+
+        return _TextTarget((*label_target.key, "rich", index), read, write)
 
     def _source_for(self, text: str) -> str:
         sources = i18n.english_sources()
@@ -660,5 +697,17 @@ class RuntimeTranslator(QObject):
 
 
 def _looks_like_markup(text: str) -> bool:
-    """Do not rebuild rich text: replacing it would strip links and styling."""
+    """True for labels that carry HTML or other rich-text markup."""
     return "<" in text and ">" in text
+
+
+_TAG_SPLIT = re.compile(r"(<[^>]*>)")
+
+
+def _markup_parts(text: str) -> list[str]:
+    """Split markup into alternating tags and text runs, keeping both."""
+    return _TAG_SPLIT.split(text)
+
+
+def _is_tag(part: str) -> bool:
+    return part.startswith("<") and part.endswith(">")

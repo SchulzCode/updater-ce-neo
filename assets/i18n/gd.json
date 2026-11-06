@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Thoir air falbh Innealan Àrd-ùrlar Android (ADB / Fastboot) cuideachd? Tagh Keep ma chleachdas tu ADB.",
  "legacy_cleanup_keep_btn": "Cùm",
  "legacy_cleanup_remove_btn": "Thoir air falbh",
- "legacy_cleanup_done_inline": "Air a thoirt air falbh - mu {size} air a shaoradh."
+ "legacy_cleanup_done_inline": "Air a thoirt air falbh - mu {size} air a shaoradh.",
+ "donate_completion_body_family": "Is e obair aon neach a th’ anns an aplacaid seo, agus bidh e a’ roinn dachaigh le mo theaghlach. Ma rinn stàladh an latha an-diugh cùisean beagan nas fhasa, tha cofaidh na dhòigh math air taic a thoirt dha na h-uairean agus an cridhe air a chùlaibh.",
+ "donate_completion_body_running_costs": "Bidh luchd-frithealaidh, stòradh agus raointean air am pàigheadh ​​​​airson gach mìos, ge bith a bheil duine a’ stàladh an latha sin no nach eil. Nam biodh an stàladh an-diugh rèidh, bidh cofaidh na chuideachadh gus na cosgaisean ruith sàmhach sin a chòmhdach.",
+ "donate_completion_body_kindness": "Chan eil ballrachd ann agus chan eil dad glaiste air falbh. Nam biodh an aplacaid feumail an-diugh, is e coibhneas beag a th’ ann a bhith a’ pàigheadh ​​cofaidh air adhart a chumas e saor airson an ath neach.",
+ "donate_completion_body_small_hours": "Bidh a’ mhòr-chuid den phròiseact seo a’ tachairt ann an uairean beaga às deidh obair an latha, agus tha cofaidh na dhòigh socair air a ràdh gum b’ fhiach e. Tapadh leibh airson a bhith an seo.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} cheannaich sinn cofaidh air Ko-Fi {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} cheannaich {count} cofaidh dhuinn air Ko-Fi {when}.",
+ "donate_completion_signature": "- Ryan - Neach-gleidhidh an Updater CE",
+ "donate_support_appeal_full": "Bidh tabhartasan gu dìreach gam chuideachadh le bhith a’ toirt taic do mo theaghlach agus a’ maoineachadh nan innealan deuchainn a nì an t-seirbheis an-asgaidh seo comasach don h-uile duine. Ma shàbhail an inneal seo ùine dhut no ma shàbhail thu do chluicheadair an-diugh, feuch an smaoinich thu air tabhartas beag, tha e dha-rìribh a’ ciallachadh an saoghal dhuinne."
 }

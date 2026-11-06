@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Poistetaanko myös Android Platform Tools (ADB / Fastboot)? Valitse Keep, jos käytät ADB:tä.",
  "legacy_cleanup_keep_btn": "Pitää",
  "legacy_cleanup_remove_btn": "Poistaa",
- "legacy_cleanup_done_inline": "Poistettu – noin {size} vapautettu."
+ "legacy_cleanup_done_inline": "Poistettu – noin {size} vapautettu.",
+ "donate_completion_body_family": "Tämä sovellus on yhden henkilön työ, ja se jakaa kodin perheeni kanssa. Jos tämän päivän asennus helpotti hieman, kahvi on ystävällinen tapa tukea tunteja ja sydäntä sen takana.",
+ "donate_completion_body_running_costs": "Palvelimista, tallennustilasta ja verkkotunnuksista maksetaan kuukausittain riippumatta siitä, asentaako kukaan sinä päivänä vai ei. Jos tämän päivän asennus oli sujuvaa, kahvi auttaa kattamaan hiljaiset käyttökustannukset.",
+ "donate_completion_body_kindness": "Tilausta ei ole, eikä mikään ole lukittu. Jos sovelluksesta oli tänään hyötyä, kahvin maksaminen eteenpäin on pieni ystävällisyys, joka pitää sen ilmaiseksi seuraavalle.",
+ "donate_completion_signature": "- Ryan - Updater CE:n ylläpitäjä",
+ "donate_completion_body_small_hours": "Suurin osa tästä projektista tapahtuu pienissä tunneissa työpäivän jälkeen, ja kahvi on lempeä tapa sanoa, että se oli sen arvoista. Kiitos, että olet täällä.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} osti meille kahvin Ko-Fistä {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} osti meille {count} kahvia Ko-Fistä {when}.",
+ "donate_support_appeal_full": "Lahjoitukset auttavat minua suoraan tukemaan perhettäni ja rahoittamaan testilaitteita, jotka mahdollistavat tämän ilmaisen palvelun kaikille. Jos tämä työkalu säästää aikaasi tai pelasti pelaajasi tänään, harkitse pientä lahjoitusta, se todella merkitsee meille maailmaa."
 }

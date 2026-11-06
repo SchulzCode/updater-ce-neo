@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Itangtangindu nge Alat-alat Platform Android (ADB/Fastboot) e? Pilih Keep adi ipakendu ADB.",
  "legacy_cleanup_keep_btn": "Simpan",
  "legacy_cleanup_remove_btn": "Muat",
- "legacy_cleanup_done_inline": "Itangtangi, kira-kira {size} ibebasken."
+ "legacy_cleanup_done_inline": "Itangtangi, kira-kira {size} ibebasken.",
+ "donate_completion_body_family": "Aplikasi enda eme pendahin sekalak jelma, janah sada rumah ras keluargaku. Adi pasang gundari erbahanca hal-hal sitik lebih gampang, sada kopi eme cara si mehuli guna mendukung jam ras pusuh i balikna.",
+ "donate_completion_body_running_costs": "Server, penyimpanan ras domain igalari tiap bulan, lit si masang wari e ntah lang. Adi pemasangan sendah e lancar, sada kopi nampati nutupi biaya-biaya si tenang e.",
+ "donate_completion_body_small_hours": "Sebagian besar proyek enda terjadi ibas jam-jam si kitik kenca dung pendahin sada wari, janah sada kopi eme cara si lembut guna ngatakenca maka e berharga. Bujur man bandu si enggo reh ku jenda.",
+ "donate_completion_signature": "- Ryan - Pemelihara Pembaruen CE .",
+ "donate_support_appeal_full": "Sumbangen langsung nampati aku ndukung keluargangku ras ndayaken alat-alat tes si erban layanan gratis enda banci ilakoken kerina kalak. Adi alat enda menghemat waktundu ntah pe menyelamatken pemainndu gundari, silahken pertimbangkan sumbangan si kitik, tuhu-tuhu berarti doni enda man banta.",
+ "donate_completion_body_kindness": "La lit langganan janah la lit si ikunci. Adi aplikasi e erguna gundari, nggalari kopi ku lebe eme sada kiniulin si kitik si njagasa tetap gratis man kalak si seterusna.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} itukurna kami sada kopi i Ko-Fi {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} itukur kami {count} kopi i Ko-Fi {when}."
 }

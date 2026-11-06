@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Kwanyo jami ma ki tiyo kwede i Android (ADB / Fastboot) bene? Yer Gwok ka itiyo ki ADB.",
  "legacy_cleanup_keep_btn": "Gwok",
  "legacy_cleanup_remove_btn": "Kwanyo",
- "legacy_cleanup_done_inline": "Ki kwanyo, ma romo {size} ki gonyo."
+ "legacy_cleanup_done_inline": "Ki kwanyo, ma romo {size} ki gonyo.",
+ "donate_completion_body_family": "Gin ni obedo tic pa ngat acel, ki en bedo kacel ki jo me oda. Ka keto ne tin ni oweko jami odoko yot manok, mwony obedo yoo maber me miiyo kony bot cawa ki cwiny ma tye iye.",
+ "donate_completion_body_kindness": "Pe tye cul mo ki pe tye gin mo ma ki umu. Ka app ni tye ki kony i nino man, culu mwony anyim obedo ber matidi ma miyo bedo labongo cul pi ngat mukene.",
+ "donate_completion_body_running_costs": "Ka gwoko jami, ka gwoko jami ki ka gwoko jami ki culu pi dwe ki dwe, kede ka ngat mo oketo i nino meno onyo ku. Ka keto ne tin ni obedo maber, mwony konyo me culu wel cente ma mite ni.",
+ "donate_completion_body_small_hours": "Pol pa yub man time i cawa manok inge tic me nino, ki mwony obedo yoo maber me waco ni onongo ber. Wapoyoyi pi bedo kany.",
+ "donate_completion_signature": "- Ryan - Lagwok pa Updater CE",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} owilo botwa mwony i Ko-Fi {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} owilo botwa {count} mwony i Ko-Fi {when}.",
+ "donate_support_appeal_full": "Miiyo kony konyo me gwoko jo me oda ki culu pi jami ma ki tiyo kwede me temo ma miyo tic man ma pe ki culu bot dano weny. Ka gin ni okonyo me gwoko cawa ni onyo okonyo latuku ni tin, tim ber i tam i kom miiyo kony manok, en tye gin ma pire tek botwa."
 }

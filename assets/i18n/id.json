@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Hapus juga Alat Platform Android (ADB/Fastboot)? Pilih Keep jika Anda menggunakan ADB.",
  "legacy_cleanup_keep_btn": "Menyimpan",
  "legacy_cleanup_remove_btn": "Menghapus",
- "legacy_cleanup_done_inline": "Dihapus, sekitar {size} dibebaskan."
+ "legacy_cleanup_done_inline": "Dihapus, sekitar {size} dibebaskan.",
+ "donate_completion_body_running_costs": "Server, penyimpanan, dan domain dibayar setiap bulan, baik ada yang menginstal pada hari itu atau tidak. Jika pemasangan saat ini berjalan lancar, kopi dapat membantu menutupi biaya operasional yang tidak terlalu besar.",
+ "donate_completion_body_family": "Aplikasi ini adalah karya satu orang, dan berbagi rumah dengan keluarga saya. Jika instalasi saat ini membuat segalanya lebih mudah, kopi adalah cara yang baik untuk mendukung jam kerja dan hati di baliknya.",
+ "donate_completion_body_kindness": "Tidak ada langganan dan tidak ada yang dikunci. Jika aplikasi ini berguna saat ini, membayar kopi adalah sebuah kebaikan kecil yang membuatnya tetap gratis untuk orang berikutnya.",
+ "donate_completion_body_small_hours": "Sebagian besar proyek ini terjadi dalam waktu singkat setelah pekerjaan sehari-hari, dan minum kopi adalah cara yang lembut untuk mengatakan bahwa itu sepadan. Terima kasih telah berada di sini.",
+ "donate_completion_signature": "- Ryan - Pengelola Updater CE",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} membelikan kami {count} kopi di Ko-Fi {when}.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} membelikan kami kopi di Ko-Fi {when}.",
+ "donate_support_appeal_full": "Donasi secara langsung membantu saya menghidupi keluarga saya dan mendanai perangkat pengujian yang memungkinkan layanan gratis ini bagi semua orang. Jika alat ini menghemat waktu Anda atau menyelamatkan pemain Anda hari ini, mohon pertimbangkan donasi kecil, itu sangat berarti bagi kami."
 }

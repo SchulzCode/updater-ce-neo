@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Sún Azɔwanú Android Tɔn lɛ (ADB / Fastboot) lɛ lɔmɔ̌ à? Hɛn Keep nú a nɔ zán ADB hǔn.",
  "legacy_cleanup_keep_btn": "Ɖŏ",
  "legacy_cleanup_remove_btn": "Ɖè",
- "legacy_cleanup_done_inline": "È ɖè síìn, ɖi {size} è ɖè sín mɛ."
+ "legacy_cleanup_done_inline": "È ɖè síìn, ɖi {size} è ɖè sín mɛ.",
+ "donate_completion_body_family": "Mɛ ɖokpo sín azɔ̌ wɛ appli elɔ nyí, bɔ é nɔ nɔ xwé ɖokpo ɔ gbè xá xwédo ce. Enyi nǔ e è sɔ́ ɖó tɛn tɔn mɛ égbé é zɔ́n bɔ nǔ lɛ bɔkun kpɛɖé ɔ, kafée ɖé nyí ali ɖagbe ɖé bo na dó nɔ gudo nú ganxixo lɛ kpo ayi e ɖò gudo tɔn é kpo.",
+ "donate_completion_body_running_costs": "È nɔ sú akwɛ nú serveurs, storage kpo domaine kpo sunmɛ sunmɛ, mɛɖebǔ na bo sɔ́ ɖó azǎn enɛ jí alǒ gbɔ ɔ. Enyi nǔ e è sɔ́ ɖó tɛn tɔn mɛ égbé é nyɔ́ bló ɔ, kafée ɖé nɔ d’alɔ bɔ è nɔ sú akwɛ e è nɔ zán dó w’azɔ̌ ɖò cícící mɛ lɛ é.",
+ "donate_completion_body_small_hours": "Azɔ̌ enɛ sín akpáxwé gègě nɔ jɛ ɖò ganxixo kpɛví kpɛví lɛ mɛ ɖò azɔ̌ e è wà ɖò kéze ɔ mɛ é gudo, bɔ kafée ɖé nyí ali ɖagbe ɖé bɔ è na gbɔn bo ɖɔ ɖɔ é xɔ akwɛ. Mi do ku nu mi ɖee mi ɖo fi ɔ.",
+ "donate_completion_body_kindness": "È nɔ bló abonement ǎ, è ka nɔ lɛ́ sú nǔ ɖebǔ dó ǎ. Enyi appli ɔ hɛn lè wá égbé ɔ, kafée ɖé súsú dó nukɔn nyí xomɛnyínyɔ́ kpɛví ɖé bo nɔ zɔ́n bɔ mɛ e bɔ d’ewu é nɔ yí vɔ̌nu.",
+ "donate_completion_signature": "- Ryan - Mɛ e nɔ kpé nukún dó nǔ yɔyɔ̌ lɛ wu é CE",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} xɔ kafé {count} nú mǐ ɖò Ko-Fi jí {when}.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} xɔ kafe ɖokpo nu mi ɖo Ko-Fi ji {when}.",
+ "donate_support_appeal_full": "Nǔnina lɛ nɔ d’alɔ mì tlɔlɔ bo nɔ kpé nukún dó xwédo ce wu, bo nɔ lɛ́ sú akwɛ nú nǔ e è nɔ zán dó tɛ́n nǔ kpɔ́n na lɛ é, bɔ enɛ nɔ zɔ́n bɔ mɛ bǐ nɔ kpéwú bo nɔ wà azɔ̌ vɔ̌nu enɛ. Enyi azɔwanú elɔ hwlɛn hwenu towe gán alǒ hwlɛn ayihunmlimlixotɔ́ towe gán égbé ɔ, kɛnklɛn bo lin tamɛ dó nùnina kpɛví ɖé jí, é nyí gbɛ̀ ɔ nú mǐ nugbǒ."
 }

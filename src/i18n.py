@@ -3953,7 +3953,7 @@ _STRINGS: dict = {
         "es": "Donar en Boosty",
         "de": "Auf Boosty spenden",
         "ja": "Boosty で支援",
-        "ru": "Поддержать на Boosty",
+        "ru": "Поддержать проект",
     },
     "donate_paypal": {
         "zh-CN": "通过 PayPal 捐赠",
@@ -4195,6 +4195,14 @@ _STRINGS: dict = {
         "fr": "Développeur principal · Updater CE et projet de micrologiciel communautaire",
         "es": "Desarrollador principal · Updater CE y proyecto de firmware comunitario",
         "is": "Aðalforritari · Updater CE og Community Firmware verkefnið",
+    },
+    "donate_support_appeal_full": {
+        "en": "Donations directly help me support my family and fund the test devices that make this free service possible for everyone. If this tool saved you time or rescued your player today, please consider a small donation, it truly means the world to us.",
+        "zh-CN": "捐款直接帮助我养家糊口，并资助测试设备，使每个人都能享受这项免费服务。如果这个工具今天节省了您的时间或拯救了您的玩家，请考虑捐款，它对我们来说真的意味着世界。",
+        "fr": "Les dons m'aident directement à soutenir ma famille et à financer les appareils de test qui rendent ce service gratuit accessible à tous. Si cet outil vous a fait gagner du temps ou a sauvé votre joueur aujourd'hui, pensez à faire un petit don, cela signifie vraiment tout pour nous.",
+        "es": "Las donaciones me ayudan directamente a mantener a mi familia y financiar los dispositivos de prueba que hacen posible este servicio gratuito para todos. Si esta herramienta le ahorró tiempo o rescató a su jugador hoy, considere hacer una pequeña donación, realmente significa mucho para nosotros.",
+        "de": "Spenden helfen mir direkt, meine Familie zu unterstützen und die Testgeräte zu finanzieren, die diesen kostenlosen Service für alle ermöglichen. Wenn Ihnen dieses Tool heute Zeit gespart oder Ihren Player gerettet hat, denken Sie bitte über eine kleine Spende nach, es bedeutet uns wirklich die Welt.",
+        "ja": "寄付は私の家族をサポートし、誰もがこの無料サービスを利用できるようにするためのテスト デバイスに資金を提供するのに直接役立ちます。このツールによって時間を節約できたり、今日プレーヤーを救ったりできた場合は、少額の寄付を検討してください。それは私たちにとって本当に意味のあることです。",
     },
     "donate_support_appeal_lead": {
         "en": "Donations directly help me support my family and fund the test devices",

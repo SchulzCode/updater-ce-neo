@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Dilemel an ostilhoù leurenn Android (ADB / Fastboot) ivez ? Dibabit Mirout ma implijit ADB.",
  "legacy_cleanup_keep_btn": "Mirout",
  "legacy_cleanup_remove_btn": "Lemel kuit",
- "legacy_cleanup_done_inline": "Dilamet, war-dro {size} dieubet."
+ "legacy_cleanup_done_inline": "Dilamet, war-dro {size} dieubet.",
+ "donate_completion_body_family": "Labour un den hepken eo an arload-mañ, ha rannañ a ra un ti gant ma familh. Ma oa bet aesaet un tamm an traoù gant ar staliadur hiziv, ur c'hafe zo un doare madelezhus da skoazellañ an eurvezhioù hag ar galon a-dreñv.",
+ "donate_completion_body_running_costs": "Paeet e vez ar servijerioù, ar stokañ hag an domanioù evit pep miz, pe e vefe unan bennak o staliañ an deiz-se pe get. Ma 'z eo bet staliet hiziv an deiz, ur c'hafe a sikour da baeañ ar c'houstoù mont-en-dro sioul-se.",
+ "donate_completion_body_kindness": "N'eus enskrivadur ebet ha n'eus netra prennet. Ma oa talvoudus an arload hiziv, paeañ ur c'hafe en a-raok zo ur vadelezh vihan a vir anezhañ digoust evit an hini da heul.",
+ "donate_completion_body_small_hours": "An darn vrasañ eus ar raktres-mañ a c'hoarvez e-pad eurvezhioù bihan goude al labour-deiz, hag ur banne kafe zo un doare dous da lavarout e oa talvoudus. Trugarez deoc'h da vezañ amañ.",
+ "donate_completion_signature": "- Ryan - Merour an Hizivaer CE",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} en deus prenet ur banne kafe deomp war Ko-Fi {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} en deus prenet deomp {count} kafeoù war Ko-Fi {when}.",
+ "donate_support_appeal_full": "Ar skoazelloù a sikour ac'hanon da skoazellañ ma familh ha da arc'hantaouiñ an dafar amprouiñ a laka ar servij digoust-mañ da vezañ posupl d'an holl. Ma 'z eus bet espernet amzer deoc'h gant an ostilh-mañ pe ma 'z eo bet saveteet ho c'hoarier hiziv, soñjit en ur skoazell vihan, talvezout a ra ar bed deomp e gwirionez."
 }

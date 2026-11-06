@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Odebrat také nástroje platformy Android (ADB / Fastboot)? Pokud používáte ADB, zvolte Keep.",
  "legacy_cleanup_keep_btn": "Nechat",
  "legacy_cleanup_remove_btn": "Odstranit",
- "legacy_cleanup_done_inline": "Odstraněno – uvolněno přibližně {size}."
+ "legacy_cleanup_done_inline": "Odstraněno – uvolněno přibližně {size}.",
+ "donate_completion_body_family": "Tato aplikace je dílem jedné osoby a sdílí domov s mou rodinou. Pokud dnešní instalace věci trochu usnadnila, káva je laskavý způsob, jak podpořit hodiny a srdce za tím.",
+ "donate_completion_body_running_costs": "Za servery, úložiště a domény se platí každý měsíc, ať už ten den někdo instaluje nebo ne. Pokud byla dnešní instalace bezproblémová, káva pomáhá pokrýt tyto tiché provozní náklady.",
+ "donate_completion_body_kindness": "Neexistuje žádné předplatné a nic není uzamčeno. Pokud byla aplikace dnes užitečná, zaplatit kávu dopředu je malá laskavost, která ji udržuje zdarma pro další osobu.",
+ "donate_completion_body_small_hours": "Většina tohoto projektu se odehrává během několika hodin po pracovním dni a káva je jemný způsob, jak říct, že to stálo za to. Děkuji, že jste tady.",
+ "donate_completion_signature": "- Ryan - Správce Updater CE",
+ "donate_support_appeal_full": "Dary mi přímo pomáhají podporovat moji rodinu a financovat testovací zařízení, která umožňují tuto bezplatnou službu pro každého. Pokud vám tento nástroj dnes ušetřil čas nebo zachránil váš přehrávač, zvažte prosím malý dar, opravdu to pro nás znamená svět.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} nám koupil kávu na Ko-Fi {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} nám koupil {count} kávy na Ko-Fi {when}."
 }

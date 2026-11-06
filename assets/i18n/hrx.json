@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Host tuu ti Android-Platform Tools (ADB / Fastboot) aach wech ketuun? Wëlt Keep wëns tuu ADB penutst.",
  "legacy_cleanup_keep_btn": "Hale",
  "legacy_cleanup_remove_btn": "Raus tuun",
- "legacy_cleanup_done_inline": "Entfernt, ungefeer {size} fray."
+ "legacy_cleanup_done_inline": "Entfernt, ungefeer {size} fray.",
+ "donate_completion_body_family": "Tiise applicatsioon is een persoon sayn aarwayt, un tii tuut een haus mit mayn familye teele. Wën ti hayt tsu taach instaliirunge ti sache en pisye laychter kemach hon, is en kaafe en liiplich aat fer ti xtune un tas hërts hiner traan se unerxtitse.",
+ "donate_completion_body_running_costs": "Serwer, xpiichle un domains sin fer yeete moonat petsaalt, opwool yemant tas taach instaliirt orer net. Wën ti hayt tsu taach instaliirunge een xlisel waar, een kaafe hëleft tiise ruich laafe khoste se tëke.",
+ "donate_completion_body_kindness": "Es kept khee abonnëment un niks is ferxlos. Wën ti applicatsioon hayt nutslich waar, een kaafe foer perayte is een kleen kuutheet woo tas fer ti neekst persoon fray hale tuut.",
+ "donate_completion_body_small_hours": "Tas meyerxte fon tëm proyekt paseyert in kleene xtune noo tëm taach aarwat, un en kaafe is en sanfte aat fer se saan tas es es weyert hat. Tanke xeen tas tëyer too sayt.",
+ "donate_completion_signature": "- Ryan - Instandhalter fon te Aktualisierung CE",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} hot uns en kaafe uf Ko-Fi kekhaaft {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} hot uns {count} kaafe uf Ko-Fi kekhaaft {when}.",
+ "donate_support_appeal_full": "Ti kontripuytsioone helfe mich direktsioon mayn familye unerxtitse un ti testitsioons apteelunge finansiire woo tiise fraywilich tiinst fer yeete eene meechlich mache. Wën tas hilfs mitel tich tsayt kexpaart hot orer tayn xpiiler hayt tsu taach keret hot, tan tënkt mool noo en kleene kontripuytsioon, tas petayt wërklich ti welt fer uns."
 }

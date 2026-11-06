@@ -545,7 +545,7 @@
  "donate_ticker_status_fmt": "<b>{anchor}</b> mannin ${amount}{when}",
  "donate_kofi": "To kafe kun man e",
  "donate_bmac": "To min kafe",
- "donate_boosty": "Donate on Boosty",
+ "donate_boosty": "Man sika Boosty su",
  "donate_paypal": "PayPal su man sika",
  "donate_revolut": "Revolut yɛ ɔ mannin sika ɔ.",
  "donate_patreon": "Patreon yɛ ɔ mannin sika ɔ.",
@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "?Amun yi ninnge nga be fa di junman Android su’n (ADB / Fastboot) wie? Sɛ a fa ADB’n, fa Keep.",
  "legacy_cleanup_keep_btn": "Tra'nu",
  "legacy_cleanup_remove_btn": "Yi i lɛ",
- "legacy_cleanup_done_inline": "Be yili, ɔ ti kɛ {size} sa."
+ "legacy_cleanup_done_inline": "Be yili, ɔ ti kɛ {size} sa.",
+ "donate_completion_body_family": "App sɔ’n ti sran kun i junman, yɛ ɔ nin min awlobofuɛ mun e tran sua kunngba’n nun. Sɛ andɛ instalɛ’n yoli maan ninnge’m be yoli pɔpɔ kan’n, kafe kun ti like kpa kun m’ɔ kwla suan dɔ nin awlɛn ng’ɔ o i sin’n be bo ɔ.",
+ "donate_completion_body_running_costs": "Be tua serveurs, storage nin domaine’m be kalɛ anglo kwlaa nun, sɛ sran kun fa sie i cɛn sɔ’n nun annzɛ ɔ faman’n. Sɛ andɛ’n, be siesieli lika’n i kpa’n, kafe kun uka naan b’a kwla fa sika nga be fa di junman’n b’a di junman.",
+ "donate_completion_body_kindness": "Be yoman aboneman yɛ be faman like fi be siemɛn i lika. Sɛ andɛ’n, appli’n yoli kpa’n, kafe kun i tualɛ’n ti aklunye kan kun m’ɔ yo maan sran ng’ɔ́ bá’n, ɔ ɲanman sika ɔ.",
+ "donate_completion_body_small_hours": "Kɛ be ko wie junman sɔ’n i di’n, dɔ kanngan wie’m be nun yɛ be di junman sɔ’n niɔn, yɛ kafe nɔnlɛ’n ti wafa blɛblɛblɛ kun mɔ be fa se kɛ ɔ yoli kpa ɔ. Ɔ yo ɔ mo kɛ a o lɛ’n ti.",
+ "donate_completion_signature": "- Ryan - Sran ng’ɔ nian ninnge’m be su’n CE .",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} to kafe kun man e Ko-Fi su {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} toli e {count} kafe mun Ko-Fi su {when}.",
+ "donate_support_appeal_full": "Like nga be man’n, ɔ uka min trele naan m’an nian min awlobofuɛ’m be lika, kpɛkun m’an fa sika m’an fa yo ninnge nga be fa yo sran’m be te’n, mɔ maan sran kwlaa kwla di junman sɔ’n ngbɛn’n. Sɛ like sɔ’n w’a deman amun blɛ’n annzɛ w’a de amun jue tofuɛ’n andɛ’n, amun bu sika kan kun i akunndan, ɔ ti mɛn’n i bo sakpa e ɲrun."
 }

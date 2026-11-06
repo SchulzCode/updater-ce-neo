@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Kkes-d Allalen n Tmeẓdit n Android (ADB / Fastboot) daɣen? Fren Keep ma yella tesqedceḍ ADB.",
  "legacy_cleanup_keep_btn": "Ṭṭen",
  "legacy_cleanup_remove_btn": "Kkes",
- "legacy_cleanup_done_inline": "Yettwakkes, ɣef {size} yettwaslelli."
+ "legacy_cleanup_done_inline": "Yettwakkes, ɣef {size} yettwaslelli.",
+ "donate_completion_body_family": "App-a d axeddim n yiwen n umdan, yerna yettqadar axxam d twacult-iw. Ma yella asras n wass-a yessefsayen cwiṭ lecɣal, lqahwa d abrid yelhan i lmend n uɛiwen n tsaɛtin d wul yellan deffir-s.",
+ "donate_completion_body_running_costs": "Iqeddacen, aḥezzeb d yiḥricen ttwaxelṣen yal aggur, ama d win i d-yesbedden ass-nni neɣ ala. Ma yella asras n wass-a yella d win igerrzen, lqahwa tettɛawan ad teḍfer idrimen-nni n uɛeddi ssusmen.",
+ "donate_completion_body_kindness": "Ur yelli ara usmel yerna ulac ayen yettwaqqnen. Ma yella app-nni yella d anfay ass-a, axelleṣ n lqahwa sdat d lxir ameẓyan ay t-yettaǧǧan ad yili d ilelli i umdan ay d-iteddun.",
+ "donate_completion_body_small_hours": "Amur ameqran seg usenfar-a yettili-d deg teswiɛin timeẓyanin deffir n uxeddim n wass, yerna lqahwa d abrid n tmeẓẓuɣt akken ad d-nini d akken tesɛa azal. Tanemmirt imi telliḍ dagi.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} sɣen-aɣ-d lqahwa deg Ko-Fi {when}.",
+ "donate_completion_signature": "- Ryan - Amḥaddi n Useɣẓan CE",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} sɣen-aɣ-d {count} lqahwa deg Ko-Fi {when}.",
+ "donate_support_appeal_full": "Tiwsiwin ttɛawanent-iyi srid ad ɛiwneɣ tawacult-iw yerna ad sfaydiɣ seg wallalen n ukayad ay yettaǧǧan aseqdec-a ilelli ad yili i yal yiwen. Ma yella allal-a yesseḥbes-ak akud neɣ yesseḥbes amyurar-ik ass-a, ttxil-k tḥesbeḍ-d tikci tamecṭuḥt, s tidett d amaḍal ɣur-neɣ."
 }

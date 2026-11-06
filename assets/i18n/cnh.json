@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Android Platform Tools (ADB / Fastboot) zong hloh ve? ADB na hman ahcun Keep kha thim.",
  "legacy_cleanup_keep_btn": "Chiah",
  "legacy_cleanup_remove_btn": "Thial",
- "legacy_cleanup_done_inline": "Hlonh, {size} hrawng luat."
+ "legacy_cleanup_done_inline": "Hlonh, {size} hrawng luat.",
+ "donate_completion_body_family": "Hi app hi minung pakhat rian a si, cun ka chungkhar he inn pakhat kan i hrawm. Nihin install nih thil a fawiter deuh ahcun, coffee cu a hnulei suimilam le lungthin bawmhchanhnak caah zaangfahnak lam pakhat a si.",
+ "donate_completion_body_running_costs": "Server, chiahnak le domain pawl cu thla fatin man pek an si, cu ni ah ahohmanh nih an install zongah, an install lo zongah. Nihin i chiahmi cu a tluangmi a si ahcun, coffee nih dai tein kalnak man kha a bawmh.",
+ "donate_completion_body_kindness": "Subscription a um lo i zeihmanh khar a si lo. Nihin ah app cu a ttha ahcun, hmailei ah coffee man pek cu a hnu mi caah man loin a chiahmi zaangfahnak hmete a si.",
+ "donate_completion_body_small_hours": "Hi project tam deuh cu nikhat riantuan hnu suimilam tlawmpal ah a cang, cun coffee din cu a phu ko tiah chim khawhnak lam nem a si. Hika ah na um caah kan i lawm.",
+ "donate_completion_signature": "- Ryan - Updater CE zohkhenhtu",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} nih Ko-Fi ah coffee a kan cawk piak {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} nih Ko-Fi {when} ah {count} coffee a kan cawk piak.",
+ "donate_support_appeal_full": "Thawhlawm nih ka chungkhar bawmhchanhnak le mi vialte caah man loin riantuannak a tuah khawhnak ding caah hneksaknak thilri pawl bawmhnak ah direct in a ka bawmh. Hi thilri nih hin na caan a khamh asiloah nihin ah na player a khamh ahcun, bawmhnak hmete pakhatkhat kha ruat, kan caah vawlei sullam a ngei taktak."
 }

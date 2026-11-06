@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Kugwisya zibelesyo zya Android (ADB / Fastboot) azyalo? Sala kubamba kuti kobelesya ADB.",
  "legacy_cleanup_keep_btn": "Bamba",
  "legacy_cleanup_remove_btn": "Gwisya",
- "legacy_cleanup_done_inline": "Kugwisigwa, aali {size} kwaangununwa."
+ "legacy_cleanup_done_inline": "Kugwisigwa, aali {size} kwaangununwa.",
+ "donate_completion_body_family": "Eeyi aapu mulimu wamuntu omwe, mpawo ilaaŋanda yomwe amukwasyi wangu. Ikuti naa kubikka kwasunu kwakapa kuti zintu zibe zyuuba-uba, kkofi ninzila mbotu yakugwasyilizya mawoola amoyo uuli musyule lyayo.",
+ "donate_completion_body_running_costs": "Maseva, busena bwakuyobweda antoomwe amasena zilabbadelwa mwezi amwezi, nikuba kuti kuli uubikka buzuba oobo naa pe. Ikuti naa kubikka kwasunu kwakali kabotu, kkofi ilagwasya kuvwola mali aayo aakubelesya.",
+ "donate_completion_body_kindness": "Kunyina kulilembesya alimwi kunyina chintu chijalilidwe. Ikuti naa app eeyi yakali kugwasya sunu, kubbadela kkofi kumbele mbubotu buniini bupa kuti muntu uutobela kaitakwe mali.",
+ "donate_completion_body_small_hours": "Bunji bwapulojekiti eeyi ilachitika mumahola masyoonto musule amulimu wabuzuba, mpawo kkofi ninzila iiteteete yakwaamba kuti yakagwasya. Twalumba kuba aano.",
+ "donate_completion_signature": "- Ryan - Mulangizi wa Updater CE",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} wakatuulila kkofi a Ko-Fi {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} wakatuulila {count} kkofi a Ko-Fi {when}.",
+ "donate_support_appeal_full": "Zipego zilandigwasya kugwasya mukwasyi wangu akugwasilizya zibelesyo zyakusunka zipa kuti mulimo ooyu uutabbadelelwi ukonzyeke kumuntu uli woonse. Kuti eechi chibelesyo chakukwabilila chiindi naakuti chakugwasya sikusobana wako sunu, twalomba kuti uyeeye kusanga kaniini, nchintu chipati loko kulindiswe."
 }

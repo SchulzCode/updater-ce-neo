@@ -525,7 +525,7 @@
  "donate_a_top_supporter": "یک حامی برتر",
  "donate_a_supporter": "یک حامی",
  "donate_bought_coffee": "{top_prefix}{anchor} برای ما یک قهوه خرید {when}.",
- "donate_bought_coffees": "{top_prefix}{anchor} bought us {count} coffees {when}.",
+ "donate_bought_coffees": "{top_prefix}{anchor} برای ما {count} قهوه خرید {when}.",
  "donate_donated_by_method": "{top_prefix}{anchor} توسط {method} {when} ${amount} اهداء کرد.",
  "donate_donated_amount": "{top_prefix}{anchor} ${amount} {when} اهداء کرد.",
  "label_for_os": "برای سیستم عامل {version}",
@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "آیا ابزارهای پلت فرم اندروید (ADB / Fastboot) را نیز حذف کنید؟ اگر از ADB استفاده میکنید Keep را انتخاب کنید.",
  "legacy_cleanup_keep_btn": "نگهداشتن",
  "legacy_cleanup_remove_btn": "حذف",
- "legacy_cleanup_done_inline": "حذف شد, تقریباً {size} آزاد شد."
+ "legacy_cleanup_done_inline": "حذف شد, تقریباً {size} آزاد شد.",
+ "donate_completion_body_family": "این اپلیکیشن کار یک شخص است، و این یک خانه را با خانواده من شریک میسازد. اگر نصب امروز همه چیز را کمی آسان تر ساخته باشد، یک قهوه یک شیوه مهربان برای حمایت از ساعت ها و قلب پشت آن است.",
+ "donate_completion_body_running_costs": "سرورها، ذخیره سازی و دامنه ها برای هر ماه پرداخت میشوند، چه کسی آن روز را نصب کند یا خیر. اگر نصب امروز یک نصب هموار بود، یک قهوه کمک میکند تا مصارف اجرای آرام را پوشش دهد.",
+ "donate_completion_body_kindness": "هیچ اشتراک وجود ندارد و هیچ چیز قفل نشده است. اگر اپلیکیشن امروز مفید بود، پرداخت یک قهوه به جلو یک مهربانی کوچک است که آنرا برای شخص بعدی رایگان نگه میدارد.",
+ "donate_completion_body_small_hours": "بیشتر این پروژه در ساعات کوچک بعد از کار روزانه اتفاق میافتد، و یک قهوه یک شیوه ملایم برای گفتن این است که ارزش آنرا داشت. تشکر از اینکه اینجا هستید.",
+ "donate_completion_signature": "- رایان - نگهدارنده به روز کننده CE",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} برای ما یک قهوه در کو-فای خرید {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} برای ما {count} قهوه در کو-فی {when} خرید.",
+ "donate_support_appeal_full": "کمک ها مستقیماً به من کمک میکند تا از خانواده ام حمایت کنم و دستگاه های آزمایشی را که این خدمات رایگان را برای همه ممکن می سازد، تمویل مالی کنم. اگر این وسیله در وقت شما صرفه جویی کرد یا بازیکن شما را امروز نجات داد، لطفاً یک کمک کوچک را در نظر بگیرید، این واقعاً برای ما معنی جهان را دارد."
 }

@@ -526,8 +526,8 @@
  "donate_a_supporter": "Raan ye kɔc kuɔɔny",
  "donate_bought_coffee": "{top_prefix}{anchor} acï ɣok ɣɔɔc ka bun {when}.",
  "donate_bought_coffees": "{top_prefix}{anchor} acï ɣok ɣɔɔc {count} bun {when}.",
- "donate_donated_by_method": "{top_prefix}{anchor} donated ${amount} by {method} {when}.",
- "donate_donated_amount": "{top_prefix}{anchor} donated ${amount} {when}.",
+ "donate_donated_by_method": "{top_prefix}{anchor} cï gäm ${amount} në {method} {when}.",
+ "donate_donated_amount": "{top_prefix}{anchor} acï ${amount} {when}.",
  "label_for_os": "ë OS{version}",
  "month_01": "ëya",
  "month_02": "Pɛi rou",
@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Tääu ë käk ë thäät ë Android (ADB / Käk ë thäät) ëya dɛ̈t? Kuany Keep të nɔŋ yïn ADB.",
  "legacy_cleanup_keep_btn": "Muk nhom",
  "legacy_cleanup_remove_btn": "Nyiëc",
- "legacy_cleanup_done_inline": "Acï nyaai, në kë de {size} cï jäl."
+ "legacy_cleanup_done_inline": "Acï nyaai, në kë de {size} cï jäl.",
+ "donate_completion_body_family": "App kënë ee luɔi de raan tök, ku ka ye baai rɔm kek kɔc ke paanden. Na ye tɛ̈ɛ̈u de ye akäl kën käŋ looi amääth, ke coffee ee dhöl piɛth bï thɛɛr ku piɔ̈u tɔ̈ në ye cök kuɔɔny.",
+ "donate_completion_body_running_costs": "Servers, tɔ̈ɔ̈u ku domains aye tääu-pïny ë pɛ̈i yiic, të nɔŋ yen raan cï tääu-pïny ë köölë wala këc. Na ye tɛ̈ɛ̈u de ye akäl kën ee kë puɔth, ke coffee ee kuɔɔny në wëu ke cäth cïn kë ye keek lueel.",
+ "donate_completion_body_kindness": "Acïn kë cë tääu thïn ku acïn kë cë gël. Na ye app ë tɔ̈ ke ye kë lui në ye akäl käk yiic, ke gɛ̈m de wëu ke coffee tueŋ ee kë thiin koor ye yen cɔk tɔ̈ ke cïn kë tɔ̈ thïn tënë raan dɛ̈t.",
+ "donate_completion_signature": "- Ryan - Raan ye käŋ waar yiic CE",
+ "donate_completion_body_small_hours": "Kä juëc ke luɔi kënë aye röt loi në thɛɛr thiik yiic të cïn luɔi ë kööl thök, ku thäät ë thäät ë thäät ë thäät ë thäät ë thäät ë thäät. Yïn acä leec rin cï yïn bɛ̈n ëtënë.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} acï ɣok ɣɔɔc ë thäät ë Ko-Fi {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} acï ɣok ɣɔɔc {count} thäät ë Ko-Fi {when}.",
+ "donate_support_appeal_full": "Käk ë gɛm ë thäät yiic aye ɣɛn kuɔɔny tënë kɔc ke paandiɛ̈ ku wëu ke thëm ë käŋ ë thäät yiic ë luɔi ë thäät yiic ë raan ëbɛ̈n. Na ye kë kënë yïn acï thaar kony wala cï raan ë poldu kony akölë, ke yïn thiëcku ba wëu thiik yök, ee yic ë pinynhom tënë ɣook."
 }

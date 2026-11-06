@@ -553,7 +553,7 @@
  "donate_crypto_toggle": "Sugandiliw yira (BTC, ETH, SHIB)",
  "donate_crypto_hide": "Kiripto sugandiliw dogo",
  "donate_dont_ask": "Kana n ɲininga tuguni lozisiyɛli fitinin donnin kɔ",
- "donate_thanks_status": "Thanks, supporters!",
+ "donate_thanks_status": "Aw ni ce, dɛmɛbagaw!",
  "donate_thanks": "An ka dɛmɛbagaw & dɛmɛbagaw bɛɛ fo!",
  "donate_coffee_pitch": "Hi, Ryan yan, n’i ye n’ ka baarakɛminan {app} sɔrɔ min be mɔgɔ dɛmɛ, i be se ka kafe san n’ ye.",
  "donate_coffee_btn": "Kafe san nne ye",
@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Yala i be se ka baarakɛminanw (ADB / Fastboot) bɔ yen fana wa? N’i ​​be baara kɛra ni ADB ye, i ka Keep sugandi.",
  "legacy_cleanup_keep_btn": "Kɛrɛnkɛrɛn",
  "legacy_cleanup_remove_btn": "Bɔ",
- "legacy_cleanup_done_inline": "A bɔra, a be se ka kɛ {size} ye."
+ "legacy_cleanup_done_inline": "A bɔra, a be se ka kɛ {size} ye.",
+ "donate_completion_body_family": "Nin appli ye mɔgɔ kelen ka baara ye, ani a be soo kelen kɔnɔ ni n’ somɔgɔw ye. Ni bi installation ye koow nɔgɔya dɔɔni, kafe ye fɛɛrɛ ɲuman ye ka lɛrɛw ni dusukun dɛmɛ a kɔfɛ.",
+ "donate_completion_body_running_costs": "Servɛriw, marayɔrɔw ani domainew be sara kalo o kalo, mɔgɔ o mɔgɔ y’u don o loon na wala n’u m’u don. Ni bi ka yɛlɛmani tun be kɛra cogo ɲuman na, kafe be dɛmɛ don k’o baara musakaw sara.",
+ "donate_completion_body_kindness": "Abonnema tɛ yen ani foyi tɛ datugu. Ni appli tun be mɔgɔ nafa bi, ka kafe sara ka kɔn, o ye ɲumanya fitinin ye min b’a to a be to mɔgɔ wɛrɛ bolo gwansan.",
+ "donate_completion_body_small_hours": "O baara fanba be kɛ lɛrɛ fitininw kɔnɔ tile baara kɔ ani kafe min ye fɛɛrɛ ɲuman ye min b’a yira ko a tun ka ɲi. Aw ni ce aw ka na yan.",
+ "donate_completion_signature": "- Ryan - CE ka yɛlɛmaniw marabaga.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} ye kafe san an ye Ko-Fi kan {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} ye kafew san an ye {count} Ko-Fi kan {when}.",
+ "donate_support_appeal_full": "Nilifɛnw be n’ dɛmɛ ka n’ ka denbaya dɛmɛ ani ka wari di sɛgɛsɛgɛrikɛminanw ma minw b’a to bɛɛ be se k’o baara kɛ gwansan. Ni nin baarakɛminan y’i ka wagati kisi wala k’i ka tulonkɛla kisi bi, i ka jateminɛ kɛ nili dɔɔni ye, o kɔrɔ ye duniɲa ye tiɲɛn na an fɛ."
 }

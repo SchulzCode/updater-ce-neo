@@ -506,7 +506,7 @@
  "donate_intro_general_mediatek": "Hey! Ik bin Ryan, de ûntwikkelder efter MediaTek Installer. Ik betelje foar hosting, ark en opslach út myn eigen bûse om dizze ynstallearder fergees te hâlden. Moanlikse ûnderhâld komt op sawat $ 200 - elke stipe dy't jo jouwe helpt it libben te hâlden foar de folgjende brûker.",
  "donate_intro_success": "Wy hawwe <b>{software}</b> ynstallearre op jo <b>{model}</b>.<br><br>Hey! Ik bin Ryan, de ûntwikkelder efter Updater, it Community Firmware Archive, en de Themes Gallery. Ik dekke ús moanlikse $ 200 moanlikse server- en opslachkosten út 'e bûse om alles fergees en iepen te hâlden. As dit ark jo holp, beskôgje dan asjebleaft donearje - it hâldt dizze boarnen yn libben foar elkenien.",
  "donate_intro_general": "Hey! Ik bin Ryan, de ûntwikkelder efter Updater, it Community Firmware Archive, en de Themes Gallery. Ik betelje foar serverhosting, firmware-argyf opslach, en domeinfernijings út myn eigen bûse om alles fergees te hâlden. Moanlikse ûnderhâld komt op sawat $ 200 - elke stipe dy't jo jouwe helpt dizze ark yn libben te hâlden foar de folgjende eigner.",
- "donate_supporter": "Supporter",
+ "donate_supporter": "Stipe",
  "donate_method_generic": "Donaasje",
  "donate_when_today": "Hjoed",
  "donate_when_yesterday": "Juster",
@@ -521,7 +521,7 @@
  "donate_when_last_year": "ferline jier",
  "donate_when_in_month": "yn {month}",
  "donate_when_in_year": "yn {year}",
- "donate_top_supporter_prefix": "Top supporter",
+ "donate_top_supporter_prefix": "Top stipe ",
  "donate_a_top_supporter": "In topsupporter",
  "donate_a_supporter": "In supporter",
  "donate_bought_coffee": "{top_prefix}{anchor} kocht ús in kofje {when}.",
@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Ferwiderje de Android Platform-ark (ADB / Fastboot) ek? Kies Keep as jo ADB brûke.",
  "legacy_cleanup_keep_btn": "Hâlde",
  "legacy_cleanup_remove_btn": "Fuortsmite",
- "legacy_cleanup_done_inline": "Fuortsmiten - sawat {size} frijmakke."
+ "legacy_cleanup_done_inline": "Fuortsmiten - sawat {size} frijmakke.",
+ "donate_completion_body_kindness": "Der is gjin abonnemint en neat is opsletten. As de app hjoed nuttich wie, is it beteljen fan in kofje foarút in lytse freonlikens dy't it fergees hâldt foar de folgjende persoan.",
+ "donate_completion_body_family": "Dizze app is it wurk fan ien persoan, en it dielt in hûs mei myn famylje. As de ynstallaasje fan hjoed dingen wat makliker makke, is in kofje in soarte manier om de oeren en it hert derachter te stypjen.",
+ "donate_completion_body_running_costs": "Servers, opslach en domeinen wurde foar elke moanne betelle, oft immen dy dei ynstalleart of net. As de ynstallaasje fan hjoed soepel wie, helpt in kofje dy stille rinnende kosten te dekken.",
+ "donate_completion_body_small_hours": "It grutste part fan dit projekt bart yn lytse oeren nei de dei baan, en in kofje is in sêfte manier om te sizzen dat it wurdich wie. Tank foar it wêzen hjir.",
+ "donate_completion_signature": "- Ryan - Underhâlder fan Updater CE",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} kocht ús in kofje op Ko-Fi {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} kocht ús {count} kofjes op Ko-Fi {when}.",
+ "donate_support_appeal_full": "Donaasjes helpe my direkt myn famylje te stypjen en de testapparaten te finansieren dy't dizze fergese tsjinst foar elkenien mooglik meitsje. As dit ark jo tiid hat bewarre of jo spiler hjoed hat rêden, beskôgje dan in lytse donaasje, it betsjut wirklik de wrâld foar ús."
 }

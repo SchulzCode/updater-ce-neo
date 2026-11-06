@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "የአንድሮይድ መድረክ መሳሪያዎች (ADB/ Fastboot) እንዲሁ ይወገዱ? ADB የሚጠቀሙ ከሆነ Keepን ይምረጡ።",
  "legacy_cleanup_keep_btn": "አቆይ",
  "legacy_cleanup_remove_btn": "አስወግድ",
- "legacy_cleanup_done_inline": "ተወግዷል - {size} ገደማ ተለቅቋል።"
+ "legacy_cleanup_done_inline": "ተወግዷል - {size} ገደማ ተለቅቋል።",
+ "donate_completion_body_family": "ይህ መተግበሪያ የአንድ ሰው ስራ ነው፣ እና ከቤተሰቤ ጋር ቤት ይጋራል። የዛሬው መጫኑ ነገሮችን ትንሽ ቀላል ካደረገ፣ ቡና ከኋላው ያለውን ሰአታት እና ልብ ለመደገፍ ደግ መንገድ ነው።",
+ "donate_completion_body_running_costs": "ማንም ሰው ያን ቀን ቢጭንም ባይጭንም አገልጋይ፣ ማከማቻ እና ጎራዎች በየወሩ ይከፈላሉ። የዛሬው ጭነት ለስላሳ ከሆነ ቡና እነዚያን ጸጥ ያሉ የማስኬጃ ወጪዎችን ለመሸፈን ይረዳል።",
+ "donate_completion_body_kindness": "ምንም ምዝገባ የለም እና ምንም ነገር አልተቆለፈም። አፕ ዛሬ ጠቃሚ ከሆነ ቡናን ወደ ፊት መክፈል ለቀጣዩ ሰው ነፃ የሚያደርግ ትንሽ ደግነት ነው።",
+ "donate_completion_body_small_hours": "አብዛኛው የዚህ ፕሮጀክት የሚከናወነው ከቀን ስራ በኋላ በጥቃቅን ሰዓታት ውስጥ ነው፣ እና ቡና ዋጋ ያለው መሆኑን ለመናገር ረጋ ያለ መንገድ ነው። እዚህ በመሆኖ እናመሰግናለን።",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} በኮ-ፊ {when} ላይ ቡና ገዝተውልናል።",
+ "donate_completion_signature": "- ራያን - የ Updater CE ጠባቂ",
+ "donate_support_appeal_full": "ልገሳ በቀጥታ ቤተሰቤን እንድደግፍ እና ይህን ነፃ አገልግሎት ለሁሉም ሰው የሚቻለውን የሙከራ መሳሪያዎችን እንድደግፍ ይረዳኛል። ይህ መሳሪያ ጊዜዎን ከቆጠበ ወይም ተጫዋችዎን ዛሬ ካዳነ፣እባክዎ ትንሽ ልገሳን ያስቡ፣ በእውነት ለእኛ አለም ማለት ነው።",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} {count} ቡና በኮ-Fi {when} ገዛን።"
 }

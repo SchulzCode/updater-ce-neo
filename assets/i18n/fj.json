@@ -526,7 +526,7 @@
  "donate_a_supporter": "E dua na dau veitokoni .",
  "donate_bought_coffee": "{top_prefix}{anchor} volia vei keitou e dua na kofi {when}.",
  "donate_bought_coffees": "{top_prefix}{anchor} volia vei keitou na {count} kofi {when}.",
- "donate_donated_by_method": "{top_prefix}{anchor} donated ${amount} by {method} {when}.",
+ "donate_donated_by_method": "{top_prefix}{anchor} solia e ${amount} mai vei ira na {method} {when}.",
  "donate_donated_amount": "{top_prefix}{anchor} soli ${amount} {when}.",
  "label_for_os": "for OS {version}",
  "month_01": "Janueri",
@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Kauta laivi na iyaya ni cakacaka ni ituvatuva ni Android (ADB / Fastboot) vakakina? Digitaka na Maroroya kevaka o vakayagataka na ADB.",
  "legacy_cleanup_keep_btn": "Maroroya",
  "legacy_cleanup_remove_btn": "Kauta tani",
- "legacy_cleanup_done_inline": "Vakasukai, me baleta na {size} vakagalalataki."
+ "legacy_cleanup_done_inline": "Vakasukai, me baleta na {size} vakagalalataki.",
+ "donate_completion_body_family": "Na app oqo e cakacaka ni dua na tamata, ka wasea e dua na itikotiko kei na noqu matavuvale. Kevaka e vakarawarawataka vakalailai na veika e vakacurumi nikua, e dua na kofi e dua na sala yalololoma me tokona na auwa kei na yalo e dakuna.",
+ "donate_completion_body_running_costs": "Na veiqaravi, maroroi kei na domain e saumi ena veivula, se dua e vakacuruma na siga oya se sega. Kevaka e dua na ka malumu na vakacurumi nikua, e dua na kofi e vukea me ubia na isau ni cici vakanomodi oqori.",
+ "donate_completion_body_kindness": "E sega ni dua na sausaumi ka sega ni dua na ka e lokataki. Kevaka e yaga na app nikua, sauma e dua na kofi ki liu e dua na yalololoma lailai ka maroroya me galala me baleta na tamata e tarava.",
+ "donate_completion_body_small_hours": "E levu na cakacaka oqo e yaco ena auwa lalai ni oti na cakacaka ni siga, kei na dua na kofi e dua na sala malumu me tukuni kina ni a yaga. Vinaka vakalevu na tiko eke.",
+ "donate_completion_signature": "- Ryan - Dauniveiqaravi ni veivakavoui CE",
+ "donate_support_appeal_full": "Na cau e vukei au vakadodonu meu tokona na noqu matavuvale ka vakailavotaka na iyaya ni veivakatovolei ka rawa kina na veiqaravi galala oqo vei ira kecega. Kevaka na iyaya ni cakacaka oqo e vakabulai iko na gauna se vakabula na nomu dauqito nikua, yalovinaka vakasamataka e dua na cau lailai, e kena ibalebale dina na vuravura vei keda.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} volia vei keitou e dua na kofi ena Ko-Fi {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} volia vei keitou e {count} na kofi ena Ko-Fi {when}."
 }

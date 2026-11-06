@@ -37,6 +37,11 @@ COMPLETION_BODY_KEYS = (
 )
 
 LEGACY_APPEAL_KEY = "donate_support_appeal_lead"
+#: One complete sentence pair for the legacy appeal. The pair below was two
+#: fragments of a single English sentence, and translators punctuated the first
+#: fragment as if it ended there ("...test devices. that make..."), so the card
+#: read as a broken sentence in every language that did so.
+FULL_APPEAL_KEY = "donate_support_appeal_full"
 SUPPORT_APPEAL_KEYS = (
     LEGACY_APPEAL_KEY,
     "donate_appeal_always_free",
@@ -157,11 +162,18 @@ def _bold_lead(text: str) -> str:
         return text
     return f"<b>{lead}</b>{match.group(0)}{rest}"
 
-def support_appeal_html(key: str) -> str:
+def support_appeal_text(key: str) -> str:
     key = key or LEGACY_APPEAL_KEY
-    if key == LEGACY_APPEAL_KEY:
-        return f"<b>{tr('donate_support_appeal_lead')}</b> {tr('donate_support_appeal_followup')}"
-    return _bold_lead(tr(key))
+    if key != LEGACY_APPEAL_KEY:
+        return tr(key)
+    full = tr(FULL_APPEAL_KEY)
+    if full and full != FULL_APPEAL_KEY:
+        return full
+    return f"{tr('donate_support_appeal_lead')} {tr('donate_support_appeal_followup')}"
+
+
+def support_appeal_html(key: str) -> str:
+    return _bold_lead(support_appeal_text(key))
 
 def bundled_portrait_path():
     return paths.RESOURCES_DIR / "developer.png"

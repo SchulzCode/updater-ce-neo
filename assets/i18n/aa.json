@@ -524,10 +524,10 @@
  "donate_top_supporter_prefix": "Fayya le qokleena",
  "donate_a_top_supporter": "Fayya le qokleena",
  "donate_a_supporter": "Qokleyna",
- "donate_bought_coffee": "{top_prefix}{anchor} bought us a coffee {when}.",
+ "donate_bought_coffee": "{top_prefix}{anchor} neh xaame buna {when} .",
  "donate_bought_coffees": "{top_prefix}_{anchor} neh xaame {count}bunitte{when}.",
- "donate_donated_by_method": "{top_prefix}{anchor} donated ${amount} by {method} {when}.",
- "donate_donated_amount": "{top_prefix}{anchor} donated ${amount} {when}.",
+ "donate_donated_by_method": "{top_prefix}{anchor} qokolteh ${amount} {method}{when}.",
+ "donate_donated_amount": "{top_prefix}{anchor} qokolteh ${amount}{when}.",
  "label_for_os": "OS {version}",
  "month_01": "Naharsi Kudo",
  "month_02": "Qad-dirri",
@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Andiroyix pilaatformih silaacitte kala (ADB/sissik ugtuma) tonnah? Atu ADB xoqoysimtek Daffes doorit.",
  "legacy_cleanup_keep_btn": "Ibbix",
  "legacy_cleanup_remove_btn": "Kal",
- "legacy_cleanup_done_inline": "Duugumteh - wagittaamal {size} currik tan."
+ "legacy_cleanup_done_inline": "Duugumteh - wagittaamal {size} currik tan.",
+ "donate_completion_signature": "- Rayan - CE asqassaabe dammiyo",
+ "donate_completion_body_running_costs": "Ayfaf taceem, kobxisso kee domain kulli alsal meklaanam, faxe num too ayro kibbiime waytek. asaaki kibne sahlin tiya tekkek, buni too tibba le ardih awqentitte duudusele.",
+ "donate_completion_body_small_hours": "Ta cugaysok mangom ayro taamak lakal qunxa saaqoota takkeeh, buni kaadu qimmoh addah edde yaabam xiqah yan gita. Atu akkel gacteemih gadda gey.",
+ "donate_completion_body_family": "Ta assabalta inki numih taamaay, yi buxah mara lih buxa tasgalle. asaaki kibne caagiida dagoom sahhalossek, buni meqe gitay saaqoota qokoltam kee sorkoco baxi derret kak yani.",
+ "donate_completion_body_kindness": "Maysarraqa matan kee tu alfimtam matan. App asaaku tuxxiq luk sugtek, buxah addah meklaanam qunxa meqem kaban kinnim kee ciggiila numuh currik tan.",
+ "donate_support_appeal_full": "Ixibi saanih yoo cattam yi buxah mara qokoltam kee ta currik tan ayfaf kulli numuh takkem xiqtah tan aqayyaareh mansoofah qokol abta. ta silac wakti koh daagissek hinnay asaaku ku digir abeynit catek, kumagan dagoo qokol cubbit hayis, toh nummaak baad neh yaanama.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} Ko-Fi {when} amol buna neh xaame.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} neh xaame {count} bunitte Ko-Fi amol {when}."
 }

@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Verwyder ook die Android-platformnutsgoed (ADB / Fastboot)? Kies Hou as jy ADB gebruik.",
  "legacy_cleanup_keep_btn": "Hou",
  "legacy_cleanup_remove_btn": "Verwyder",
- "legacy_cleanup_done_inline": "Verwyder, ongeveer {size} vrygestel."
+ "legacy_cleanup_done_inline": "Verwyder, ongeveer {size} vrygestel.",
+ "donate_completion_body_family": "Hierdie toepassing is een persoon se werk, en dit deel 'n huis met my gesin. As vandag se installasie dinge 'n bietjie makliker gemaak het, is 'n koffie 'n vriendelike manier om die ure en hart daaragter te ondersteun.",
+ "donate_completion_body_running_costs": "Bedieners, berging en domeine word vir elke maand betaal, of iemand daardie dag installeer of nie. As vandag se installasie glad was, help 'n koffie om daardie stil bedryfskoste te dek.",
+ "donate_completion_body_small_hours": "Die meeste van hierdie projek vind plaas in klein ure ná die dagtaak, en 'n koffie is 'n sagte manier om te sê dit was die moeite werd. Dankie dat jy hier is.",
+ "donate_completion_body_kindness": "Daar is geen intekening nie en niks is weggesluit nie. As die toepassing vandag nuttig was, is om 'n koffie vorentoe te betaal 'n klein vriendelikheid wat dit gratis hou vir die volgende persoon.",
+ "donate_completion_signature": "- Ryan - Onderhouer van Updater CE",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} het vir ons 'n koffie op Ko-Fi gekoop {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} het vir ons {count} koffie op Ko-Fi gekoop {when}.",
+ "donate_support_appeal_full": "Skenkings help my direk om my gesin te ondersteun en die toetstoestelle te finansier wat hierdie gratis diens vir almal moontlik maak. As hierdie instrument jou tyd gespaar het of jou speler vandag gered het, oorweeg asseblief 'n klein skenking, dit beteken werklik die wêreld vir ons."
 }

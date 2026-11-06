@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Android Platforma Alətləri (ADB / Fastboot) da silinsin? ADB istifadə edirsinizsə, Saxla seçin.",
  "legacy_cleanup_keep_btn": "Saxla",
  "legacy_cleanup_remove_btn": "Sil",
- "legacy_cleanup_done_inline": "Silindi, təxminən {size} azad edildi."
+ "legacy_cleanup_done_inline": "Silindi, təxminən {size} azad edildi.",
+ "donate_completion_body_family": "Bu proqram bir nəfərin işidir və o, ailəmlə bir evi paylaşır. Bugünkü quraşdırma işləri bir az asanlaşdırdısa, qəhvə arxasındakı saatları və ürəyi dəstəkləmək üçün yaxşı bir yoldur.",
+ "donate_completion_body_running_costs": "Serverlər, saxlama və domenlər hər ay üçün ödənilir, hər kəs həmin gün quraşdırır və ya quraşdırmır. Əgər bugünkü quraşdırma rəvan idisə, qəhvə bu sakit işləyən xərcləri ödəməyə kömək edir.",
+ "donate_completion_body_kindness": "Abunəlik yoxdur və heç bir şey bağlanmayıb. Tətbiq bu gün faydalı idisə, bir qəhvəni irəli ödəmək onu növbəti şəxs üçün pulsuz saxlayan kiçik bir xeyirxahlıqdır.",
+ "donate_completion_body_small_hours": "Bu layihənin əksəriyyəti gündəlik işdən sonra kiçik saatlarda baş verir və qəhvə buna dəyər olduğunu söyləmək üçün yumşaq bir yoldur. Burada olduğunuz üçün təşəkkür edirik.",
+ "donate_completion_signature": "- Ryan - Updater CE-nin Təminatçısı",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} bizə Ko-Fi {when}-də qəhvə aldı.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} bizə Ko-Fi {when}-də {count} qəhvə aldı.",
+ "donate_support_appeal_full": "İanələr mənim ailəmi dəstəkləməyə və bu pulsuz xidməti hər kəs üçün mümkün edən sınaq cihazlarını maliyyələşdirməyə birbaşa kömək edir. Bu alət sizin vaxtınıza qənaət edibsə və ya oyunçunu bu gün xilas edibsə, lütfən, kiçik bir ianə düşünün, bu, bizim üçün həqiqətən dünya deməkdir."
 }

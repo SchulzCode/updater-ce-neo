@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Haleon man an mga Android Platform Tools (ADB / Fastboot)? Pilion an Keep kun naggagamit ka nin ADB.",
  "legacy_cleanup_keep_btn": "Taguon",
  "legacy_cleanup_remove_btn": "Haleon",
- "legacy_cleanup_done_inline": "Hinale, mga {size} pinatalingkas."
+ "legacy_cleanup_done_inline": "Hinale, mga {size} pinatalingkas.",
+ "donate_completion_body_family": "An app na ini gibo nin sarong tawo, asin ini nag-iiribang harong sa sakuyang pamilya. Kun an pag-instalar ngonian na aldaw nagpadali nin kadikit, an sarong kape sarong maboot na paagi tanganing suportaran an mga oras asin puso sa likod kaini.",
+ "donate_completion_body_running_costs": "An mga server, storage asin domain binabayadan kada bulan, igwa man nin mag-install kan aldaw na iyan o dai. Kun an pag-instalar ngonian na aldaw sarong makinis, an sarong kape nakakatabang na mabayadan an mga toninong na gastos sa pagdalagan.",
+ "donate_completion_body_kindness": "Mayo nin suskrisyon asin mayo nin naka-lock away. Kun an app kapaki-pakinabang ngonian na aldaw, an pagbayad nin sarong kape sa enotan sarong sadit na kabootan na nagpapadanay kaini na libre para sa masunod na tawo.",
+ "donate_completion_body_small_hours": "Kadaklan sa proyektong ini nangyayari sa saradit na oras pagkatapos kan aldaw na trabaho, asin an sarong kape sarong maluyang paagi tanganing sabihon na sulit ini. Salamat sa pag-abot mo digdi.",
+ "donate_completion_signature": "- Ryan - Paramantenir kan Updater CE",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} nagbakal samuya nin kape sa Ko-Fi {when}.",
+ "donate_support_appeal_full": "An mga donasyon direktang nakakatabang sako na suportaran an sakuyang pamilya asin pondohan an mga test device na nagpapangyari kan libreng serbisyong ini para sa gabos. Kun an kasangkapan na ini nakatipid saimo nin oras o nakaligtas sa saimong parakawat ngonian na aldaw, pakikonsiderar an sarong sadit na donasyon, ini tunay na nangangahulugan kan kinaban para sa samo.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} nagbakal sa samo nin {count} na mga kape sa Ko-Fi {when}."
 }

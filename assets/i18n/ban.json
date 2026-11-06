@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Icalang Piranti Platform Android (ADB/Fastboot) punika taler? Pilih Simpen yéning Sameton nganggén ADB.",
  "legacy_cleanup_keep_btn": "Nyaga",
  "legacy_cleanup_remove_btn": "Apus",
- "legacy_cleanup_done_inline": "Kaicalang, kirang langkung {size} kabebasang."
+ "legacy_cleanup_done_inline": "Kaicalang, kirang langkung {size} kabebasang.",
+ "donate_completion_body_family": "Aplikasi puniki wantah pakaryan anak asiki, lan ipun sareng-sareng ring umah sareng kulawargan titiang. Yening pasang rahinane mangkin ngawinang parindikan punika dangan akidik, kopi punika pinaka cara sane becik anggen nunjang jam lan manah ring ungkurnyane.",
+ "donate_completion_body_running_costs": "Server, penyimpanan lan domain kataur nyabran sasih, napike wenten sane masang ring rahina punika utawi nenten. Yening pasang rahinane mangkin sampun lancar, kopi asiki ngawantu nutupin biaya jalan sane sepi punika.",
+ "donate_completion_body_kindness": "Tan wenten langganan tur tan wenten sane kakunci. Yening app punika mawiguna mangkin, naur kopi maju wantah kabecikan alit sane ngawinang tetep gratis antuk jadma selanturnyane.",
+ "donate_completion_body_small_hours": "Akeh proyek puniki mamargi ring jam-jam alit sesampun pakaryan rahina, lan kopi punika cara sane alus anggen maosang punika patut. Suksma sampun rauh iriki.",
+ "donate_completion_signature": "- Ryan - Pemelihara Pembaruan CE",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} numbas tiang {count} kopi ring Ko-Fi {when}.",
+ "donate_support_appeal_full": "Sumbangan langsung nulungin tiang ngadukung kulawarga lan ngebiayain piranti tes sane ngawinang layanan gratis puniki prasida kaanggen sareng sami. Yening piranti puniki nghemat galah semetone utawi nyelametang pemain semetone mangkin, durusang anggap sumbangan alit, punika sujati maartos jagat majeng ring iraga.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} numbas tiang kopi ring Ko-Fi {when}."
 }

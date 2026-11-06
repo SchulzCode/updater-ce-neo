@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Bain an Ardán Uirlisí Android (ADB / Fastboot) chomh maith? Roghnaigh Coinnigh má úsáideann tú ADB.",
  "legacy_cleanup_keep_btn": "Coinnigh",
  "legacy_cleanup_remove_btn": "Bain",
- "legacy_cleanup_done_inline": "Bainte, thart ar {size} saor."
+ "legacy_cleanup_done_inline": "Bainte, thart ar {size} saor.",
+ "donate_completion_body_family": "Is obair duine amháin í an aip seo, agus roinneann sé teach le mo theaghlach. Má rinne suiteáil an lae inniu rudaí beagán níos éasca, is bealach cineálta é caife chun tacú leis na huaireanta agus na croí taobh thiar de.",
+ "donate_completion_body_small_hours": "Tarlaíonn an chuid is mó den tionscadal seo i uaireanta beaga tar éis an jab lae, agus is bealach milis é caife a rá gurbh fhiú é. Go raibh maith agat as a bheith anseo.",
+ "donate_completion_body_running_costs": "Íoctar freastalaithe, stóráil agus fearainn gach mí, cibé acu a shuiteálann aon duine an lá sin nó nach ea. Más rud é go raibh suiteáil an lae inniu réidh, cuidíonn caife leis na costais reatha chiúin sin a chlúdach.",
+ "donate_completion_body_kindness": "Níl aon síntiús ann agus níl aon rud faoi ghlas. Más rud é go raibh an aip úsáideach inniu, is cineáltas beag é caife a íoc ar aghaidh a choimeádann saor é don chéad duine eile.",
+ "donate_completion_signature": "- Ryan - Coimeádaí an Nuashonraithe CE",
+ "donate_bought_coffee_kofi": "Cheannaigh {top_prefix}{anchor} caife dúinn ar Ko-Fi {when}.",
+ "donate_support_appeal_full": "Cabhraíonn síntiúis go díreach liom tacú le mo theaghlach agus na gléasanna tástála a mhaoiniú a fhágann go mbeidh an tseirbhís saor in aisce seo indéanta do chách. Má shábháil an uirlis seo am duit nó má tharrtháil tú d'imreoir inniu, smaoinigh ar shíntiús beag, ciallaíonn sé go fírinneach an domhan dúinn.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} cheannaigh {count} caife dúinn ar Ko-Fi {when}."
 }

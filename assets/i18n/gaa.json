@@ -526,8 +526,8 @@
  "donate_a_supporter": "Mɔ ko ni fiɔ sɛɛ",
  "donate_bought_coffee": "{top_prefix}{anchor} he wɔ kɔfe {when}.",
  "donate_bought_coffees": "{top_prefix}{anchor} he wɔ {count} kɔfii {when}.",
- "donate_donated_by_method": "{top_prefix}{anchor} donated ${amount} by {method} {when}.",
- "donate_donated_amount": "{top_prefix}{anchor} donated ${amount} {when}.",
+ "donate_donated_by_method": "{top_prefix}{anchor} ha ${amount} kɛtsɔ {method} {when}.",
+ "donate_donated_amount": "{top_prefix}{anchor} kɛ ${amount} {when} ha.",
  "label_for_os": "for OS {version}",
  "month_01": "aharabata",
  "month_02": "Oflɔ",
@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Ani ojieɔ Android gbɛjianɔtoo nibii (ADB / Fastboot) lɛ hu? Halamɔ Keep kɛji okɛ ADB miitsu nii.",
  "legacy_cleanup_keep_btn": "Kɛto",
  "legacy_cleanup_remove_btn": "Jiemɔ",
- "legacy_cleanup_done_inline": "Ajie, aaafee {size} ajie."
+ "legacy_cleanup_done_inline": "Ajie, aaafee {size} ajie.",
+ "donate_completion_body_kindness": "Akɛ shika woɔ mli ni nɔ ko nɔ ko hu bɛ ni akɛwo mli. Kɛji akɛ app lɛ he yɛ sɛɛnamɔ ŋmɛnɛ lɛ, kɔfi ni awoɔ kɛyaa hiɛ lɛ ji mlihilɛ bibioo ko ni haa mɔ ni nyiɛɔ sɛɛ lɛ feɔ yaka.",
+ "donate_completion_body_family": "App nɛɛ ji mɔ kome nitsumɔ, ni ekɛ miweku lɛ yɔɔ shia kome mli. Kɛji ŋmɛnɛŋmɛnɛ beaŋ install lɛ ha nibii fee mlɛo fioo lɛ, kɔfi ji mlihilɛ gbɛ ni atsɔɔ nɔ ayeɔ abuaa ŋmɛlɛtswai kɛ tsui ni yɔɔ sɛɛ lɛ.",
+ "donate_completion_body_running_costs": "Awoɔ sɛɛvai, nibii ni akɛtoɔ kɛ domains lɛ ahe nyɔmɔ daa nyɔŋ nɔ, kɛji mɔ ko kɛwo mli nakai gbi lɛ loo ekɛwooo mli. Kɛji ŋmɛnɛŋmɛnɛ nɔ ni akɛwoɔ mli lɛ ji nɔ ni yɔɔ mlɛo lɛ, kɔfe yeɔ ebuaa ni ekɛ nakai shika ni akɛtsuɔ nii dioo lɛ he nyɔmɔ.",
+ "donate_completion_body_small_hours": "Nitsumɔ nɛɛ mli babaoo baa mli yɛ ŋmɛlɛtswai bibii amli yɛ gbi lɛ nitsumɔ lɛ sɛɛ, ni kɔfe ji gbɛ ni yɔɔ blɛoo ni atsɔɔ nɔ akɛɛ akɛ ejara wa. Oyiwaladɔŋŋ akɛ oyɛ biɛ.",
+ "donate_completion_signature": "- Ryan - Mɔ ni kwɛɔ nibii ni atsakeɔ lɛ anɔ CE",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} he wɔ kɔfe yɛ Ko-Fi nɔ {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} he wɔ {count} kɔfi yɛ Ko-Fi nɔ {when}.",
+ "donate_support_appeal_full": "Oniatsumɔi yeɔ ebuaa mi tɛ̃ɛ ni mikwɛɔ miweku lɛ nɔ, ni mikɛ shika haa tsɔnei ni akɛkaa nii ni haa nɛkɛ nitsumɔ ni aheee nɔ ko nɛɛ baanyɛ aba mli aha mɔ fɛɛ mɔ. Kɛji akɛ dɛŋdade nɛɛ ha oná be loo ejie oshwɛlɔ lɛ ŋmɛnɛ lɛ, ofainɛ susumɔ oniatsumɔ bibioo ko he, etsɔɔ je lɛ diɛŋtsɛ kɛha wɔ."
 }

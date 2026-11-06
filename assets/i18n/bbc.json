@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Hapus ma Alat Platform Android (ADB/Fastboot) songon i? Pillit ma Simpan molo mamangke ADB.",
  "legacy_cleanup_keep_btn": "Mameop",
  "legacy_cleanup_remove_btn": "Manghorus",
- "legacy_cleanup_done_inline": "Dihapus, hira-hira {size} dipalua."
+ "legacy_cleanup_done_inline": "Dihapus, hira-hira {size} dipalua.",
+ "donate_completion_body_running_costs": "Server, penyimpanan dohot domain digarar do ganup bulan, manang na adong na mamasang di ari i manang ndang. Molo pasang sadarion lancar do, kopi mangurupi manutup biaya jalan na tenang i.",
+ "donate_completion_body_family": "Aplikasi on, ulaon ni sahalak do, jala sarupa jabu do i dohot keluargangku. Molo pasang sadarion mambahen lam mura saotik, sada kopi ima cara na burju laho mendukung jam dohot roha di pudina.",
+ "donate_completion_signature": "- Ryan - Pemelihara Pembaruan CE",
+ "donate_completion_body_small_hours": "Godangan proyek on masa di jam na metmet dung karejo arian, jala kopi ima cara na lambok laho mandok na marguna do i. Mauliate ma di hamu na ro.",
+ "donate_completion_body_kindness": "Ndang adong langganan jala ndang adong na dikunci. Molo marguna do app i saonari, manggarar kopi tu jolo, i ma haburjuon na metmet na mambahen tongtong gratis tu halak na mangihut.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} dituhor hami kopi di Ko-Fi {when}.",
+ "donate_support_appeal_full": "Sumbangan langsung mangurupi ahu mendukung keluargangku jala membiayai alat tes na mambahen layanan gratis on boi diulahon sude halak. Molo alat on menghemat waktumu manang menyelamatkan pemainmu sadarion, tolong pertimbangkan ma sumbangan na metmet, tutu do marlapatan portibi on di hami.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} dituhor hami {count} kopi di Ko-Fi {when}."
 }

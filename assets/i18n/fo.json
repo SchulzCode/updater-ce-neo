@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Strika Android-palltólini (ADB / Fastboot) eisini? Vel Keep um tú brúkar ADB.",
  "legacy_cleanup_keep_btn": "Hava",
  "legacy_cleanup_remove_btn": "Taka burtur",
- "legacy_cleanup_done_inline": "Strikað, umleið {size} frígivið."
+ "legacy_cleanup_done_inline": "Strikað, umleið {size} frígivið.",
+ "donate_completion_body_family": "Hendan appin er verk hjá einum persóni, og hon deilir eitt heim við mína familju. Um uppsetingin í dag gjørdi tað eitt sindur lættari, so er ein kaffimunnur ein góður máti at stuðla tímunum og hjartanum aftanfyri.",
+ "donate_completion_body_running_costs": "Servarar, goymsla og domain eru goldnar fyri hvønn mánað, um nakar installerar tann dagin ella ikki. Um uppsetingin í dag var ein smidlig, so hjálpir eitt kaffimunnur at dekka tann stilla koyrikostnaðin.",
+ "donate_completion_body_kindness": "Tað er einki hald og einki er læst burtur. Um appin var til gagns í dag, so er tað ein lítil vælvild at gjalda ein kaffi frammanundan, sum heldur hana ókeypis fyri næsta persónin.",
+ "donate_completion_body_small_hours": "Tað mesta av hesi verkætlan hendir í smáum tímum eftir dagstarvið, og ein kaffimunnur er ein blíður máti at siga, at tað var tað vert. Takk fyri, at tú ert her.",
+ "donate_completion_signature": "- Ryan - Viðlíkahaldari av dagførara CE",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} keypti okkum ein kaffi á Ko-Fi {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} keypti okkum {count} kaffi á Ko-Fi {when}.",
+ "donate_support_appeal_full": "Stuðul hjálpir mær beinleiðis at stuðla mínari familju og fíggja royndartól, sum gera hesa ókeypis tænastuna møguliga fyri øll. Um hetta tólið sparaði tær tíð ella bjargaði tínum spælara í dag, so umhugsa eina lítla gávu, tað merkir sanniliga heimin fyri okkum."
 }

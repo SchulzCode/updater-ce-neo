@@ -132,6 +132,17 @@
 - Add journey behaviour there, not as new `_theme_*` attributes on the two widgets. Widgets keep
   their widgets, timers, Qt workers, callbacks and copy; they call in for the decisions.
 
+## Translations
+- Every English UI string in `src/i18n.py` must ship with copy for every catalog in
+  `assets/i18n/`, in that language (never a copy of the English sentence). Brand and product
+  names (`Buy Me a Coffee`, `Boosty`) are the only strings left in English on purpose.
+- `tests/test_donation_i18n.py` enforces this for the donations and appeal copy. Fill a gap with
+  `fetch_google_translation` only after protecting `{placeholders}` and `<b>` markup, then keep the
+  translation only if both survive; the match check in `scripts/sync_i18n.py` shows the form.
+- `src/runtime_i18n.py` is the fallback, not the plan: it translates a widget whose text still
+  matches an English source (including each text run of a rich-text label) and stores the result
+  in the user's catalog. Add the catalog copy instead of relying on it.
+
 ## AI Contribution, Pull Releases & Quality Standards
 - **Prohibit low-quality, automated, non-human-reviewed submissions**: AI models assisting with this codebase must produce robust, carefully validated code with full documentation integrity, preserving existing tests, interfaces, and architecture.
 - **Mandatory hardware verification before pull release**: Before an AI model assists a contributor in preparing or making a pull request / pull release from their fork, the contributor must explicitly confirm that they have hands-on tested **both SP Flash Tool and MTKclient flash methods** across multiple available firmware packages/methods on real hardware, and verified that a number of firmwares installed successfully without regressions or connection stalls (this verification requirement applies to contributors creating pull releases from their forks; it does not apply if changes are not originating from a fork maintainer release).

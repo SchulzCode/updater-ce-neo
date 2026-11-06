@@ -17,7 +17,7 @@ from ..browser import open_browser
 from ..config import DONATION_CRYPTO, DONATION_LINKS
 from ..i18n import tr
 from .dark import page_margins, theme_foreground
-from .support_appeal import bundled_portrait_path, circle_pixmap
+from .support_appeal import bundled_portrait_path, circle_pixmap, support_appeal_html
 from .surfaces import show_glass_backdrop
 from .widgets import Card, FlowLayout
 
@@ -147,10 +147,7 @@ class SupportPage(QWidget):
         self._appeal_body.setStyleSheet(
             "font-size: 12px; line-height: 1.4; color: palette(window-text); background: transparent; border: none;"
         )
-        self._appeal_body.setText(
-            f"<b>{tr('donate_support_appeal_lead')}</b> "
-            f"{tr('donate_support_appeal_followup')}"
-        )
+        self._appeal_body.setText(support_appeal_html("donate_support_appeal_lead"))
         card_layout.addWidget(self._appeal_body)
 
         # Primary payment methods: each button keeps its own label width and
@@ -382,10 +379,7 @@ class SupportPage(QWidget):
     def retranslate(self) -> None:
         self._author_lbl.setText(tr("donate_support_author"))
         self._role_lbl.setText(tr("donate_support_role"))
-        self._appeal_body.setText(
-            f"<b>{tr('donate_support_appeal_lead')}</b> "
-            f"{tr('donate_support_appeal_followup')}"
-        )
+        self._appeal_body.setText(support_appeal_html("donate_support_appeal_lead"))
         # New wording is a new line count; the card has to be re-measured.
         self._queue_content_check()
         self._honeygain_link.setText(tr("donate_honeygain"))

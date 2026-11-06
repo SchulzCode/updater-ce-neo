@@ -525,7 +525,7 @@
  "donate_a_top_supporter": "ⴰⵎⴹⴻⴱⴱⴻⵔ ⵏ ⵜⵇⴰⵛⵓⵛⵜ",
  "donate_a_supporter": "ⴰⵎⵄⴰⵡⴻⵏ",
  "donate_bought_coffee": "{top_prefix}{anchor} ⵢⴻⵙⵖⴰⴰⵖⴷ ⵍⵇⴰⵀⵡⴰ {when}.",
- "donate_bought_coffees": "{top_prefix}{anchor} bought us {count} coffees {when}.",
+ "donate_bought_coffees": "{top_prefix}{anchor} ⵖⴰⵖ-ⴷ {count} ⵍⵇⴰⵀⵡⴰ {when}.",
  "donate_donated_by_method": "{top_prefix}{anchor} ⵢⴻⵜⵜⵓⵏⴻⴼⴽ ɣ{amount} ⵙⵖⵓⵔ {method}{when}.",
  "donate_donated_amount": "{top_prefix}{anchor} ⵢⴻⴼⴽⴰⴷ ${amount}{when}.",
  "label_for_os": "ⵉ OS {version}",
@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "ⴽⴽⴻⵙⴷ ⴷⴰⵖⴻⵏ ⴰⵍⵍⴰⵍⴻⵏ ⵏ ⵜⵎⴻⵥⴷⵉⵜ ⵏ Android (ADB / Fastboot)? ⴼⵔⴻⵏ Keep ⵎⴰ ⵢⴻⵍⵍⴰ ⵜⴻⵙⵇⴻⴷⵛⴻⴹ ADB.",
  "legacy_cleanup_keep_btn": "ⵟⵟⴻⵏ",
  "legacy_cleanup_remove_btn": "ⴽⴽⴻⵙ",
- "legacy_cleanup_done_inline": "ⵢⴻⵜⵜⵡⴰⴽⴽⴻⵙ, ⴰⵣⴰⵍ ⵏ {size} ⵢⴻⵜⵜⵡⴰⵙⴻⵍⵍⴻⴽ."
+ "legacy_cleanup_done_inline": "ⵢⴻⵜⵜⵡⴰⴽⴽⴻⵙ, ⴰⵣⴰⵍ ⵏ {size} ⵢⴻⵜⵜⵡⴰⵙⴻⵍⵍⴻⴽ.",
+ "donate_completion_body_family": "Appa ⴷ ⴰⵅⴻⴷⴷⵉⵎ ⵏ ⵢⵉⵡⴻⵏ ⵏ ⵡⴻⵎⴷⴰⵏ, ⵢⴻⵔⵏⴰ ⵢⴻⵜⵜⵇⴰⴷⴰⵔ ⴰⵅⵅⴰⵎ ⴷ ⵜⵡⴰⵛⵓⵍⵜⵉⵡ. ⵎⴰ ⵢⴻⵍⵍⴰ ⴰⵙⴻⵔⵙⵉ ⵏ ⵡⴰⵙⵙⴰ ⵢⴻⵙⵙⴻⴼⵙⴰⵢ ⵛⵡⵉⵟ ⵍⴻⵛⵖⴰⵍ, ⵍⵇⴰⵀⵡⴰ ⴷ ⴰⴱⵔⵉⴷ ⵏ ⵍⵅⵉⵔ ⵉ ⵍⵎⴻⵏⴷ ⵏ ⵓⵄⵉⵡⴻⵏ ⵏ ⵙⵙⴰⵄⴰ ⴷ ⵡⵓⵍ ⵢⴻⵍⵍⴰⵏ ⴷⴻⴼⴼⵉⵔⵙ.",
+ "donate_completion_body_running_costs": "ⵉⵇⴻⴷⴷⴰⵛⴻⵏ, ⴰⵃⴻⵣⵣⴻⴱ ⴷ ⵢⵉⵃⵔⵉⵛⴻⵏ ⵜⵜⵡⴰⵅⴻⵍⵚⴻⵏ ⵉ ⵢⴰⵍ ⴰⴳⴳⵓⵔ, ⴰⵎⴰ ⴷ ⵡⵉⵏ ⵉ ⴷⵢⴻⵙⴱⴻⴷⴷⴻⵏ ⴰⵙⵙⵏⵏⵉ ⵏⴻⵖ ⴰⵍⴰ. ⵎⴰ ⵢⴻⵍⵍⴰ ⴰⵙⴻⵏⴼⴰⵔ ⵏ ⵡⴰⵙⵙⴰ ⵢⴻⵍⵍⴰ ⴷ ⵡⵉⵏ ⵉⴳⴻⵔⵔⵣⴻⵏ, ⵍⵇⴰⵀⵡⴰ ⵜⴻⵜⵜⵄⴰⵡⴰⵏ ⴰⴷ ⵜⴹⴻⴼⴼⴻⵔ ⵉⴷⵔⵉⵎⴻⵏⵏⵏⵉ ⵏ ⵓⵅⴻⴷⴷⵉⵎ ⵢⴻⵙⵙⵓⵙⴻⵎ.",
+ "donate_completion_body_kindness": "ⵓⵔ ⵢⴻⵍⵍⵉ ⴰⵔⴰ l’abonnement ⵢⴻⵔⵏⴰ ⵓⵍⴰⵛ ⴰⵢⴻⵏ ⵢⴻⵜⵜⵡⴰⵇⵇⵏⴻⵏ. ⵎⴰ ⵢⴻⵍⵍⴰ appnni ⵢⴻⵍⵍⴰ ⵢⴻⵙⵄⴰ ⵏⵏⴼⴻⵄ ⴰⵙⵙⴰ, ⴰⵅⴻⵍⵍⴻⵚ ⵏ ⵍⵇⴰⵀⵡⴰ ⵙⴷⴰⵜ ⴷ ⵍⵅⵉⵔ ⴰⵎⴻⵥⵢⴰⵏ ⴰⵢ ⵜⵢⴻⵜⵜⴰⴵⴵⴰⵏ ⴰⴷ ⵢⵉⵍⵉ ⴷ ⵉⵍⴻⵍⵍⵉ ⵉ ⵓⵎⴷⴰⵏ ⴰⵢ ⴷⵉⵜⴻⴷⴷⵓⵏ.",
+ "donate_completion_body_small_hours": "ⴰⵎⵓⵔ ⴰⵎⴻⵇⵔⴰⵏ ⵙⴻⴳ ⵓⵙⴻⵏⴼⴰⵔⴰ ⵢⴻⵜⵜⵉⵍⵉⴷ ⴷⴻⴳ ⵜⴻⵙⵡⵉⵄⵉⵏ ⵜⵉⵎⴻⵥⵢⴰⵏⵉⵏ ⴷⴻⴼⴼⵉⵔ ⵓⵅⴻⴷⴷⵉⵎ ⵏ ⵡⴰⵙⵙ, ⵢⴻⵔⵏⴰ ⵍⵇⴰⵀⵡⴰ ⴷ ⴰⴱⵔⵉⴷ ⵏ ⵜⵎⴻⵥⵥⵓⵖⵜ ⴰⴽⴽⴻⵏ ⴰⴷ ⴷⵏⵉⵏⵉ ⴷ ⴰⴽⴽⴻⵏ ⵜⴻⵙⵄⴰ ⴰⵣⴰⵍ. ⵜⴰⵏⴻⵎⵎⵉⵔⵜ ⵉⵎⵉ ⵜⴻⵍⵍⵉⴹ ⴷⴰⴳⵉ.",
+ "donate_completion_signature": "- ⵔⵢⴰⵏ - ⴰⵎⵃⴰⴷⴷⵉ ⵏ ⵓⵙⴻⵖⵣⴻⴼ CE",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} ⵢⴻⵙⵄⴰⴰⵖⴷ ⵍⵇⴰⵀⵡⴰ ⴷⴻⴳ KoFi {when}.",
+ "donate_support_appeal_full": "ⵜⵉⵡⵙⵉⵡⵉⵏ ⵜⵜⵄⴰⵡⴰⵏⴻⵏⵜⵉⵢⵉ ⵙⵔⵉⴷ ⴰⴷ ⵄⵉⵡⵏⴻⵖ ⵜⴰⵡⴰⵛⵓⵍⵜⵉⵡ ⵢⴻⵔⵏⴰ ⴰⴷ ⵙⴼⴰⵢⴷⵉⵖ ⵙⴻⴳ ⵢⵉⴼⴰⵔⵉⵙⴻⵏ ⵏ ⵜⴻⵙⵍⴻⴹⵜ ⵉ ⵢⴻⵜⵜⴰⴵⴵⴰⵏ ⴰⵙⴻⵍⴽⵉⵎⴰⴳⵉ ⵉⵍⴻⵍⵍⵉ ⴰⴷ ⵢⵉⵍⵉ ⵉ ⵢⴰⵍ ⵢⵉⵡⴻⵏ. ⵎⴰ ⵢⴻⵍⵍⴰ ⴰⵍⵍⴰⵍⴰ ⵢⴻⵙⵙⴻⵃⴱⴻⵙⵉⴽ ⴰⴽⵓⴷ ⵏⴻⵖ ⵢⴻⵙⵙⴻⵃⴱⴻⵙ ⴰⵎⵢⵓⵔⴰⵔⵉⴽ ⴰⵙⵙⴰ, ⵜⵜⵅⵉⵍⴽ ⵃⴻⵙⵙⴷ ⵉ ⵜⵉⴽⵛⵉ ⵜⴰⵎⴻⵛⵟⵓⵃⵜ, ⵙ ⵜⵉⴷⴻⵜⵜ ⴷ ⴰⵏⴰⵎⴻⴽ ⵏ ⵓⵎⴰⴹⴰⵍ ⵖⵓⵔⵏⴻⵖ.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} ⵙⵖⴻⵏⴰⵖⴷ {count} ⵍⵇⴰⵀⵡⴰ ⴷⴻⴳ KoFi {when}."
 }

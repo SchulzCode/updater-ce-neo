@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "להסיר גם את כלי פלטפורמת אנדרואיד (ADB / Fastboot)? בחר Keep אם אתה משתמש ב-ADB.",
  "legacy_cleanup_keep_btn": "לִשְׁמוֹר",
  "legacy_cleanup_remove_btn": "לְהַסִיר",
- "legacy_cleanup_done_inline": "הוסר - בערך {size} שוחרר."
+ "legacy_cleanup_done_inline": "הוסר - בערך {size} שוחרר.",
+ "donate_completion_body_running_costs": "שרתים, אחסון ודומיינים מקבלים תשלום עבור כל חודש, בין אם מישהו מתקין באותו יום ובין אם לא. אם ההתקנה של היום הייתה חלקה, קפה עוזר לכסות את העלויות השוטפות השקטות הללו.",
+ "donate_completion_body_family": "האפליקציה הזו היא עבודה של אדם אחד, והיא חולקת בית עם המשפחה שלי. אם ההתקנה של היום הקלה קצת על הדברים, קפה הוא דרך טובה לתמוך בשעות ובלב שמאחוריו.",
+ "donate_completion_body_kindness": "אין מנוי ושום דבר לא נעול. אם האפליקציה הייתה שימושית היום, תשלום קפה קדימה הוא חסד קטן ששומר אותו בחינם עבור האדם הבא.",
+ "donate_completion_body_small_hours": "רוב הפרויקט הזה מתרחש בשעות קטנות אחרי יום העבודה, וקפה הוא דרך עדינה לומר שזה היה שווה את זה. תודה שהיית כאן.",
+ "donate_completion_signature": "- ריאן - מתחזק של Updater CE",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} קנה לנו קפה ב-Ko-Fi {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} קנה לנו {count} קפה ב-Ko-Fi {when}.",
+ "donate_support_appeal_full": "תרומות עוזרות לי ישירות לתמוך במשפחתי ולממן את מכשירי הבדיקה שמאפשרים את השירות החינמי הזה לכולם. אם הכלי הזה חסך לך זמן או הציל את השחקן שלך היום, אנא שקול תרומה קטנה, זה באמת אומר את העולם עבורנו."
 }

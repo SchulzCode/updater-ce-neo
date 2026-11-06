@@ -506,7 +506,7 @@
  "donate_intro_general_mediatek": "Hé! Je m'appelle Ryan, le développeur derrière MediaTek Installer. Je paie l'hébergement, l'outillage et l'entreposage de ma propre poche pour que ce programme d'installation reste gratuit. L'entrevue mensuelle coûte environ 200 $ – tout soutien que vous apportez aide à le maintenir en vie pour le prochain utilisateur.",
  "donate_intro_success": "Nous avons installé <b>{software}</b> sur votre <b>{model}</b>.<br><br>Hé ! Je m'appelle Ryan, le développeur derrière Programme de mise à jour, Community Firmware Archive et Themes Gallery. Je couvre de ma poche nos frais mensuels de serveur et de stockage d'environ 200 $ pour que tout reste gratuit et ouvert. Si cet outil vous a aidé, pensez à faire un don : il garde ces ressources en vie pour tout le monde.",
  "donate_intro_general": "Hé! Je m'appelle Ryan, le développeur derrière Programme de mise à jour, Community Firmware Archive et Themes Gallery. Je paie de ma poche l'hébergement du serveur, le stockage des archives du micrologiciel et le renouvellement des domaines pour que tout reste gratuit. L'entretien mensuel s'élève à environ 200 $ – tout soutien que vous apportez aide à garder ces outils en vie pour le prochain propriétaire.",
- "donate_supporter": "Supporter",
+ "donate_supporter": "Soutien",
  "donate_method_generic": "Don",
  "donate_when_today": "Aujourd'hui",
  "donate_when_yesterday": "Hier",
@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Supprimer aussi les outils de la plateforme Android (ADB / Fastboot) ? Choisissez Keep si vous utilisez ADB.",
  "legacy_cleanup_keep_btn": "Garder",
  "legacy_cleanup_remove_btn": "Retirer",
- "legacy_cleanup_done_inline": "Supprimée – environ {size} libérées."
+ "legacy_cleanup_done_inline": "Supprimée – environ {size} libérées.",
+ "donate_completion_body_family": "Cette application est le travail d'une seule personne et elle partage une maison avec ma famille. Si l'installation d'aujourd'hui a rendu les choses un peu plus faciles, un café est une façon aimable de supporter les heures et le cœur qui y sont consacrés.",
+ "donate_completion_body_running_costs": "Les serveurs, le stockage et les domaines sont payés chaque mois, que quelqu'un les installe ce jour-là ou non. Si l'installation d'aujourd'hui s'est bien déroulée, un café aide à couvrir ces coûts de fonctionnement silencieux.",
+ "donate_completion_body_kindness": "Il n’y a pas d’abonnement et rien n’est verrouillé. Si l'application était utile aujourd'hui, payer un café à l'avance est une petite gentillesse qui le rend gratuit pour la prochaine personne.",
+ "donate_completion_signature": "- Ryan - Mainteneur d'Updater CE",
+ "donate_completion_body_small_hours": "La plupart de ces projets se déroulent quelques heures après la journée de travail, et prendre un café est une façon douce de dire que ça en valait la peine. Merci d'être ici.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} nous a acheté un café sur Ko-Fi {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} nous a acheté {count} cafés sur Ko-Fi {when}.",
+ "donate_support_appeal_full": "Les dons m'aident directement à soutenir ma famille et à financer les appareils de test qui rendent ce service gratuit accessible à tous. Si cet outil vous a fait gagner du temps ou a sauvé votre joueur aujourd'hui, pensez à faire un petit don, ça veut vraiment dire tout pour nous."
 }

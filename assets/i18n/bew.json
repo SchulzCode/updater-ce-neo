@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Hapus Android Platform Tools (ADB / Fastboot) juga? Pilih Keep kalo lu make ADB.",
  "legacy_cleanup_keep_btn": "Pegang",
  "legacy_cleanup_remove_btn": "Mindahin",
- "legacy_cleanup_done_inline": "Dihapus, sekitar {size} dibebaskan."
+ "legacy_cleanup_done_inline": "Dihapus, sekitar {size} dibebaskan.",
+ "donate_completion_body_family": "Aplikasi ini adalah karya satu orang, dan berbagi rumah dengan keluarga gue. Kalo pemasangan hari ini membuat hal-hal lebih mudah, kopi adalah cara yang baik untuk mendukung jam dan hati di baliknya.",
+ "donate_completion_body_running_costs": "Server, penyimpanan dan domain dibayar setiap bulan, entah ada yang masang hari itu atau kagak. Kalo pemasangan hari ini lancar, kopi bisa ngebantu nutupin biaya operasional yang tenang itu.",
+ "donate_completion_body_kindness": "Gak ada langganan dan gak ada yang dikunci. Kalo aplikasinya berguna hari ini, bayar kopi ke depan adalah kebaikan kecil yang bikin gratis buat orang berikutnya.",
+ "donate_completion_body_small_hours": "Kebanyakan dari proyek ini terjadi di jam-jam kecil setelah pekerjaan seharian, dan minum kopi adalah cara yang lembut untuk mengatakan bahwa itu worth it. Makasih udah ada disini.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} beliin kita kopi di Ko-Fi {when}.",
+ "donate_completion_signature": "- Ryan - Pemelihara Updater CE",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} beliin kita {count} kopi di Ko-Fi {when}.",
+ "donate_support_appeal_full": "Sumbangan secara langsung membantu gue mendukung keluarga gue dan mendanai alat tes yang membuat layanan gratis ini memungkinkan untuk semua orang. Kalo alat ini menghemat waktu lu atau nyelametin pemain lu hari ini, tolong pertimbangin sumbangan kecil, itu bener-bener berarti banget buat kita."
 }

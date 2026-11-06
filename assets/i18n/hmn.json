@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Tshem tawm cov cuab yeej hauv Platform (ADB / Fastboot) thiab? Xaiv Keep yog tias koj siv ADB.",
  "legacy_cleanup_keep_btn": "Khaws",
  "legacy_cleanup_remove_btn": "Tshem tawm",
- "legacy_cleanup_done_inline": "Tshem tawm, txog {size} pub dawb."
+ "legacy_cleanup_done_inline": "Tshem tawm, txog {size} pub dawb.",
+ "donate_completion_body_family": "Cov app no ​​​​yog ib tus neeg ua haujlwm, thiab nws koom nrog kuv tsev neeg. Yog tias niaj hnub kev teeb tsa ua tau yooj yim me ntsis, kas fes yog ib txoj hauv kev zoo los txhawb lub sijhawm thiab lub siab tom qab.",
+ "donate_completion_body_small_hours": "Feem ntau ntawm qhov project no tshwm sim me me tom qab hnub ua haujlwm, thiab kas fes yog ib txoj hauv kev zoo los hais tias nws tsim nyog. Ua tsaug rau koj nyob ntawm no.",
+ "donate_completion_body_running_costs": "Servers, cia thiab domains them rau txhua lub hlis, txawm hais tias leej twg nruab hnub ntawd lossis tsis. Yog tias niaj hnub kev teeb tsa yog qhov du, lub kas fes pab them cov nqi khiav ntsiag to.",
+ "donate_completion_body_kindness": "Tsis muaj subscription thiab tsis muaj dab tsi raug kaw tseg. Yog tias lub app tau txais txiaj ntsig niaj hnub no, them kas fes rau pem hauv ntej yog kev ua siab zoo me me uas ua rau nws dawb rau lwm tus.",
+ "donate_completion_signature": "- Ryan - Tus Saib Xyuas ntawm Updater CE",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} yuav peb {count} kas fes ntawm Ko-Fi {when}.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} yuav peb kas fes ntawm Ko-Fi {when}.",
+ "donate_support_appeal_full": "Cov nyiaj pub dawb ncaj qha pab kuv txhawb nqa kuv tsev neeg thiab pab nyiaj rau cov cuab yeej xeem uas ua rau qhov kev pabcuam dawb no ua tau rau txhua tus. Yog tias lub cuab yeej no cawm koj lub sijhawm lossis cawm koj cov neeg ua si hnub no, thov xav txog kev pub dawb me me, nws txhais tau tias lub ntiaj teb rau peb."
 }

@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Para un na'suha i Android Platform Tools (ADB / Fastboot) lokkue'? Pulan Keep yanggen un usa ADB.",
  "legacy_cleanup_keep_btn": "Go'ti",
  "legacy_cleanup_remove_btn": "Na suha",
- "legacy_cleanup_done_inline": "Ma na'suha, mas ki {size} ma na'libre."
+ "legacy_cleanup_done_inline": "Ma na'suha, mas ki {size} ma na'libre.",
+ "donate_completion_body_family": "Un taotao ha' i che'cho'-ña este na app, ya gaige gi un guma' yan i familia-ku. Yanggen i inestotba på'go na ha'åni ha na'fa'sahnge i lina'la', un kape' un maolek na manera para u ayuda i ora yan i korason gi i tatte-ña.",
+ "donate_completion_body_running_costs": "Manma'apasi i setbiente siha, i tåya' yan i lugåt siha kada mes, yanggen guaha uminestotba gi ayu na diha pat taya'. Yanggen maolek i inestotba på'go na ha'åni, siña un kapeha kubre ayu na gaston lina'la'.",
+ "donate_completion_body_kindness": "Ti guaha suskrision yan taya' ma'a'atan. Yanggen maolek i app på'go na ha'åni, i para un na'i un kape gi sanhiyong un dikike' na minaolek ni' ha na'fanlibre i sigiente na taotao.",
+ "donate_completion_signature": "- Ryan - Mantension i Updater CE",
+ "donate_completion_body_small_hours": "Meggai na prohektos ma susedi gi dikike' na ora siha despues di i che'cho' gi i ha'åni, ya un kape un manera ni' maolek para un sangani yu' na maolek ha'. Si Yu'os ma'åse' sa' gaige hao guini.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} ha fa'tinas un kape para ham gi Ko-Fi {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} ha fa'tinas {count} kape para ham gi Ko-Fi {when}.",
+ "donate_support_appeal_full": "I donasion siha direktamente ma ayuda yu' sumupotte i familia-ku yan ma na'i salåppe' para i prublema siha ni' muna'posipble este na setbisio ni' ti ma na'i todu. Yanggen este na åmot ha na'fanlibre hao tiempo pat ha na'fanlibre i atmas-mu på'go na ha'åni, pues, konsidera un dikike' na donasion, sa' gof impottånte este para hami."
 }

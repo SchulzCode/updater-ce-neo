@@ -3,6 +3,7 @@
 import json
 
 import pytest
+from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import (
     QApplication,
@@ -140,6 +141,32 @@ def test_english_scan_never_asks_a_translation_service(app, tmp_path, monkeypatc
     assert label.text() == "Hello"
     assert not (tmp_path / "english.json").exists()
     assert not translator._scan_timer.isActive()
+    translator.stop()
+
+
+def test_rich_text_is_translated_run_by_run_and_keeps_its_markup(app, tmp_path, monkeypatch):
+    """The donations appeal is ``<b>lead</b> followup``: translate text, not tags."""
+    _patch_sources(monkeypatch, tmp_path)
+    calls = []
+
+    def fetch(text, lang):
+        calls.append((text, lang))
+        return "Привет"
+
+    box = QWidget()
+    label = QLabel("<b>Hello</b> Hello", box)
+    label.setTextFormat(Qt.TextFormat.RichText)
+    translator = RuntimeTranslator(
+        cache_path=tmp_path / "rich.json",
+        fetch=fetch,
+        scan_interval_ms=600_000,
+    )
+    translator.start("ru")
+    translator.scan(box)
+    QTest.qWait(700)
+
+    assert label.text() == "<b>Привет</b> Привет"
+    assert calls == [("Hello", "ru")]
     translator.stop()
 
 

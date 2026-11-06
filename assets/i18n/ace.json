@@ -526,8 +526,8 @@
  "donate_a_supporter": "Sidroe pendukung .",
  "donate_bought_coffee": "{top_prefix}{anchor} geubloe kupi keu kamoe {when}.",
  "donate_bought_coffees": "{top_prefix}{anchor} geubloe keu kamoe {count} kupi-kupi {when}.",
- "donate_donated_by_method": "{top_prefix}{anchor} donated ${amount} by {method} {when}.",
- "donate_donated_amount": "{top_prefix}{anchor} donated ${amount} {when}.",
+ "donate_donated_by_method": "{top_prefix}{anchor} geubri sumbangan ${amount} le {method} {when}.",
+ "donate_donated_amount": "{top_prefix}{anchor} geubri sumbangan ${amount} {when}.",
  "label_for_os": "keu OS {version}",
  "month_01": "januari",
  "month_02": "Februari",
@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Peuhah Alat Platform Android (ADB/Fastboot) cit? Pileh Keep meunyo neupakek ADB.",
  "legacy_cleanup_keep_btn": "Jaga",
  "legacy_cleanup_remove_btn": "Peugadeuh",
- "legacy_cleanup_done_inline": "Dipeuhah, kira-kira {size} geupeubeubaih."
+ "legacy_cleanup_done_inline": "Dipeuhah, kira-kira {size} geupeubeubaih.",
+ "donate_completion_body_family": "App nyoe karya sidroe ureung, dan jih berbagi rumoh ngon keluarga lon. Meunyo uroe nyoe install geupeugot hai-hai leubeh mudah bacut, saboh kupi nakeuh saboh cara nyang jroh untuk meudukong jam dan hate di likot jih.",
+ "donate_completion_body_running_costs": "Server, storage ngon domain geu bayeu tiep buleun, peue na nyang pasang uroe nyan atawa hana. Meunyo uroe nyoe pasang nyan lancar, saboh kupi membantu menutupi biaya jalan yang sepi nyan.",
+ "donate_completion_body_kindness": "Hana langganan dan hana sapeu nyang dikunci. Meunyo app nyan na guna uroe nyoe, bayeu kupi keu ukeu nakeuh saboh kebaikan ubeut nyang teutap bebas keu ureung selanjut jih.",
+ "donate_completion_signature": "- Ryan - Peulihara Peubarô CE .",
+ "donate_completion_body_small_hours": "Seubagian rayek proyek nyoe teujadi lam jeum-jeum ubeut lheuh buet uroe, dan kupi nakeuh cara lembut untuk peugah bahwa nyan berharga. Teurimong geunaseh ka neujak keunoe.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} geubloe keu kamoe {count} kupi-kupi bak Ko-Fi {when}.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} geubloe kupi keu kamoe bak Ko-Fi {when}.",
+ "donate_support_appeal_full": "Sumbangan langsong membantu lon mendukung keluarga lon dan mendanai alat tes yang memungkenkan layanan gratis nyoe keu mandum ureung. Meunyo alat nyoe jimat watee droeneuh atawa ji seulamatkan pemain droeneuh uroe nyoe, silahkan neupertimbangkan sumbangan ubeut, nyan beutoi-beutoi meuarti donya keu geutanyoe."
 }

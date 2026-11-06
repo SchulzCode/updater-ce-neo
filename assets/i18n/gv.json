@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Remove ny h-instrumentyn platform Android (ADB / Fastboot) myrgeddin? Taght Keep my t'ou uss ADB.",
  "legacy_cleanup_keep_btn": "Cummal",
  "legacy_cleanup_remove_btn": "Arraghey",
- "legacy_cleanup_done_inline": "Removed, mychione {size} s'lesh."
+ "legacy_cleanup_done_inline": "Removed, mychione {size} s'lesh.",
+ "donate_completion_body_family": "Ta'n app shoh obbyr un dooinney, as t'eh ry-cheilley rish my theay. Mannagh row yn install y laa shoh er n'yannoo cooishyn beggan ny s'easyl, ta coffee ny aght mie dy chur tastey da'n oor as y chree ta er y çheu.",
+ "donate_completion_body_running_costs": "Ta serveryn, storage as domainyn paidjal son gagh mhee, wheesh as dy vel dooinney erbee install y laa shen ny nagh vel. Mannagh row yn install y laa shoh s'smooar, ta coffee cooney dy chosney ny costasyn reiht shen.",
+ "donate_completion_body_kindness": "Cha nel subscription erbee as cha nel red erbee lockit. Mannagh row y app feohdagh y laa shoh, ta paidjal coffee er-ash ny ghraih beg t'eh y choadey saor son y dooinney er-gerrey.",
+ "donate_completion_body_small_hours": "Ta'n chooid smoo jeh'n obbyr shoh goll er ayns ooryn beggey erreish da'n obbyr laa, as ta coffee ny aght s'geuney dy ghra dy row eh worth it. Gow booise dy vel oo ayns shoh.",
+ "donate_completion_signature": "- Ryan - Cur-my-ner CE",
+ "donate_support_appeal_full": "Ta coyrle directly my chur cooney da my theay as cur argid da ny h-instrumentyn test ta jannoo y seirveish saor shoh possible da dy chooilley ghooinney. Mannagh vel y obbyr shoh er sparrey traa dhyt ny er sparrey dty chleayst y laa shoh, cur-my-ner, smooinee er coyrle beg, t'eh dy firrinagh cowraghey y theihll dooin.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} cheayll eh coffee dooin er Ko-Fi {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} cheayll shin {count} coffeeyn 'sy Ko-Fi {when}."
 }

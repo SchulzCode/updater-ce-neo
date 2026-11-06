@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Ittude kuutorɗe lowre Android (ADB / Fastboot) kadi ? Suɓo Keep so aɗa huutoroo ADB.",
  "legacy_cleanup_keep_btn": "Siggugo",
  "legacy_cleanup_remove_btn": "Ittugo",
- "legacy_cleanup_done_inline": "Ittaama, ko ina wona {size} woppitaama."
+ "legacy_cleanup_done_inline": "Ittaama, ko ina wona {size} woppitaama.",
+ "donate_completion_body_family": "Oo app ko golle neɗɗo gooto, kadi ina renndini galle e ɓesngu am. So tawii install hannde oo weeɓinii geɗe seeɗa, kafe ko laawol moƴƴol ngam wallitde waktuuji e ɓernde caggal mum.",
+ "donate_completion_body_running_costs": "Serveeji, desorɗe e domenaaji ina njoɓee lewru kala, so tawii won liggotooɗo ñalnde heen walla alaa. So tawii install hannde oo ko ɓuuɓɗo, kafe ina wallita e suɗaade ɗeen njoɓɗeele dogdu deeƴndu.",
+ "donate_completion_body_kindness": "Alaa abonmaaji kadi alaa ko cokaaɗo. So tawii app oo ina waɗi nafoore hannde, yoɓde kafe yeeso ko moƴƴere tokosere jogornde jogaade ɗum e neɗɗo garoowo.",
+ "donate_completion_body_small_hours": "Ko ɓuri heewde e ndee eɓɓoore ina waɗa e waktuuji tokoosi caggal golle ñalawma, kadi kafe ko laawol leefngol ngam wiyde ina fotnoo. On njaaraama e tawtoreede ɗoo.",
+ "donate_completion_signature": "- Ryan - Toppitiiɗo keso CE",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} soodi min kafe e Ko-Fi {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} soodi en {count} kafe e Ko-Fi {when}.",
+ "donate_support_appeal_full": "Dokke ina mballita mi no feewi e wallitde ɓesngu am e yoɓde kaɓirɗe jarribooje baawɗe waɗde ndee ɗoo sarwiis mo alaa kaalis ngam kala neɗɗo. So tawii ndee kuutorgal hisnii ma waktu walla hisnii joloowo maa hannde, ƴeewto-ɗaa dokkal tokosal, ko goonga firti ko aduna e men."
 }

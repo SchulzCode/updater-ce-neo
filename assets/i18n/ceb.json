@@ -521,7 +521,7 @@
  "donate_when_last_year": "sa miaging tuig",
  "donate_when_in_month": "sa {month}",
  "donate_when_in_year": "sa {year}",
- "donate_top_supporter_prefix": "Top supporter",
+ "donate_top_supporter_prefix": "Top suporter ",
  "donate_a_top_supporter": "Usa ka taas nga tigpaluyo",
  "donate_a_supporter": "Usa ka tigpaluyo",
  "donate_bought_coffee": "{top_prefix}{anchor} mipalit kanamo og kape {when}.",
@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Kuhaa usab ang Android Platform Tools (ADB / Fastboot)? Pilia ang Keep kung mogamit ka og ADB.",
  "legacy_cleanup_keep_btn": "Padayon",
  "legacy_cleanup_remove_btn": "Kuhaa",
- "legacy_cleanup_done_inline": "Gitangtang, halos {size} nga gipagawas."
+ "legacy_cleanup_done_inline": "Gitangtang, halos {size} nga gipagawas.",
+ "donate_completion_body_family": "Kini nga app usa ka trabaho sa usa ka tawo, ug kini nakigbahin sa usa ka balay sa akong pamilya. Kung ang pag-install karon nagpadali sa mga butang, ang kape usa ka maayong paagi aron masuportahan ang mga oras ug kasingkasing sa luyo niini.",
+ "donate_completion_body_kindness": "Wala’y suskrisyon ug wala’y naka-lock. Kung ang app mapuslanon karon, ang pagbayad sa usa ka kape sa unahan usa ka gamay nga kaayo nga nagpabilin nga libre alang sa sunod nga tawo.",
+ "donate_completion_body_running_costs": "Ang mga server, pagtipig ug mga domain gibayran matag bulan, bisan kinsa ang nag-install nianang adlawa o wala. Kung ang pag-install karon usa ka hapsay, ang usa ka kape makatabang sa pagtabon sa mga hilum nga gasto sa pagpadagan.",
+ "donate_completion_body_small_hours": "Kadaghanan niini nga proyekto mahitabo sa gagmay nga mga oras human sa adlaw nga trabaho, ug ang kape usa ka malumo nga paagi sa pag-ingon nga kini takus niini. Salamat sa pag-anhi dinhi.",
+ "donate_completion_signature": "- Ryan - Nagmintinar sa Updater CE",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} mipalit kanamo ug kape sa Ko-Fi {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} mipalit kanamo {count} mga kape sa Ko-Fi {when}.",
+ "donate_support_appeal_full": "Ang mga donasyon direkta nga nagtabang kanako sa pagsuporta sa akong pamilya ug pagpundo sa mga kagamitan sa pagsulay nga naghimo niining libre nga serbisyo nga posible alang sa tanan. Kung kini nga himan nakaluwas kanimo sa oras o nagluwas sa imong magdudula karon, palihug hunahunaa ang usa ka gamay nga donasyon, kini tinuud nga nagpasabut sa kalibutan alang kanamo."
 }

@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Wepu ngwaọrụ gam akporo Platform (ADB / Fastboot)? Họrọ Nọgide ma ọ bụrụ na ị na-eji ADB.",
  "legacy_cleanup_keep_btn": "Debe",
  "legacy_cleanup_remove_btn": "Wepu",
- "legacy_cleanup_done_inline": "Ewepụrụ - ihe dị ka {size} tọhapụrụ."
+ "legacy_cleanup_done_inline": "Ewepụrụ - ihe dị ka {size} tọhapụrụ.",
+ "donate_completion_body_family": "Ngwa a bụ ọrụ otu onye, ​​yana ezinụlọ m na-ekerịta ụlọ. Ọ bụrụ na echichi nke taa mere ka ihe dị ntakịrị mfe, kọfị bụ ụzọ dị mma iji kwado awa na obi n'azụ ya.",
+ "donate_completion_body_running_costs": "A na-akwụ ụgwọ sava, nchekwa na ngalaba kwa ọnwa, ma onye ọ bụla etinyere ụbọchị ahụ ma ọ bụ na ọ bụghị. Ọ bụrụ na nwụnye taa bụ nke dị nro, kọfị na-enyere aka kpuchie ọnụ ahịa ịgba ọsọ ahụ dị jụụ.",
+ "donate_completion_body_kindness": "Enweghị ndenye aha na ọ nweghị ihe akpọchiri. Ọ bụrụ na ngwa ahụ bara uru taa, ịkwụ ụgwọ kọfị n'ihu bụ obere obiọma na-edebe ya n'efu maka onye ọzọ.",
+ "donate_completion_signature": "- Ryan - Onye na-ahụ maka mmelite CE",
+ "donate_completion_body_small_hours": "Ọtụtụ n'ime ọrụ a na-eme na obere awa mgbe ọrụ ụbọchị gasịrị, na kọfị bụ ụzọ dị nro iji kwuo na ọ bara uru. Daalụ maka ịnọ ebe a.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} zụtara anyị kọfị {count} na Ko-Fi {when}.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} zụtara anyị kọfị na Ko-Fi {when}.",
+ "donate_support_appeal_full": "Onyinye enyemaka na-enyere m aka ịkwado ezinụlọ m ozugbo wee kwado ngwaọrụ nnwale nke na-eme ka ọrụ a efu dịrị onye ọ bụla. Ọ bụrụ na ngwá ọrụ a zọpụtara gị oge ma ọ bụ napụta onye ọkpụkpọ gị taa, biko tụlee obere onyinye, ọ pụtara ụwa n'ezie nye anyị."
 }

@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Kopwe pwal äeä ewe minen älillis fän iten Android (ADB)? Kopwe finata Keep ika pwe ka aea ADB.",
  "legacy_cleanup_keep_btn": "Isoni",
  "legacy_cleanup_remove_btn": "Emwekutu",
- "legacy_cleanup_done_inline": "A fis, usun {size} a fis."
+ "legacy_cleanup_done_inline": "A fis, usun {size} a fis.",
+ "donate_completion_body_running_costs": "Ekkewe server, nenien iseis me domain ra kamo iteiten maram, ika emon a install non ena ran ika ese. Ika pwe ewe install ikenai a ew mi murino, ew kofi a anisi ne kouno ekkena monien run mi kinamwe.",
+ "donate_completion_body_family": "Ei app ina angangen emon aramas, me a fiti ew imw ren ai famini. Ika pwe ewe install ikenai a fori mettoch epwe ekis mecheres, ew kofi ew napanap mi kirekiroch ne anisi ekkewe awa me netip mwirin.",
+ "donate_completion_body_kindness": "Ese wor chon fiti me ese wor met epwe fis. Ika ewe app a auchea ikenai, moni ew kofi ngeni mwach ew kukkun kirekiroch mi tumunu pwe epwe free ngeni ewe emon mwirin.",
+ "donate_completion_body_small_hours": "Lape ngeni ei angang a fis non kukkun awa mwirin ewe angangen ran, me ew kofi ew napanap mi mosonoson ne apasa pwe a fich ngeni. Kinisou ren ami nomw ikei.",
+ "donate_completion_signature": "- Ryan - Ewe chon tumunu ewe Pworaus CE",
+ "donate_support_appeal_full": "Ekkewe asor ra wesewesen anisiei ne anisi ai famini me moni ekkewe pisekin test mi fori ei angang ese kamo epwe tufich ngeni aramas meinisin. Ika ei pisekin angang a amanaua om fansoun ika amanaua noum chon urumot ikenai, kose mochen ekieki ew kukkun asor, a wesewesen wewe ngeni ewe fonufan ngeni kich.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} a angei ew kofi won Ko-Fi {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} a tori kich {count} kofi won Ko-Fi {when}."
 }

@@ -506,7 +506,7 @@
  "donate_intro_general_mediatek": "Hej! Ja sam Ryan, programer iza MediaTek Installera. Plaćam hosting, alate i pohranu iz svog džepa kako bi ovaj instalater ostao besplatan. Mjesečno održavanje iznosi oko 200 USD – svaka podrška koju pružite pomaže da se očuva za sljedećeg korisnika.",
  "donate_intro_success": "Instalirali smo <b>{software}</b> na vaš <b>{model}</b>.<br><br>Hej! Ja sam Ryan, programer koji stoji iza Updater, Arhive firmvera zajednice i Galerije tema. Ja pokrivam naš ~200$ mjesečne troškove servera i skladištenja iz džepa kako bi sve ostalo besplatno i otvoreno. Ako vam je ovaj alat pomogao, razmislite o doniranju - on održava ove resurse živima za sve.",
  "donate_intro_general": "Hej! Ja sam Ryan, programer koji stoji iza Updater, Arhive firmvera zajednice i Galerije tema. Plaćam hosting servera, pohranu arhive firmvera i obnavljanje domena iz svog džepa da bi sve ostalo besplatno. Mjesečno održavanje iznosi oko 200 USD, svaka podrška koju pružite pomaže u održavanju ovih alata za sljedećeg vlasnika.",
- "donate_supporter": "Supporter",
+ "donate_supporter": "Podržavalac",
  "donate_method_generic": "Donacija",
  "donate_when_today": "Danas",
  "donate_when_yesterday": "Jučer",
@@ -521,7 +521,7 @@
  "donate_when_last_year": "prošle godine",
  "donate_when_in_month": "za {month}",
  "donate_when_in_year": "u {year}",
- "donate_top_supporter_prefix": "Top supporter",
+ "donate_top_supporter_prefix": "Top podržavalac ",
  "donate_a_top_supporter": "Vrhunski navijač",
  "donate_a_supporter": "Pristalica",
  "donate_bought_coffee": "{top_prefix}{anchor} nam je kupio kafu {when}.",
@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Ukloniti i alate za Android platformu (ADB / Fastboot)? Odaberite Keep ako koristite ADB.",
  "legacy_cleanup_keep_btn": "Zadrži",
  "legacy_cleanup_remove_btn": "Ukloni",
- "legacy_cleanup_done_inline": "Uklonjeno, oslobođeno oko {size}."
+ "legacy_cleanup_done_inline": "Uklonjeno, oslobođeno oko {size}.",
+ "donate_completion_body_family": "Ova aplikacija je posao jedne osobe i dijeli dom sa mojom porodicom. Ako je današnja instalacija malo olakšala stvari, kafa je ljubazan način da podržite sate i srce iza nje.",
+ "donate_completion_body_running_costs": "Serveri, pohrana i domeni se plaćaju svaki mjesec, bez obzira da li je neko instalirao taj dan ili ne. Ako je današnja instalacija bila glatka, kafa pomaže u pokrivanju tih tih troškova.",
+ "donate_completion_body_kindness": "Nema pretplate i ništa nije zaključano. Ako je aplikacija danas bila korisna, plaćanje kafe unaprijed je mala ljubaznost koja je ostavlja besplatnom za sljedeću osobu.",
+ "donate_completion_body_small_hours": "Većina ovog projekta se odvija u malim satima nakon dnevnog posla, a kafa je nježan način da se kaže da je vrijedilo. Hvala vam što ste ovdje.",
+ "donate_completion_signature": "- Ryan - održava Updater CE",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} nam je kupio kafu na Ko-Fi {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} nam je kupio {count} kafe na Ko-Fi {when}.",
+ "donate_support_appeal_full": "Donacije mi direktno pomažu da izdržavam svoju porodicu i finansiram testne uređaje koji omogućavaju ovu besplatnu uslugu svima. Ako vam je ovaj alat uštedio vrijeme ili spasio vašeg igrača danas, razmislite o maloj donaciji, ona nam zaista znači cijeli svijet."
 }

@@ -521,7 +521,7 @@
  "donate_when_last_year": "l'annu scorsu",
  "donate_when_in_month": "in {month}",
  "donate_when_in_year": "in {year}",
- "donate_top_supporter_prefix": "Top supporter",
+ "donate_top_supporter_prefix": "Top sustenitore ",
  "donate_a_top_supporter": "Un sustenitore di punta",
  "donate_a_supporter": "Un sustegnu",
  "donate_bought_coffee": "{top_prefix}{anchor} ci hà compru un caffè {when}.",
@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Eliminate ancu i Strumenti di piattaforma Android (ADB / Fastboot)? Sceglie Mantene se utilizate ADB.",
  "legacy_cleanup_keep_btn": "Mantene",
  "legacy_cleanup_remove_btn": "Eliminate",
- "legacy_cleanup_done_inline": "Eliminatu - circa {size} liberatu."
+ "legacy_cleanup_done_inline": "Eliminatu - circa {size} liberatu.",
+ "donate_completion_body_family": "Questa app hè u travagliu di una persona, è sparte una casa cù a mo famiglia. Se l'installazione d'oghje facia e cose un pocu più faciule, un caffè hè un modu amatu per sustene l'ore è u core daretu.",
+ "donate_completion_body_running_costs": "I servitori, l'almacenamiento è i duminii sò pagati per ogni mese, sì qualchissia stalla quellu ghjornu o micca. Se l'installazione d'oghje hè stata liscia, un caffè aiuta à copre quelli costi di gestione tranquilla.",
+ "donate_completion_body_kindness": "Ùn ci hè micca abbunamentu è nunda hè chjusu. Se l'app hè stata utile oghje, pagà un caffè in avanti hè una piccula gentilezza chì a mantene libera per a prossima persona.",
+ "donate_completion_body_small_hours": "A maiò parte di stu prughjettu passa in pocu ore dopu à u travagliu di ghjornu, è un caffè hè un modu gentile per dì chì vale a pena. Grazie per esse quì.",
+ "donate_completion_signature": "- Ryan - Maintainer di Updater CE",
+ "donate_support_appeal_full": "I donazioni mi aiutanu direttamente à sustene a mo famiglia è finanzià i dispositi di prova chì facenu stu serviziu gratuitu pussibule per tutti. Se stu strumentu hà salvatu u tempu o hà salvatu u vostru ghjucatore oghje, per piacè cunsiderà una piccula donazione, significa veramente u mondu per noi.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} ci hà compru un caffè nantu à Ko-Fi {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} ci hà compru {count} caffè nantu à Ko-Fi {when}."
 }

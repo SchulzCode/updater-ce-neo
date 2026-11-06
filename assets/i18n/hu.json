@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Eltávolítja az Android Platform Tools (ADB / Fastboot) eszközt is? Válassza a Keep lehetőséget, ha ADB-t használ.",
  "legacy_cleanup_keep_btn": "Tartsa",
  "legacy_cleanup_remove_btn": "Távolítsa el",
- "legacy_cleanup_done_inline": "Eltávolítva – körülbelül {size} felszabadult."
+ "legacy_cleanup_done_inline": "Eltávolítva – körülbelül {size} felszabadult.",
+ "donate_completion_body_family": "Ez az alkalmazás egy személy munkája, és megoszt egy otthont a családommal. Ha a mai telepítés egy kicsit megkönnyítette a dolgokat, egy kávé jó módja annak, hogy megtámogatja a mögötte lévő órákat és szívet.",
+ "donate_completion_body_running_costs": "A szerverekért, a tárhelyért és a tartományokért minden hónapban fizetni kell, függetlenül attól, hogy aznap telepít valaki vagy sem. Ha a mai telepítés zökkenőmentes volt, egy kávé segít fedezni ezeket a csendes üzemeltetési költségeket.",
+ "donate_completion_body_kindness": "Nincs előfizetés, és semmi sincs lezárva. Ha az alkalmazás ma hasznos volt, egy kávé előrefizetése egy kis kedvesség, amely ingyenesen tartja a következő személy számára.",
+ "donate_completion_body_small_hours": "Ennek a projektnek a nagy része a napi munka utáni kis órákon belül megtörténik, és egy kávé finom módja annak, hogy elmondhassa, megérte. Köszönöm, hogy itt vagy.",
+ "donate_completion_signature": "- Ryan - Az Updater CE karbantartója",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} vett nekünk egy kávét a Ko-Fi-n {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} vett nekünk {count} kávét a Ko-Fi-n {when}.",
+ "donate_support_appeal_full": "Az adományok közvetlenül segítik a családom támogatását és a teszteszközök finanszírozását, amelyek lehetővé teszik ezt az ingyenes szolgáltatást mindenki számára. Ha ezzel az eszközzel időt takarított meg, vagy megmentette játékosát ma, kérjük, fontoljon meg egy kis adományt, ez valóban a világot jelenti számunkra."
 }

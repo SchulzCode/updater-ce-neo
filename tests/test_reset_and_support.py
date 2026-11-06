@@ -1,4 +1,6 @@
 import os
+import re
+
 import pytest
 from PySide6.QtCore import QSettings, Qt
 from PySide6.QtWidgets import QApplication, QPushButton
@@ -115,8 +117,10 @@ def test_support_page_narratives_and_methods(qapp, monkeypatch):
         for language in ("zh-CN", "fr", "es", "de", "ja", "it"):
             translator().set_language(language)
             page.retranslate()
-            assert tr("donate_support_appeal_lead") in page._appeal_body.text()
-            assert tr("donate_support_appeal_followup") in page._appeal_body.text()
+            # The first sentence is wrapped in <b>, so compare the text without
+            # its markup.
+            body = re.sub(r"<[^>]+>", "", page._appeal_body.text())
+            assert tr("donate_support_appeal_full") in body
     finally:
         translator().set_language(old_language)
         page.retranslate()

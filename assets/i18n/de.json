@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Auch die Android Platform Tools (ADB / Fastboot) entfernen? Wählen Sie „Behalten“, wenn Sie ADB verwenden.",
  "legacy_cleanup_keep_btn": "Halten",
  "legacy_cleanup_remove_btn": "Entfernen",
- "legacy_cleanup_done_inline": "Entfernt – etwa {size} freigegeben."
+ "legacy_cleanup_done_inline": "Entfernt – etwa {size} freigegeben.",
+ "donate_completion_body_family": "Diese App ist das Werk einer Person und sie teilt sich ein Zuhause mit meiner Familie. Wenn die heutige Installation die Dinge ein wenig einfacher gemacht hat, ist ein Kaffee eine nette Art, die Stunden und das Herz dahinter zu unterstützen.",
+ "donate_completion_body_running_costs": "Server, Speicher und Domains werden jeden Monat bezahlt, unabhängig davon, ob jemand an diesem Tag installiert oder nicht. Wenn die heutige Installation reibungslos verlief, hilft ein Kaffee dabei, die leisen Betriebskosten zu decken.",
+ "donate_completion_body_kindness": "Es gibt kein Abonnement und nichts ist weggesperrt. Wenn die App heute nützlich war, ist die Vorauszahlung eines Kaffees eine kleine Gefälligkeit, die ihn für die nächste Person frei hält.",
+ "donate_completion_signature": "- Ryan – Betreuer von Updater CE",
+ "donate_completion_body_small_hours": "Der Großteil dieses Projekts findet in wenigen Stunden nach der Arbeit statt, und ein Kaffee ist eine sanfte Art zu sagen, dass es sich gelohnt hat. Vielen Dank, dass Sie hier sind.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} hat uns einen Kaffee auf Ko-Fi {when} gekauft.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} hat uns {count} Kaffee über Ko-Fi {when} gekauft.",
+ "donate_support_appeal_full": "Spenden helfen mir direkt, meine Familie zu unterstützen und die Testgeräte zu finanzieren, die diesen kostenlosen Service für alle ermöglichen. Wenn Ihnen dieses Tool heute Zeit gespart oder Ihren Player gerettet hat, denken Sie bitte über eine kleine Spende nach, es bedeutet uns wirklich die Welt."
 }

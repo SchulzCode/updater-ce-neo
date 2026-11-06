@@ -526,7 +526,7 @@
  "donate_a_supporter": "એક સમર્થક",
  "donate_bought_coffee": "{top_prefix}_{anchor} એ અમને કોફી {when} ખરીદી.",
  "donate_bought_coffees": "{top_prefix}_{anchor} એ અમને {count} કોફી {when} ખરીદી.",
- "donate_donated_by_method": "{top_prefix}{anchor} donated ${amount} by {method} {when}.",
+ "donate_donated_by_method": "{top_prefix}{anchor} {method} {when} દ્વારા ${amount}નું દાન.",
  "donate_donated_amount": "{top_prefix}_{anchor} એ ${amount} {when} નું દાન કર્યું.",
  "label_for_os": "OS {version} માટે",
  "month_01": "જાન્યુઆરી",
@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "એન્ડ્રોઇડ પ્લેટફોર્મ ટૂલ્સ (એડીબી / ફાસ્ટબૂટ) ને પણ દૂર કરીએ? જો તમે ADB નો ઉપયોગ કરો છો તો Keep પસંદ કરો.",
  "legacy_cleanup_keep_btn": "રાખો",
  "legacy_cleanup_remove_btn": "દૂર કરો",
- "legacy_cleanup_done_inline": "દૂર કર્યું, લગભગ {size} મુક્ત."
+ "legacy_cleanup_done_inline": "દૂર કર્યું, લગભગ {size} મુક્ત.",
+ "donate_completion_body_family": "આ એપ એક વ્યક્તિનું કામ છે અને તે મારા પરિવાર સાથે ઘર શેર કરે છે. જો આજની ઇન્સ્ટોલેશન વસ્તુઓને થોડી સરળ બનાવે છે, તો કોફી તેની પાછળના કલાકો અને હૃદયને ટેકો આપવાનો એક દયાળુ માર્ગ છે.",
+ "donate_completion_body_running_costs": "સર્વર, સ્ટોરેજ અને ડોમેન્સ દર મહિને ચૂકવવામાં આવે છે, પછી ભલે તે દિવસે કોઈ ઇન્સ્ટોલ કરે કે ન કરે. જો આજનું ઇન્સ્ટોલેશન સરળ હતું, તો કોફી તે શાંત ચાલી રહેલા ખર્ચને આવરી લેવામાં મદદ કરે છે.",
+ "donate_completion_body_kindness": "ત્યાં કોઈ સબ્સ્ક્રિપ્શન નથી અને કંઈપણ બંધ નથી. જો એપ્લિકેશન આજે ઉપયોગી હતી, તો કોફીને આગળ ચૂકવવી એ એક નાની દયા છે જે તેને આગામી વ્યક્તિ માટે મફત રાખે છે.",
+ "donate_completion_body_small_hours": "આ પ્રોજેક્ટનો મોટાભાગનો દિવસ દિવસની નોકરી પછીના નાના કલાકોમાં થાય છે, અને કોફી એ કહેવાની એક નમ્ર રીત છે કે તે મૂલ્યવાન હતી. અહીં હોવા બદલ આભાર.",
+ "donate_completion_signature": "- રાયન - અપડેટર સીઇના જાળવણીકાર",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} એ અમને Ko-Fi {when} પર કોફી ખરીદી.",
+ "donate_support_appeal_full": "દાન મને મારા પરિવારને મદદ કરવામાં અને પરીક્ષણ ઉપકરણોને ભંડોળ પૂરું પાડવામાં સીધી મદદ કરે છે જે દરેક માટે આ મફત સેવા શક્ય બનાવે છે. જો આ સાધનથી તમારો સમય બચ્યો હોય અથવા આજે તમારા પ્લેયરને બચાવ્યો હોય, તો કૃપા કરીને એક નાનું દાન ધ્યાનમાં લો, તે ખરેખર આપણા માટે વિશ્વ છે.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} એ Ko-Fi {when} પર અમને {count} કોફી ખરીદી."
 }

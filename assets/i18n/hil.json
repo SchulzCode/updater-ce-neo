@@ -521,10 +521,10 @@
  "donate_when_last_year": "sang nagligad nga tuig",
  "donate_when_in_month": "sa {month}",
  "donate_when_in_year": "sa {year}",
- "donate_top_supporter_prefix": "Top supporter",
+ "donate_top_supporter_prefix": "Top suporter ",
  "donate_a_top_supporter": "Isa ka nagapanguna nga sumalakdag",
  "donate_a_supporter": "Isa ka sumalakdag",
- "donate_bought_coffee": "{top_prefix}{anchor} bought us a coffee {when}.",
+ "donate_bought_coffee": "{top_prefix}{anchor} nagbakal sa amon sang kape {when}.",
  "donate_bought_coffees": "{top_prefix}{anchor} ang nagbakal sa amon sang {count} nga mga kape {when}.",
  "donate_donated_by_method": "{top_prefix}{anchor} naghatag sang ${amount} paagi sa {method} {when}.",
  "donate_donated_amount": "{top_prefix}{anchor} naghatag sang ${amount} {when}.",
@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Kuhaon man ang Android Platform Tools (ADB / Fastboot)? Pilia ang Keep kon nagagamit ka sang ADB.",
  "legacy_cleanup_keep_btn": "Tago",
  "legacy_cleanup_remove_btn": "Kuhain",
- "legacy_cleanup_done_inline": "Ginkuha, mga {size} ginhilway."
+ "legacy_cleanup_done_inline": "Ginkuha, mga {size} ginhilway.",
+ "donate_completion_body_family": "Ini nga app isa ka tawo ang nag-obra, kag naga-ambit ini sang puluy-an upod sa akon pamilya. Kon ang pag-instalar subong nga adlaw nagpahapos sang mga butang, ang isa ka kape isa ka mabuot nga paagi sa pagsuporta sa mga oras kag tagipusuon sa likod sini.",
+ "donate_completion_body_running_costs": "Ang mga server, storage kag domain ginabayaran kada bulan, bisan pa may mag-install sa sina nga adlaw ukon wala. Kon ang pag-instalar subong nga adlaw isa ka matalunsay, ang isa ka kape nagabulig sa pagtabon sadtong mahipos nga mga gasto sa pagdalagan.",
+ "donate_completion_body_small_hours": "Ang kalabanan sini nga proyekto nagakatabo sa magagmay nga mga oras pagkatapos sang adlaw nga trabaho, kag ang isa ka kape isa ka malulo nga paagi sa pagsiling nga takus ini. Salamat sa pag-abot mo diri.",
+ "donate_completion_body_kindness": "Wala sing suskrisyon kag wala sing nakandaduhan. Kon ang app mapuslanon karon, ang pagbayad sang isa ka kape sa unahan isa ka gamay nga kaayo nga nagahupot sini nga libre para sa masunod nga tawo.",
+ "donate_completion_signature": "- Ryan - Manugmentinar sang Updater CE",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} nagbakal sa amon sang kape sa Ko-Fi {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} nagbakal sa amon {count} sang mga kape sa Ko-Fi {when}.",
+ "donate_support_appeal_full": "Ang mga donasyon direkta nga nagabulig sa akon sa pagsuporta sa akon pamilya kag sa pagpondo sang mga test device nga nagahimo sini nga libre nga serbisyo nga posible para sa tanan. Kon ini nga gamit nakatipig sang imo tion ukon nakaluwas sang imo humalampang karon, palihog binagbinaga ang isa ka gamay nga donasyon, ini matuod nga nagakahulugan sang kalibutan sa amon."
 }

@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Wehe i ka Android Platform Tools (ADB / Fastboot) pū kekahi? E koho e mālama inā hoʻohana ʻoe i ka ADB.",
  "legacy_cleanup_keep_btn": "E mālama",
  "legacy_cleanup_remove_btn": "Wehe",
- "legacy_cleanup_done_inline": "Wehe ʻia - ma kahi o {size} kaʻawale."
+ "legacy_cleanup_done_inline": "Wehe ʻia - ma kahi o {size} kaʻawale.",
+ "donate_completion_body_family": "He hana hoʻokahi kēia app, a kaʻana like i ka home me koʻu ʻohana. Inā ʻoi aku ka maʻalahi o ka hoʻokomo ʻana i kēia lā, ʻo ke kofe kahi ala maikaʻi e kākoʻo ai i nā hola a me ka puʻuwai ma hope.",
+ "donate_completion_body_running_costs": "Uku ʻia nā kikowaena, ka waiho ʻana a me nā kāʻei kua no kēlā me kēia mahina, inā hoʻokomo kekahi i kēlā lā a ʻaʻole paha. Inā maʻalahi ka hoʻokomo ʻana i kēia lā, kōkua ke kofe i ka uhi ʻana i kēlā mau koina holo mālie.",
+ "donate_completion_body_kindness": "ʻAʻohe kau inoa a ʻaʻohe mea i laka ʻia. Inā maikaʻi ka polokalamu i kēia lā, ʻo ka uku ʻana i ke kofe i mua he mea ʻoluʻolu liʻiliʻi ia e mālama manuahi ʻia no ka mea aʻe.",
+ "donate_completion_body_small_hours": "Hana ʻia ka hapa nui o kēia pāhana i nā hola liʻiliʻi ma hope o ka hana o ka lā, a ʻo ke kofe kahi ala maʻalahi e ʻōlelo ai ua kūpono ia. Mahalo no kou noho ʻana ma ʻaneʻi.",
+ "donate_completion_signature": "- Ryan - Ka mea mālama i ka Updater CE",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} kūʻai mai iā mākou i kofe ma Ko-Fi {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} kūʻai mai iā mākou {count} kofe ma Ko-Fi {when}.",
+ "donate_support_appeal_full": "Kōkua pololei nā haʻawina iaʻu i ke kākoʻo ʻana i koʻu ʻohana a me ke kālā i nā mea hoʻāʻo e hiki ai i kēia lawelawe manuahi no nā mea āpau. Inā mālama kēia mea hana iā ʻoe i ka manawa a hoʻopakele paha i kāu mea pāʻani i kēia lā, e ʻoluʻolu e noʻonoʻo i kahi haʻawina liʻiliʻi, ʻo ia ke ʻano o ka honua iā mākou."
 }

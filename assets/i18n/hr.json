@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Ukloniti i Android Platform Tools (ADB / Fastboot)? Odaberite Zadrži ako koristite ADB.",
  "legacy_cleanup_keep_btn": "Zadržati",
  "legacy_cleanup_remove_btn": "Ukloniti",
- "legacy_cleanup_done_inline": "Uklonjeno, oko {size} oslobođeno."
+ "legacy_cleanup_done_inline": "Uklonjeno, oko {size} oslobođeno.",
+ "donate_completion_body_family": "Ova aplikacija djelo je jedne osobe i dijeli dom s mojom obitelji. Ako je današnja instalacija malo olakšala stvari, kava je dobar način da podržite sate i srce iza nje.",
+ "donate_completion_body_running_costs": "Poslužitelji, pohrana i domene plaćaju se svaki mjesec, bez obzira na to je li netko instalirao taj dan ili ne. Ako je današnja instalacija prošla glatko, kava pomaže pokriti te tihe troškove rada.",
+ "donate_completion_body_kindness": "Nema pretplate i ništa nije zaključano. Ako je aplikacija danas bila korisna, plaćanje kave unaprijed mala je ljubaznost koja kavu ostavlja besplatnom za sljedeću osobu.",
+ "donate_completion_body_small_hours": "Većina ovog projekta događa se u malim satima nakon dnevnog posla, a kava je nježan način da se kaže da je vrijedilo. Hvala vam što ste ovdje.",
+ "donate_completion_signature": "- Ryan - Održavač programa Updater CE",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} nam je kupio {count} kave na Ko-Fi {when}.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} nas je kupio kavu na Ko-Fi {when}.",
+ "donate_support_appeal_full": "Donacije mi izravno pomažu uzdržavati moju obitelj i financirati testne uređaje koji ovu besplatnu uslugu omogućuju svima. Ako vam je ovaj alat danas uštedio vrijeme ili spasio vašeg igrača, molimo vas da razmislite o maloj donaciji, to nam doista puno znači."
 }

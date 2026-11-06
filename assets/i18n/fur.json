@@ -526,8 +526,8 @@
  "donate_a_supporter": "Un sostignidôr",
  "donate_bought_coffee": "{top_prefix}{anchor} al à comprât un cafè {when}.",
  "donate_bought_coffees": "{top_prefix}{anchor} al à comprât {count} cafès {when}.",
- "donate_donated_by_method": "{top_prefix}{anchor} donated ${amount} by {method} {when}.",
- "donate_donated_amount": "{top_prefix}{anchor} donated ${amount} {when}.",
+ "donate_donated_by_method": "{top_prefix}{anchor} al à donât ${amount} di {method} {when}.",
+ "donate_donated_amount": "{top_prefix}{anchor} al à donât ${amount} {when}.",
  "label_for_os": "par SO {version}",
  "month_01": "Zenâr",
  "month_02": "Fevrâr",
@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Rimovi ancje i Struments de plateforme Android (ADB / Avviament veloç)? Sielzi Mantignî se tu dopris ADB.",
  "legacy_cleanup_keep_btn": "Tignî",
  "legacy_cleanup_remove_btn": "Tirâ vie",
- "legacy_cleanup_done_inline": "Eliminât - cirche {size} liberât."
+ "legacy_cleanup_done_inline": "Eliminât - cirche {size} liberât.",
+ "donate_completion_body_family": "Cheste aplicazion e je un lavôr di une persone, e e condivît une cjase cu la mê famee. Se la instalazion di vuê e à rindût lis robis un tic plui facilis, un cafè al è un mût zentîl di supuartâ lis oris e il cûr daûr di lui.",
+ "donate_completion_body_running_costs": "I servidôrs, il spazi di archiviazion e i dominis a son paiâts ogni mês, se cualchidun al instale chê dì o no. Se la instalazion di vuê e fos une instalazion regolâr, un cafè al jude a cuvierzi chei coscj di funzionament cuiets.",
+ "donate_completion_body_kindness": "Nol è abonament e nuie al è blocât vie. Se la aplicazion e fos utile vuê, paiâ un cafè indenant e je une piçule bontât che la manten libare pe persone dopo.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} al à comprât {count} cafès su Ko-Fi {when}.",
+ "donate_completion_signature": "- Ryan - Mantignidôr dal gjornalizadôr CE",
+ "donate_completion_body_small_hours": "La plui part di chest progjet al sucêt in piçulis oris dopo dal lavôr di dì, e un cafè al è un mût zentîl di dî che al à valût la pena. Gracie di jessi culì.",
+ "donate_support_appeal_full": "Lis donazions a mi judin in mût diret a supuartâ la mê famee e a finanziâ i dispositîfs di prove che a rindin pussibil chest servizi gratuit par ducj. Se chest imprest al à sparagnât timp o al à salvât il to zuiadôr vuê, par plasê pense a une piçule donazion, al vûl dî pardabon il mont par nô.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} al à comprât un cafè su Ko-Fi {when}."
 }

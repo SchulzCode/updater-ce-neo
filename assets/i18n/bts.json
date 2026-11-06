@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Hapuskon ma homa Android Platform Tools (ADB / Fastboot)? Pilih Simpan anggo mamakei ADB.",
  "legacy_cleanup_keep_btn": "Jaga",
  "legacy_cleanup_remove_btn": "Mamindahkon",
- "legacy_cleanup_done_inline": "Ipadaoh, hira-hira {size} ipaluah."
+ "legacy_cleanup_done_inline": "Ipadaoh, hira-hira {size} ipaluah.",
+ "donate_completion_body_family": "Aplikasi on aima horja ni sada halak, anjaha marbagi rumah pakon keluargangku. Anggo pemasangan sadari on mambahen lambin urah, kopi aima cara na dear laho mendukung jam pakon uhur na i pudini ai.",
+ "donate_completion_body_small_hours": "Bahatan humbani proyek on terjadi bani panorang na etek dobkonsi horja arian, anjaha minum kopi aima cara na lembut laho mangkatahon na marguna do ai. Tarimakasih domma roh nasiam hujon.",
+ "donate_completion_body_running_costs": "Server, penyimpanan pakon domain igalar tiap bulan, atap dong na manginstall bani ari ai atap lang. Anggo pemasangan sadari on lancar, sada kopi boi mangurupi manutupi biaya pardalanan na tenang ai.",
+ "donate_completion_body_kindness": "Lang dong langganan janah lang dong na ikunci. Anggo marguna do aplikasi ai sadari on, mambayar kopi hu lobei aima sada idop ni uhur na etek na mambahen ai gratis bani halak na mangihut.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} mamboli kopi bannami i Ko-Fi {when}.",
+ "donate_completion_signature": "- Ryan - Pemelihara Updater CE",
+ "donate_support_appeal_full": "Sumbangan secara langsung mangurupi ahu mendukung keluargaku pakon mendanai alat-alat tes na mambahen layanan gratis on boi idalankon ganup halak. Anggo alat on boi menghemat panorang nassiam atap pe paluahkon pemain nassiam sadari on, mohon pertimbangkan ma sumbangan na etek, on tongon-tongon do mararti dunia on bannami.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} mamboli hanami {count} kopi i Ko-Fi {when}."
 }

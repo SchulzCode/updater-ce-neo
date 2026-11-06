@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Eliminar tamén as ferramentas da plataforma Android (ADB / Fastboot)? Escolla Manter se usa ADB.",
  "legacy_cleanup_keep_btn": "Manteña",
  "legacy_cleanup_remove_btn": "Eliminar",
- "legacy_cleanup_done_inline": "Eliminado: aproximadamente {size} liberado."
+ "legacy_cleanup_done_inline": "Eliminado: aproximadamente {size} liberado.",
+ "donate_completion_body_running_costs": "Os servidores, o almacenamento e os dominios páganse todos os meses, independentemente de que alguén instale ese día ou non. Se a instalación de hoxe foi sen problemas, un café axuda a cubrir eses custos de funcionamento silenciosos.",
+ "donate_completion_body_family": "Esta aplicación é traballo dunha persoa e comparte casa coa miña familia. Se a instalación de hoxe facilitou un pouco as cousas, un café é unha forma amable de soportar as horas e o corazón que hai detrás.",
+ "donate_completion_body_kindness": "Non hai ningunha subscrición e nada está bloqueado. Se a aplicación foi útil hoxe, pagar un café adiante é unha pequena amabilidade que o mantén gratis para a próxima persoa.",
+ "donate_completion_body_small_hours": "A maior parte deste proxecto ocorre en pequenas horas despois do traballo diario, e un café é unha forma suave de dicir que valeu a pena. Grazas por estar aquí.",
+ "donate_completion_signature": "- Ryan - Mantedor de Updater CE",
+ "donate_support_appeal_full": "As doazóns axúdanme directamente a manter a miña familia e financiar os dispositivos de proba que fan posible este servizo gratuíto para todos. Se esta ferramenta aforrou tempo ou rescatou o teu xogador hoxe, considera unha pequena doazón, realmente significa o mundo para nós.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} comprounos un café en Ko-Fi {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} mercounos {count} cafés en Ko-Fi {when}."
 }

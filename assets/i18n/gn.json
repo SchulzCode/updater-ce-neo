@@ -525,9 +525,9 @@
  "donate_a_top_supporter": "Peteî oipytyvõva yvate",
  "donate_a_supporter": "Peteĩ oipytyvõva",
  "donate_bought_coffee": "{top_prefix}{anchor} ojogua oréve peteĩ ka’a {when}.",
- "donate_bought_coffees": "{top_prefix}{anchor} bought us {count} coffees {when}.",
- "donate_donated_by_method": "{top_prefix}{anchor} donated ${amount} by {method} {when}.",
- "donate_donated_amount": "{top_prefix}{anchor} donated ${amount} {when}.",
+ "donate_bought_coffees": "{top_prefix}{anchor} ojogua oréve {count} ka’a {when}.",
+ "donate_donated_by_method": "{top_prefix}{anchor} ome’ẽkuri ${amount} {method} {when} rupive.",
+ "donate_donated_amount": "{top_prefix}{anchor} ome’ẽkuri ${amount} {when}.",
  "label_for_os": "SO {version}-pe g̃uarã.",
  "month_01": "jasyteĩ",
  "month_02": "Jasykõi",
@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "¿Eipe’a avei umi Android Plataforma Tembipururã (ADB / Fastboot)? Eiporavo Eñongatu reiporúramo ADB.",
  "legacy_cleanup_keep_btn": "Jeguereko",
  "legacy_cleanup_remove_btn": "Pe'a",
- "legacy_cleanup_done_inline": "Ojepe’a, {size} rehegua oñemosãso."
+ "legacy_cleanup_done_inline": "Ojepe’a, {size} rehegua oñemosãso.",
+ "donate_completion_body_running_costs": "Servidor, almacenamiento ha dominio ojehepymeꞌe káda jasy, tahaꞌe haꞌeva omoĩva upe árape térã nahániri. Pe instalación ko’áĝagua ha’érire peteĩ suave, peteĩ café oipytyvõ ocubri haĝua umi costo de funcionamiento kirirĩháme.",
+ "donate_completion_body_family": "Ko app ha’e peteĩ tapicha rembiapo, ha okomparti peteĩ óga che familia ndive. Pe instalación ko’áĝagua ombohape’imi ramo umi mba’e, peteĩ café ha’e peteĩ tape porã oipytyvõ haĝua umi aravo ha korasõ oĩva hapykuéri.",
+ "donate_completion_body_kindness": "Ndaipóri suscripción ha mba'eve noñembotýi. Pe app ideprovecho ramo ko’áĝa, ojepaga peteĩ café tenonde gotyo ha’e peteĩ py’aporã michĩva omantene gratis pe tapicha oúvape ĝuarã.",
+ "donate_completion_body_small_hours": "Hetave ko tembiapo oiko aravo’i michĩmíme tembiapo ára rire, ha peteĩ café ha’e peteĩ tape suave ja’e haĝua vale hague. Aguyje peẽme peime haguére ko’ápe.",
+ "donate_completion_signature": "- Ryan - Mantenimiento de Actualizador CE rehegua",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} ojogua oréve peteĩ ka’a Ko-Fi-pe {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} ojogua oréve {count} ka’avo Ko-Fi-pe {when}.",
+ "donate_support_appeal_full": "Umi donación chepytyvõ directamente aipytyvõ haĝua che familia-pe ha ofinancia umi dispositivo de prueba ojapóva ko servicio gratuito ikatúva opavavepe ĝuarã. Ko tembipuru osalváramo ndéve nde tiempo térã osalváramo nde jugador ko árape, ehechami peteĩ donación michĩva, añetehápe he’ise ko mundo ñandéve ĝuarã."
 }

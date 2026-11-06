@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Kas eemaldada ka Androidi platvormi tööriistad (ADB / Fastboot)? Valige Keep, kui kasutate ADB-d.",
  "legacy_cleanup_keep_btn": "Hoidke",
  "legacy_cleanup_remove_btn": "Eemalda",
- "legacy_cleanup_done_inline": "Eemaldatud – umbes {size} vabastatud."
+ "legacy_cleanup_done_inline": "Eemaldatud – umbes {size} vabastatud.",
+ "donate_completion_body_family": "See rakendus on ühe inimese töö ja see jagab kodu minu perega. Kui tänane installimine muutis asja pisut lihtsamaks, on kohv hea viis toetada selle taga olevaid tunde ja südant.",
+ "donate_completion_body_running_costs": "Serverite, salvestusruumi ja domeenide eest makstakse iga kuu, olenemata sellest, kas keegi sellel päeval installib või mitte. Kui tänane paigaldamine oli sujuv, aitab kohv need vaiksed jooksvad kulud katta.",
+ "donate_completion_body_kindness": "Tellimust pole ja midagi pole lukustatud. Kui rakendusest oli täna kasu, on kohvi ettemaksmine väike lahkus, mis jätab selle järgmisele inimesele tasuta.",
+ "donate_completion_body_small_hours": "Suurem osa sellest projektist sünnib mõne tunni jooksul pärast päevatööd ja kohv on õrn viis öelda, et see oli seda väärt. Aitäh, et olete siin.",
+ "donate_completion_signature": "- Ryan - Updater CE hooldaja",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} ostis meile Ko-Fi kaudu kohvi {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} ostis meile {count} Ko-Fi kaudu kohvi {when}.",
+ "donate_support_appeal_full": "Annetused aitavad mul otseselt toetada oma perekonda ja rahastada testseadmeid, mis muudavad selle tasuta teenuse kõigile võimalikuks. Kui see tööriist säästis teie aega või päästis teie mängija täna, kaaluge väikese annetuse tegemist, see tähendab meile tõeliselt maailma."
 }

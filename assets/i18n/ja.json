@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Android プラットフォーム ツール (ADB / Fastboot) も削除しますか? ADB を使用する場合は [Keep] を選択します。",
  "legacy_cleanup_keep_btn": "保つ",
  "legacy_cleanup_remove_btn": "取り除く",
- "legacy_cleanup_done_inline": "削除されました, 約 {size} 個が解放されました。"
+ "legacy_cleanup_done_inline": "削除されました, 約 {size} 個が解放されました。",
+ "donate_completion_body_family": "このアプリは 1 人の個人の作品であり、家族と共有しています。今日のインストールで物事が少し楽になったとしたら、コーヒーはその背後にある時間と心をサポートする親切な方法です。",
+ "donate_completion_body_running_costs": "サーバー、ストレージ、ドメインの料金は、その日にインストールする人がいるかどうかに関係なく、毎月支払われます。今日のインストールがスムーズに完了した場合は、コーヒーを飲むことで、静かなランニングコストがカバーされます。",
+ "donate_completion_body_kindness": "サブスクリプションはなく、何もロックされていません。もしこのアプリが今日役に立っていたとしたら、コーヒーをフォワードで支払うことは、次の人に無料で提供できる小さな親切です。",
+ "donate_completion_body_small_hours": "このプロジェクトのほとんどは、一日の仕事が終わった後の数時間で行われます。コーヒーを飲むことで、その価値があったと穏やかに伝えることができます。ここに来てくれてありがとう。",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} は Ko-Fi {when} でコーヒーを買ってくれました。",
+ "donate_completion_signature": "- Ryan - アップデータ CE のメンテナ",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} が Ko-Fi {when} で {count} 個のコーヒーを購入してくれました。",
+ "donate_support_appeal_full": "寄付は私の家族をサポートし、誰もがこの無料サービスを利用できるようにするためのテスト デバイスに資金を提供するのに直接役立ちます。このツールによって時間を節約できたり、今日プレーヤーを救ったりできた場合は、少額の寄付を検討してください。それは私たちにとって本当に意味のあることです。"
 }

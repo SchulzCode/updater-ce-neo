@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Cire Kayan aikin Platform na Android (ADB / Fastboot) kuma? Zaɓi Keep idan kuna amfani da ADB.",
  "legacy_cleanup_keep_btn": "Ajiye",
  "legacy_cleanup_remove_btn": "Cire",
- "legacy_cleanup_done_inline": "An cire - kusan {size} an saki."
+ "legacy_cleanup_done_inline": "An cire - kusan {size} an saki.",
+ "donate_completion_body_running_costs": "Ana biyan sabar sabar, ma'adana da wuraren ajiya kowane wata, ko wani ya shigar da ranar ko a'a. Idan shigarwa na yau ya kasance mai santsi, kofi yana taimakawa wajen biyan kuɗin tafiyar shiru.",
+ "donate_completion_body_family": "Wannan app aikin mutum ɗaya ne, kuma yana raba gida tare da iyalina. Idan shigarwa na yau ya sa abubuwa kaɗan sauƙi, kofi hanya ce mai kyau don tallafawa sa'o'i da zuciya a bayansa.",
+ "donate_completion_body_kindness": "Babu biyan kuɗi kuma babu abin da ke kullewa. Idan app ɗin yana da amfani a yau, biyan kuɗin kofi a gaba ƙaramin alheri ne wanda ke ba shi kyauta ga mutum na gaba.",
+ "donate_completion_body_small_hours": "Yawancin wannan aikin yana faruwa a cikin ƙananan sa'o'i bayan aikin rana, kuma kofi shine hanya mai sauƙi don faɗi cewa yana da daraja. Na gode da kasancewa a nan.",
+ "donate_completion_signature": "- Ryan - Mai kula da Updater CE",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} ya saya mana kofi akan Ko-Fi {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} ya saya mana {count} kofi akan Ko-Fi {when}.",
+ "donate_support_appeal_full": "Taimako kai tsaye na taimaka mini in tallafa wa iyalina da ba da kuɗin na'urorin gwaji waɗanda ke ba da damar wannan sabis ɗin kyauta ga kowa da kowa. Idan wannan kayan aikin ya cece ku lokaci ko ya ceci ɗan wasan ku a yau, da fatan za a yi la'akari da ƙaramin gudummawa, hakika yana nufin duniya a gare mu."
 }

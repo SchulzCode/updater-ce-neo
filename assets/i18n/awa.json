@@ -524,10 +524,10 @@
  "donate_top_supporter_prefix": "शीर्ष समर्थक",
  "donate_a_top_supporter": "एक शीर्ष समर्थक",
  "donate_a_supporter": "एक समर्थक",
- "donate_bought_coffee": "{top_prefix}{anchor} bought us a coffee {when}.",
- "donate_bought_coffees": "{top_prefix}{anchor} bought us {count} coffees {when}.",
+ "donate_bought_coffee": "{top_prefix}{anchor} हमका एक कॉफी खरीदिन {when}।",
+ "donate_bought_coffees": "{top_prefix}{anchor} हमका {count} कॉफी {when} खरीदिन।",
  "donate_donated_by_method": "{top_prefix}{anchor} {method} {when} द्वारा ${amount} दान किहिन।",
- "donate_donated_amount": "{top_prefix}{anchor} donated ${amount} {when}.",
+ "donate_donated_amount": "{top_prefix}{anchor} ${amount} {when} दान किहिन।",
  "label_for_os": "ओएस {version} के लिए",
  "month_01": "जनवरी",
  "month_02": "फ़रवरी",
@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "एंड्रॉइड प्लेटफॉर्म टूल्स (एडीबी / फास्टबूट) का भी हटावा जाय? अगर आप एडीबी का उपयोग करत हैं तौ रखै का चुनौ।",
  "legacy_cleanup_keep_btn": "रखब",
  "legacy_cleanup_remove_btn": "निकारब",
- "legacy_cleanup_done_inline": "हटावा गा - लगभग {size} मुक्त कीन गा।"
+ "legacy_cleanup_done_inline": "हटावा गा - लगभग {size} मुक्त कीन गा।",
+ "donate_completion_body_family": "ई ऐप एक मनई के काम है, अऊर ई मोर परिवार के साथे एक घर साझा करत है। अगर आज के इंस्टॉल चीजन का थोड़ा आसान बना दिहिस है, तौ एक कॉफी एक दयालु तरीका है जेहिसे ई घंटन अऊर दिल का समर्थन कर सकत है।",
+ "donate_completion_body_running_costs": "सर्वर, भंडारण अऊर डोमेन हर महीना के लिए भुगतान कीन जात है, चाहे केहू उ दिन इंस्टॉल करै या न करै। अगर आज के इंस्टॉल एक सुचारू रहा, तौ एक कॉफी ओन शांत चलत लागतन का कवर करै मा मदद करत है।",
+ "donate_completion_signature": "- रयान - अपडेटर सीई के रखरखाव",
+ "donate_completion_body_kindness": "न तौ सदस्यता है अऊर न ही कुछौ बंद है। अगर ऐप आज उपयोगी रहा, तौ एक कॉफी का आगे देब एक छोट दयालुता है जवन अगले व्यक्ति के लिए मुफ्त रखत है।",
+ "donate_completion_body_small_hours": "ई परियोजना के अधिकांश दिन के काम के बाद छोट-छोट घंटन मा होत है, अऊर एक कॉफी ई कहै का एक कोमल तरीका है कि ई एकर लायक रहा। हिंया आवै के लिए धन्यवाद।",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} हमका को-फाई {when} पर एक कॉफी खरीदिन।",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} हमका {count} को-फाई {when} पर कॉफी खरीदिन।",
+ "donate_support_appeal_full": "दान सीधे तौर पर मोर परिवार का समर्थन करै अऊर परीक्षण उपकरणन का वित्त पोषित करै मा मदद करत है जवन ई मुफ्त सेवा का सबके लिए संभव बनावत है। अगर ई उपकरण आपका समय बचाइस या आज आपके खिलाड़ी का बचाइस, त कृपया एक छोट दान पर विचार करा, ई हमरे लिए सही मायने मा दुनिया का मतलब है।"
 }

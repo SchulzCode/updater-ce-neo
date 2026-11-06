@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Fjarlægja Android pallverkfærin (ADB / Fastboot) líka? Veldu Keep ef þú notar ADB.",
  "legacy_cleanup_keep_btn": "Halda",
  "legacy_cleanup_remove_btn": "Fjarlægja",
- "legacy_cleanup_done_inline": "Fjarlægt, um {size} laus."
+ "legacy_cleanup_done_inline": "Fjarlægt, um {size} laus.",
+ "donate_completion_body_family": "Þetta app er verk eins manns og deilir heimili með fjölskyldu minni. Ef uppsetningin í dag gerði hlutina aðeins auðveldari er kaffi góð leið til að styðja við stundirnar og hjartað á bak við það.",
+ "donate_completion_body_running_costs": "Miðlarar, geymsla og lén eru greidd fyrir hvern mánuð, hvort sem einhver setur upp þann dag eða ekki. Ef uppsetningin í dag var slétt, hjálpar kaffi til að standa undir þessum rólega rekstrarkostnaði.",
+ "donate_completion_body_kindness": "Það er engin áskrift og ekkert er læst. Ef appið var gagnlegt í dag, þá er smá góðvild að borga kaffi áfram sem heldur því ókeypis fyrir næsta mann.",
+ "donate_completion_body_small_hours": "Flest af þessu verkefni gerist á litlum klukkutímum eftir vinnudaginn og kaffi er blíð leið til að segja að það hafi verið þess virði. Þakka þér fyrir að vera hér.",
+ "donate_completion_signature": "- Ryan - Umsjónarmaður Updater CE",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} keypti okkur kaffi á Ko-Fi {when}.",
+ "donate_support_appeal_full": "Framlög hjálpa mér beint við að styðja fjölskyldu mína og fjármagna prófunartækin sem gera þessa ókeypis þjónustu mögulega fyrir alla. Ef þetta tól sparaði þér tíma eða bjargaði spilaranum þínum í dag skaltu íhuga lítið framlag, það þýðir sannarlega heiminn fyrir okkur.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} keypti okkur {count} kaffi á Ko-Fi {when}."
 }

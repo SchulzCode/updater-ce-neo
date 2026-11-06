@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Buai Perengka Platform Android (ADB/Fastboot) nya pia? Pilih Keep enti nuan ngena ADB.",
  "legacy_cleanup_keep_btn": "Majak",
  "legacy_cleanup_remove_btn": "Muai",
- "legacy_cleanup_done_inline": "Dibuai, kira-kira {size} dilepaska."
+ "legacy_cleanup_done_inline": "Dibuai, kira-kira {size} dilepaska.",
+ "donate_completion_body_family": "App tu pengawa siku orang, lalu iya bekunsi rumah enggau kami sebilik. Enti pemasang saritu ngasuh utai nyamai mimit, ai kopi nya chara ti manah dikena nyukung jam enggau ati di belakang iya.",
+ "donate_completion_body_running_costs": "Server, storage enggau domain dibayar tiap bulan, sekalika bisi orang masang sehari nya tauka nadai. Enti pemasang saritu nya lanchar, ai kopi nulung nampung kos bejalai ti sunyi nya.",
+ "donate_completion_body_kindness": "Nadai langganan lalu nadai utai dikunchi. Enti app nya beguna kemaya hari tu, mayar kopi ke mua nya pemanah ati ti mit ti ngasuh iya meruan pechuma ungkup orang ti nangkanka iya.",
+ "donate_completion_body_small_hours": "Tebal agi projek tu nyadi dalam jam ti mit pengudah pengawa sehari, lalu ngirup kopi nya chara ti lembut dikena madahka iya berega. Terima kasih laban udah datai ditu.",
+ "donate_completion_signature": "- Ryan - Penyaga Pemadah CE",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} meli kami {count} kopi ba Ko-Fi {when}.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} meli kami ngirup kopi ba Ko-Fi {when}.",
+ "donate_support_appeal_full": "Pemeri terus nulung aku nyukung kami sebilik sereta melanja perengka nguji ti ngasuh servis pechuma tu ulih dikereja semua orang. Enti perengka tu ngelimatka awak nuan tauka nyelamatka pemain nuan saritu, sila berundingka pemeri ti mit, iya amat mai reti dunya ngagai kami."
 }

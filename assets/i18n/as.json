@@ -524,10 +524,10 @@
  "donate_top_supporter_prefix": "শীৰ্ষ সমৰ্থক",
  "donate_a_top_supporter": "এজন শীৰ্ষ সমৰ্থক",
  "donate_a_supporter": "এজন সমৰ্থক",
- "donate_bought_coffee": "{top_prefix}{anchor} bought us a coffee {when}.",
- "donate_bought_coffees": "{top_prefix}{anchor} bought us {count} coffees {when}.",
+ "donate_bought_coffee": "{top_prefix}{anchor} আমাক কফি কিনি দিলে {when}।",
+ "donate_bought_coffees": "{top_prefix}{anchor} আমাক {count} কফি {when} কিনিছিল।",
  "donate_donated_by_method": "{top_prefix}{anchor} এ {method} {when} দ্বাৰা ${amount} দান কৰিছে।",
- "donate_donated_amount": "{top_prefix}{anchor} donated ${amount} {when}.",
+ "donate_donated_amount": "{top_prefix}{anchor} এ ${amount} {when} দান কৰিছে।",
  "label_for_os": "OS {version} ৰ বাবে",
  "month_01": "জানুৱাৰী",
  "month_02": "ফেব্ৰুৱাৰী",
@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "এণ্ড্ৰইড প্লেটফৰ্ম সঁজুলিসমূহ (ADB / Fastboot) আঁতৰাওক? ৰাখক নিৰ্ব্বাচন কৰক যদি আপুনি ADB ব্যৱহাৰ কৰে।",
  "legacy_cleanup_keep_btn": "ৰাখক",
  "legacy_cleanup_remove_btn": "আঁতৰোৱা",
- "legacy_cleanup_done_inline": "আঁতৰোৱা হৈছে, প্ৰায় {size} মুক্ত কৰা হৈছে।"
+ "legacy_cleanup_done_inline": "আঁতৰোৱা হৈছে, প্ৰায় {size} মুক্ত কৰা হৈছে।",
+ "donate_completion_body_family": "এই এপটো এজন ব্যক্তিৰ কাম, আৰু ই মোৰ পৰিয়ালৰ সৈতে এটা ঘৰ শ্বেয়াৰ কৰে। আজিৰ ইনষ্টলটোৱে যদি কামবোৰ অলপ সহজ কৰি তুলিলে তেন্তে কফি এটাই ইয়াৰ আঁৰৰ ঘণ্টা আৰু হৃদয়ক সমৰ্থন কৰাৰ এক দয়ালু উপায়।",
+ "donate_completion_body_kindness": "কোনো চাবস্ক্ৰিপচন নাই আৰু একোৱেই লক কৰা নাই। আজি যদি এপটো উপযোগী আছিল, তেন্তে কফি আগবঢ়াই দিয়াটো এটা সৰু দয়া যিয়ে পৰৱৰ্তী ব্যক্তিৰ বাবে ইয়াক বিনামূলীয়া কৰি ৰাখে।",
+ "donate_completion_body_running_costs": "চাৰ্ভাৰ, ষ্ট’ৰেজ আৰু ডমেইনৰ বাবে প্ৰতিমাহে ধন দিয়া হয়, সেইদিনা কোনোবাই ইনষ্টল কৰক বা নকৰক। আজিৰ ইনষ্টলটো যদি মসৃণ আছিল, তেন্তে কফিয়ে সেই নিস্তব্ধ চলোৱা খৰচবোৰ বহন কৰাত সহায় কৰে।",
+ "donate_completion_body_small_hours": "এই প্ৰজেক্টটোৰ বেছিভাগেই দিনৰ কামৰ পিছত সৰু সৰু ঘণ্টাত ঘটে, আৰু কফি এটাই কফিৰ মূল্য আছিল বুলি কোৱাৰ এটা কোমল উপায়। ইয়াত থকাৰ বাবে ধন্যবাদ।",
+ "donate_completion_signature": "- ৰিয়ান - আপডেটাৰ চিইৰ ৰক্ষণাবেক্ষণকাৰী",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} এ আমাক কো-ফাইত কফি কিনি দিলে {when}।",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} এ আমাক {count} কো-ফাই {when} ত কফি কিনিছিল।",
+ "donate_support_appeal_full": "অনুদানে মোক পোনপটীয়াকৈ মোৰ পৰিয়ালটোক পোহপাল দিয়াত সহায় কৰে আৰু সকলোৰে বাবে এই বিনামূলীয়া সেৱা সম্ভৱ কৰি তোলা পৰীক্ষামূলক যন্ত্ৰসমূহৰ বাবে ধন আগবঢ়ায়। যদি এই সঁজুলিয়ে আপোনাৰ সময় ৰাহি কৰিলে বা আজি আপোনাৰ খেলুৱৈক উদ্ধাৰ কৰিলে, অনুগ্ৰহ কৰি এটা সৰু অনুদানৰ কথা চিন্তা কৰক, ই সঁচাকৈয়ে আমাৰ বাবে পৃথিৱীখনক বুজায়।"
 }

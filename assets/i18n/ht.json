@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Retire zouti platfòm android (ADB / Fastboot) tou? Chwazi Kenbe si w itilize ADB.",
  "legacy_cleanup_keep_btn": "Kenbe",
  "legacy_cleanup_remove_btn": "Retire",
- "legacy_cleanup_done_inline": "Retire, apeprè {size} libere."
+ "legacy_cleanup_done_inline": "Retire, apeprè {size} libere.",
+ "donate_completion_body_family": "Aplikasyon sa a se travay yon sèl moun, epi li pataje yon kay ak fanmi mwen. Si enstalasyon jodi a te fè bagay sa yo yon ti kras pi fasil, yon kafe se yon fason bon pou sipòte èdtan yo ak kè dèyè li.",
+ "donate_completion_body_running_costs": "Sèvè, depo ak domèn yo peye pou chak mwa, kit nenpòt moun enstale jou sa a oswa ou pa. Si enstalasyon jodi a se te yon lis, yon kafe ede kouvri depans sa yo kouri trankil.",
+ "donate_completion_body_kindness": "Pa gen abònman e pa gen anyen ki fèmen. Si aplikasyon an te itil jodi a, peye yon kafe pi devan se yon ti jantiyès ki kenbe li gratis pou pwochen moun nan.",
+ "donate_completion_body_small_hours": "Pifò nan pwojè sa a rive nan ti èdtan apre travay la jounen an, ak yon kafe se yon fason dou yo di li te vo li. Mèsi paske w la.",
+ "donate_completion_signature": "- Ryan - Responsab Updater CE",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} te achte nou {count} kafe sou Ko-Fi {when}.",
+ "donate_support_appeal_full": "Donasyon dirèkteman ede m sipòte fanmi mwen ak finanse aparèy tès ki fè sèvis gratis sa a posib pou tout moun. Si zouti sa a te sove tan ou oswa sove jwè ou jodi a, tanpri konsidere yon ti don, li vrèman vle di mond lan pou nou.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} te achte yon kafe pou nou sou Ko-Fi {when}."
 }

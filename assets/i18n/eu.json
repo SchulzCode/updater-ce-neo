@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Android plataformako tresnak (ADB / Fastboot) ere kendu? Aukeratu Keep ADB erabiltzen baduzu.",
  "legacy_cleanup_keep_btn": "Mantendu",
  "legacy_cleanup_remove_btn": "Kendu",
- "legacy_cleanup_done_inline": "Kendua, {size} inguru askatu da."
+ "legacy_cleanup_done_inline": "Kendua, {size} inguru askatu da.",
+ "donate_completion_body_family": "Aplikazio hau pertsona baten lana da eta nire familiarekin etxea partekatzen du. Gaurko instalazioak gauzak apur bat erraztu baditu, kafe bat atzean dauden orduei eta bihotzari eusteko modu atsegina da.",
+ "donate_completion_body_running_costs": "Zerbitzariak, biltegiratzea eta domeinuak hilero ordaintzen dira, edonork egun horretan instalatu ala ez. Gaurko instalazioa erraza izan bada, kafe batek funtzionamendu-kostu lasai horiek estaltzen laguntzen du.",
+ "donate_completion_body_kindness": "Ez dago harpidetzarik eta ez dago ezer blokeatuta. Gaur egun aplikazioa baliagarria bazen, kafe bat aurrera ordaintzea hurrengo pertsonarentzat doan mantentzen duen adeitasun txiki bat da.",
+ "donate_completion_signature": "- Ryan - Updater CE-ren mantentzailea",
+ "donate_completion_body_small_hours": "Proiektu honen gehiengoa eguneko lanaren ondoren ordu txikietan gertatzen da, eta kafe bat merezi izan duela esateko modu leuna da. Eskerrik asko hemen egoteagatik.",
+ "donate_support_appeal_full": "Dohaintzek zuzenean laguntzen didate nire familiari laguntzen eta guztiontzat doako zerbitzu hau posible egiten duten proba-gailuak finantzatzen. Tresna honek denbora aurreztu edo zure jokalaria erreskatatu badu gaur, kontuan hartu dohaintza txiki bat, benetan mundua esan nahi du guretzat.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} kafe bat erosi zigun Ko-Fi {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} {count} kafe erosi zizkigun Ko-Fi-n {when}."
 }

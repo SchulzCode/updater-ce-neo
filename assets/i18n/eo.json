@@ -963,5 +963,13 @@
  "legacy_cleanup_tools_body": "Ĉu ankaŭ forigi la Android-Platformilojn (ADB / Fastboot)? Elektu Konservu se vi uzas ADB.",
  "legacy_cleanup_keep_btn": "Konservu",
  "legacy_cleanup_remove_btn": "Forigi",
- "legacy_cleanup_done_inline": "Forigita, proksimume {size} liberigita."
+ "legacy_cleanup_done_inline": "Forigita, proksimume {size} liberigita.",
+ "donate_completion_body_family": "Ĉi tiu programo estas laboro de unu persono, kaj ĝi dividas hejmon kun mia familio. Se la hodiaŭa instalado iom pli facilas, kafo estas afabla maniero subteni la horojn kaj koron malantaŭ ĝi.",
+ "donate_completion_body_running_costs": "Serviloj, stokado kaj domajnoj estas pagitaj por ĉiu monato, ĉu iu ajn instalas tiun tagon aŭ ne. Se la hodiaŭa instalado estis glata, kafo helpas kovri tiujn trankvilajn kurantajn kostojn.",
+ "donate_completion_body_kindness": "Ne ekzistas abono kaj nenio estas ŝlosita. Se la programo estis utila hodiaŭ, pagi kafon antaŭen estas malgranda bonkoreco, kiu tenas ĝin senpaga por la sekva persono.",
+ "donate_completion_body_small_hours": "Plejparto de ĉi tiu projekto okazas en malgrandaj horoj post la taga laboro, kaj kafo estas milda maniero diri, ke ĝi valoris ĝin. Dankon pro esti ĉi tie.",
+ "donate_completion_signature": "- Ryan - Prizorganto de Updater CE",
+ "donate_support_appeal_full": "Donacoj rekte helpas min subteni mian familion kaj financi la testajn aparatojn, kiuj ebligas ĉi tiun senpagan servon por ĉiuj. Se ĉi tiu ilo ŝparis al vi tempon aŭ savis vian ludanton hodiaŭ, bonvolu konsideri malgrandan donacon, ĝi vere signifas la mondon por ni.",
+ "donate_bought_coffee_kofi": "{top_prefix}{anchor} aĉetis al ni kafon per Ko-Fi {when}.",
+ "donate_bought_coffees_kofi": "{top_prefix}{anchor} aĉetis al ni {count} kafojn sur Ko-Fi {when}."
 }
