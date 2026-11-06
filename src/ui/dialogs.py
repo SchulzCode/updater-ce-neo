@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
-from PySide6.QtCore import QDate, QDateTime, QSettings, QSize, QTime, Qt, QTimer, Signal
+from PySide6.QtCore import QDate, QDateTime, QEvent, QSettings, QSize, QTime, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPalette, QTextCursor, QTextDocument
 from PySide6.QtWidgets import (
     QBoxLayout,
@@ -845,6 +845,9 @@ class _NoticeRow(QFrame):
         super().__init__(parent)
         self._notice = notice
         self.setObjectName("noticeRow")
+        # A card is as tall as its content; the body has its own scrollbar when
+        # the notice is long, so the list never stretches a short card.
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
         # Same bento card as the toasts: painted rounded plate, no opaque fill.
         self.setProperty("cssClass", "card")
         self.setAutoFillBackground(False)
@@ -893,6 +896,10 @@ class _NoticeRow(QFrame):
         self._body.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._body.set_markdown(body_text, text_color=t.fg)
         self._body.document().contentsChanged.connect(self._fit_body)
+        # The first fit runs before the page has laid the card out, so the
+        # viewport can still be only a few pixels wide. Re-fit once its real
+        # width arrives instead of leaving the body at the 300 px ceiling.
+        self._body.viewport().installEventFilter(self)
         col.addWidget(self._body)
 
         target_url = read_more_url
@@ -954,12 +961,26 @@ class _NoticeRow(QFrame):
     def _fit_body(self) -> None:
         """Give the body its content height up to a card-sized ceiling."""
         doc = self._body.document()
-        width = self._body.viewport().width() or 400
+        width = self._body.viewport().width()
+        if width < 80:
+            # Construction happens before layout; measure against the card's
+            # own width so a short notice does not start at the 300 px cap.
+            width = max(200, self.width() - 24)
         doc.setTextWidth(width)
         height = int(doc.size().height()) + 4
         self._body.setFixedHeight(
             max(40, min(height, NOTICE_CARD_BODY_MAX_HEIGHT))
         )
+
+    def eventFilter(self, watched, event):  # noqa: N802 (Qt naming)
+        """Re-measure when the viewport gets its real width after layout."""
+        if (
+            watched is self._body.viewport()
+            and event.type() == QEvent.Type.Resize
+            and event.oldSize().width() != event.size().width()
+        ):
+            self._fit_body()
+        return super().eventFilter(watched, event)
 
     def resizeEvent(self, event):  # noqa: N802 (Qt naming)
         super().resizeEvent(event)

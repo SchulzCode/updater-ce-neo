@@ -425,6 +425,29 @@ def test_notice_cards_render_markdown_images_and_inner_scroll(qapp):
         row.deleteLater()
 
 
+def test_short_notice_card_does_not_reserve_the_body_ceiling(qapp):
+    """A one-line notice is a one-line card, not a 300 px empty pane."""
+    from src.ui.dialogs import NOTICE_CARD_BODY_MAX_HEIGHT, _NoticeRow
+
+    notice = Notice(
+        id="short-card",
+        title="Short notice",
+        content="One short line.",
+        full_content="One short line.",
+    )
+    row = _NoticeRow(notice)
+    try:
+        row.resize(600, 300)
+        row.show()
+        qapp.processEvents()
+        assert row._body.height() < NOTICE_CARD_BODY_MAX_HEIGHT
+        assert row._body.height() <= 80
+        assert row._body.verticalScrollBar().maximum() == 0
+    finally:
+        row.close()
+        row.deleteLater()
+
+
 def test_notices_page_opens_a_notice_and_returns_to_the_list(qapp):
     from src.ui.dialogs import NoticesPage
 
