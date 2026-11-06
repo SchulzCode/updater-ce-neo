@@ -8202,6 +8202,16 @@ class MainWindow(QMainWindow):
             runtime.set_language(lang)
         translator().set_language(lang)
         self.settings.setValue("language", lang)
+        # Existing app shortcuts follow the interface language. Missing ones
+        # stay missing; renamed ones keep the name the person gave them.
+        try:
+            from ..shortcut_manager import reconcile_shortcut_names
+
+            reconcile_shortcut_names()
+        except Exception:
+            logger.debug(
+                "Could not update shortcut names after language change", exc_info=True
+            )
         # A right-to-left language mirrors the interface. This runs before the
         # retranslation so the re-laid-out copy is measured in the direction it
         # is finally drawn in.

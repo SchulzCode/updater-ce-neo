@@ -819,6 +819,12 @@ Type: filesandordirs; Name: "C:\ProgramData\SP_FT_Logs"
 Type: filesandordirs; Name: "C:\ProgramData\SP_FT_Dump"
 
 [Code]
+{ Exact shortcut names the app can create, generated from its language
+  catalogs. This is larger than [Languages]: the app can create a shortcut in
+  a language Setup cannot display, and an update must still be able to remove
+  that older shortcut when the app language changes. }
+#include "build_windows_shortcut_names.iss"
+
 const
   UninstallRoot = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\';
   CurrentUninstallKey = UninstallRoot + '{#MyAppId}_is1';
@@ -835,6 +841,7 @@ var
   PriorDesktopShortcut: Boolean;
   DriverInstalled: Boolean;
   SettingsBackupFile: String;
+  AppShortcutNames: TStringList;
 
 { The app keeps its settings in HKCU\Software\innioasis (QSettings). Removing an
   older copy wipes that key, so an upgrade saves it here first and puts it back
@@ -1038,10 +1045,28 @@ begin
   Result := (Ext = '.lnk') or (Ext = '.url');
 end;
 
+function IsLocalizedAppShortcut(const Name: String): Boolean;
+var
+  I: Integer;
+  Stem: String;
+begin
+  Result := False;
+  if (AppShortcutNames = nil) or (not IsShortcutFile(Name)) then
+    Exit;
+  Stem := ChangeFileExt(Name, '');
+  for I := 0 to AppShortcutNames.Count - 1 do
+    if CompareText(Stem, AppShortcutNames.Strings[I]) = 0 then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
 function IsRetiredShortcut(const Name: String): Boolean;
 begin
   Result :=
     IsShortcutFile(Name) and (
+      IsLocalizedAppShortcut(Name) or
       NameContains(Name, 'Innioasis') or
       NameContains(Name, 'SP Flash') or
       NameContains(Name, 'Updater CE')
@@ -1142,6 +1167,43 @@ begin
   PurgeShortcutTree(ExpandConstant('{userdesktop}'));
   PurgeShortcutTree(ExpandConstant('{commonprograms}'));
   PurgeShortcutTree(ExpandConstant('{commondesktop}'));
+end;
+
+{ An update can change the app language, or replace a shortcut the app created
+  in a language Setup does not offer. Remove only the exact known app names,
+  never SP Flash Tool, the uninstall entry or a MediaTek Installer shortcut. }
+procedure PurgeLocalizedAppShortcutsAt(const Root: String; Depth: Integer);
+var
+  FindRec: TFindRec;
+  Path: String;
+begin
+  if (Root = '') or (Depth > MaxShortcutPurgeDepth) or (not DirExists(Root)) then
+    Exit;
+  if not FindFirst(Root + '\*', FindRec) then
+    Exit;
+  try
+    repeat
+      if (FindRec.Name = '.') or (FindRec.Name = '..') then
+        Continue;
+      if (FindRec.Attributes and FILE_ATTRIBUTE_REPARSE_POINT) <> 0 then
+        Continue;
+      Path := Root + '\' + FindRec.Name;
+      if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then
+        PurgeLocalizedAppShortcutsAt(Path, Depth + 1)
+      else if IsLocalizedAppShortcut(FindRec.Name) then
+        DeleteFile(Path);
+    until not FindNext(FindRec);
+  finally
+    FindClose(FindRec);
+  end;
+end;
+
+procedure PurgeLocalizedAppShortcuts;
+begin
+  PurgeLocalizedAppShortcutsAt(ExpandConstant('{userprograms}'), 0);
+  PurgeLocalizedAppShortcutsAt(ExpandConstant('{userdesktop}'), 0);
+  PurgeLocalizedAppShortcutsAt(ExpandConstant('{commonprograms}'), 0);
+  PurgeLocalizedAppShortcutsAt(ExpandConstant('{commondesktop}'), 0);
 end;
 
 function DirHasRetiredShortcut(const Dir: String): Boolean;
@@ -1366,6 +1428,10 @@ begin
     There is no version floor: the same file is a clean install and an update. }
   Result := True;
   DriverInstalled := False;
+  if AppShortcutNames = nil then
+    AppShortcutNames := TStringList.Create;
+  AppShortcutNames.Clear;
+  AddAppShortcutNames(AppShortcutNames);
   PriorDesktopShortcut :=
     DirHasRetiredShortcut(ExpandConstant('{userdesktop}')) or
     DirHasRetiredShortcut(ExpandConstant('{commondesktop}'));
@@ -1506,6 +1572,14 @@ begin
     ShowStep('StepShortcuts');
     { An update keeps the shortcut placements the user already has. A fresh
       install clears the old Innioasis / SP Flash entries and folders first. }
+    if ShouldPreserveUserData and IsUpdaterCeBrand then
+    begin
+      { The app may have created a shortcut under any catalog language, so an
+        update that changes language must remove the old exact name too. A
+        fresh install has no previous app shortcut and keeps its hands off
+        generic names such as "Updater". }
+      PurgeLocalizedAppShortcuts;
+    end;
     if not ShouldPreserveUserData then
     begin
       PurgeRetiredShortcuts;
@@ -1541,6 +1615,8 @@ procedure DeinitializeSetup();
 var
   ResultCode: Integer;
 begin
+  if AppShortcutNames <> nil then
+    AppShortcutNames.Free;
   Exec(ExpandConstant('{sys}\cmd.exe'),
     '/C ping 127.0.0.1 -n 3 > nul & del /F /Q "' + ExpandConstant('{srcexe}') + '"',
     '', SW_HIDE, ewNoWait, ResultCode);

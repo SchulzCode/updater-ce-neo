@@ -27,7 +27,12 @@ from pathlib import Path
 from typing import Dict, Iterable, Iterator, List, Optional, Tuple
 
 from . import paths
-from .i18n import current_language, text_for_language
+from .i18n import (
+    catalog_codes,
+    current_language,
+    is_english_language,
+    text_for_language,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +52,9 @@ LINUX_APP_FILE = "innioasis-updater.desktop"
 LINUX_TOOL_FILE = "sp-flash-tool.desktop"
 LEGACY_COMMUNITY_FOLDER = "Innioasis Community"
 
-# The languages Inno Setup offers in scripts/build_windows_installer.iss. The
-# app is translated more widely, but shortcut generation follows the installer:
-# outside this set the installer's English name remains the correct name.
+# The languages Inno Setup offers in scripts/build_windows_installer.iss. It
+# is only used to read the installer's language marker: shortcut creation and
+# cleanup follow the app's own catalogs, which cover more languages than Setup.
 INNO_SHORTCUT_LANGUAGES: dict[str, tuple[str, ...]] = {
     "english": ("en",),
     "arabic": ("ar",),
@@ -141,33 +146,80 @@ def _inno_language_for(lang: str) -> str:
     return ""
 
 
-def _localized_creation_name(lang: str = "") -> str:
-    """The localized app shortcut name for an installer language, or ""."""
-    if _is_mediatek_brand():
+def _name_for_language(lang: str) -> str:
+    """The app's shortcut name for *lang*, falling back to its base language."""
+    code = (lang or "").strip()
+    if not code or is_english_language(code):
         return ""
-    inno_name = _inno_language_for(lang or current_language())
-    if not inno_name or inno_name == "english":
-        return ""
-    for code in INNO_SHORTCUT_LANGUAGES[inno_name]:
-        name = text_for_language("app_name", code).strip()
+    for candidate in (code, code.split("-")[0]):
+        name = text_for_language("app_name", candidate).strip()
         if name:
             return name
     return ""
 
 
+def _localized_creation_name(lang: str = "") -> str:
+    """The localized app shortcut name for an app language, or "".
+
+    This follows the app's language catalog, not the smaller [Languages] list
+    the Windows installer offers: the app can create a Welsh or Indonesian
+    shortcut even when Setup cannot display that language.
+    """
+    if _is_mediatek_brand():
+        return ""
+    return _name_for_language(lang or current_language())
+
+
+_LOCALIZED_APP_NAMES: Optional[Tuple[str, ...]] = None
+
+
+def _all_localized_app_names(codes: Iterable[str] | None = None) -> Tuple[str, ...]:
+    """Every localized app name the app can put on a shortcut."""
+    global _LOCALIZED_APP_NAMES
+    if codes is None and _LOCALIZED_APP_NAMES is not None:
+        return _LOCALIZED_APP_NAMES
+    source = tuple(catalog_codes() if codes is None else codes)
+    names: List[str] = []
+    seen = set()
+    for code in source:
+        name = _name_for_language(code)
+        key = name.casefold()
+        if name and key not in seen:
+            seen.add(key)
+            names.append(name)
+    result = tuple(names)
+    if codes is None:
+        _LOCALIZED_APP_NAMES = result
+    return result
+
+
 def _localized_shortcut_names(shortcut_id: str) -> Tuple[str, ...]:
-    """Localized app names an Inno Setup shortcut may carry."""
+    """Every localized app name a shortcut may carry, in any app language."""
     if shortcut_id != APP_ID or _is_mediatek_brand():
         return ()
-    names: List[str] = []
-    for inno_name, codes in INNO_SHORTCUT_LANGUAGES.items():
-        if inno_name == "english":
-            continue
-        for code in codes:
-            name = text_for_language("app_name", code).strip()
-            if name and name not in names:
-                names.append(name)
-    return tuple(names)
+    return _all_localized_app_names()
+
+
+def app_shortcut_names_for_cleanup(
+    codes: Iterable[str] | None = None,
+) -> Tuple[str, ...]:
+    """Every Updater CE shortcut name that may need removing, all languages.
+
+    The Windows installer bakes this list into Setup, which cannot otherwise
+    know the name of a shortcut the app created in a language its own
+    [Languages] section does not offer. The app uses the same set when it
+    renames an existing shortcut after a language change.
+    """
+    names = [APP_NAME, DESKTOP_APP_NAME, "Updater CE"]
+    names.extend(_all_localized_app_names(codes))
+    unique: List[str] = []
+    seen = set()
+    for name in names:
+        key = name.casefold()
+        if name and key not in seen:
+            seen.add(key)
+            unique.append(name)
+    return tuple(sorted(unique, key=lambda value: (value.casefold(), value)))
 
 
 def _creation_name(shortcut_id: str, kind: str) -> str:
@@ -345,18 +397,11 @@ def _name_matches(stem: str, names: Iterable[str]) -> bool:
 
 
 def _active_localized_names(shortcut_id: str) -> Tuple[str, ...]:
-    """The installer-language name for the language the app is using now."""
+    """The localized name for the language the app is using now."""
     if shortcut_id != APP_ID or _is_mediatek_brand():
         return ()
-    inno_name = _inno_language_for(current_language())
-    if not inno_name or inno_name == "english":
-        return ()
-    names: List[str] = []
-    for code in INNO_SHORTCUT_LANGUAGES[inno_name]:
-        name = text_for_language("app_name", code).strip()
-        if name and name not in names:
-            names.append(name)
-    return tuple(names)
+    name = _localized_creation_name()
+    return (name,) if name else ()
 
 
 def _belongs(path: Path, owned_folder: str, shortcut_id: str, target: str = "") -> bool:
@@ -672,6 +717,93 @@ def _creation_path(shortcut_id: str, kind: str) -> Optional[Path]:
     return roots[0] / (LINUX_APP_FILE if shortcut_id == APP_ID else LINUX_TOOL_FILE)
 
 
+def _prune_other_language_shortcuts(
+    shortcut_id: str, kind: str, existing: Iterable[Path]
+) -> List[Path]:
+    """Remove known app names that are not this language's shortcut name.
+
+    A shortcut the person renamed is not a known i18n name, so it is kept. The
+    same goes for a shortcut whose name matches the current language; that one
+    is adopted. This is what turns an installer shortcut left by an earlier
+    language into one shortcut in the language now selected.
+    """
+    if shortcut_id != APP_ID or _is_mediatek_brand():
+        return list(existing)
+    current = _creation_name(shortcut_id, kind)
+    if not current:
+        return list(existing)
+    known = app_shortcut_names_for_cleanup()
+    kept: List[Path] = []
+    for path in existing:
+        if _name_matches(path.stem, known) and not _name_matches(path.stem, (current,)):
+            try:
+                path.unlink()
+                continue
+            except OSError:
+                logger.info(
+                    "Could not remove old-language shortcut %s", path, exc_info=True
+                )
+        kept.append(path)
+    return kept
+
+
+def reconcile_shortcut_names() -> None:
+    """Rename existing app shortcuts to the active language, in place.
+
+    Called after a language change. It never creates a shortcut and never
+    changes the Settings switches: a kind with no shortcut stays off. Renaming
+    keeps the shortcut's folder, target, arguments and icon; a shortcut the
+    person renamed is left alone because its name is not a known app name.
+    """
+    if not supported() or _is_mediatek_brand():
+        return
+    _migrate_community_folder()
+    known = app_shortcut_names_for_cleanup()
+    for kind in ("desktop", "menu"):
+        existing = _shortcut_files(APP_ID, kind)
+        if not existing:
+            continue
+        current = _creation_name(APP_ID, kind)
+        if not current:
+            continue
+        existing_keys = {_path_key(path) for path in existing}
+        claimed = {
+            _path_key(path)
+            for path in existing
+            if _name_matches(path.stem, (current,))
+        }
+        for path in existing:
+            if _name_matches(path.stem, (current,)):
+                continue
+            if not _name_matches(path.stem, known):
+                continue
+            destination = path.with_name(f"{current}{path.suffix}")
+            destination_key = _path_key(destination)
+            if destination.exists() or destination_key in claimed:
+                if destination_key in existing_keys or destination_key in claimed:
+                    try:
+                        path.unlink()
+                    except OSError:
+                        logger.info(
+                            "Could not remove duplicate shortcut %s",
+                            path,
+                            exc_info=True,
+                        )
+                    continue
+                logger.info(
+                    "Not renaming shortcut %s: %s already exists",
+                    path,
+                    destination,
+                )
+                continue
+            try:
+                path.rename(destination)
+                claimed.add(destination_key)
+                logger.info("Renamed shortcut %s -> %s", path, destination)
+            except OSError:
+                logger.info("Could not rename shortcut %s", path, exc_info=True)
+
+
 def set_shortcut(shortcut_id: str, kind: str, enabled: bool) -> bool:
     """Add or remove one shortcut. Returns True when the files now match."""
     if not supported() or shortcut_id not in SHORTCUT_IDS or kind not in ("desktop", "menu"):
@@ -689,6 +821,7 @@ def set_shortcut(shortcut_id: str, kind: str, enabled: bool) -> bool:
                 # rather than a preference that had no effect.
                 logger.info("Could not remove shortcut %s", path, exc_info=True)
         return not _shortcut_files(shortcut_id, kind)
+    existing = _prune_other_language_shortcuts(shortcut_id, kind, existing)
     if existing:
         # One is already there - the installer's own, or one the person kept -
         # so adopt it instead of adding a second entry beside it.

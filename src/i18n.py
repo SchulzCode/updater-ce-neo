@@ -6845,8 +6845,13 @@ def languages() -> dict:
     return _LANGUAGES["table"]
 
 
-def catalog_codes() -> tuple:
-    """Every language the app can be set to, curated ones first."""
+def shipped_catalog_codes() -> tuple:
+    """Every language whose catalog ships with the app, curated ones first.
+
+    This deliberately excludes catalogs learned at runtime: a build tool that
+    needs a deterministic list (the Windows installer's shortcut cleanup) must
+    not depend on what the person running the build has looked at.
+    """
     found = [code for code in _SUPPORTED]
     directory = catalog_dir()
     if directory.is_dir():
@@ -6854,6 +6859,12 @@ def catalog_codes() -> tuple:
             code = path.stem
             if code != "languages" and code not in found:
                 found.append(code)
+    return tuple(found)
+
+
+def catalog_codes() -> tuple:
+    """Every language the app can be set to, curated ones first."""
+    found = list(shipped_catalog_codes())
     # A language that only has a user-side catalog still has one: keep it
     # selectable even if a later build stops shipping that bundled file.
     try:

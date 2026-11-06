@@ -1,4 +1,4 @@
-"""Shortcut names follow the languages the Windows installer offers."""
+"""Shortcut names follow the app's languages, not only the installer's list."""
 
 import re
 from pathlib import Path
@@ -30,10 +30,21 @@ def test_installer_language_coverage_is_explicit():
 
 
 def test_creation_name_follows_the_active_installer_language(monkeypatch):
+    monkeypatch.setattr(sm, "_is_mediatek_brand", lambda: False)
     monkeypatch.setattr(sm, "current_language", lambda: "ru")
     expected = i18n.text_for_language("app_name", "ru")
     assert expected
     assert sm._creation_name(sm.APP_ID, "menu") == expected
+    assert sm._creation_name(sm.APP_ID, "desktop") == expected
+
+
+def test_creation_name_follows_languages_the_installer_cannot_offer(monkeypatch):
+    """The app catalog, not Inno's 32 languages, decides the shortcut name."""
+    monkeypatch.setattr(sm, "_is_mediatek_brand", lambda: False)
+    monkeypatch.setattr(sm, "current_language", lambda: "cy")
+    expected = i18n.text_for_language("app_name", "cy")
+    assert expected
+    assert not any("cy" in codes for codes in sm.INNO_SHORTCUT_LANGUAGES.values())
     assert sm._creation_name(sm.APP_ID, "desktop") == expected
 
 
@@ -80,6 +91,175 @@ def test_top_level_active_language_name_is_detected_without_a_target(
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def _generated_shortcut_names():
+    """The names baked into Setup for localized shortcut cleanup."""
+    path = ROOT / "scripts" / "build_windows_shortcut_names.iss"
+    assert path.is_file(), "run scripts/generate_windows_shortcut_names.py"
+    names = []
+    prefix = "  Names.Add('"
+    suffix = "');"
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        if not line.startswith(prefix):
+            continue
+        assert line.endswith(suffix), line
+        names.append(line[len(prefix) : -len(suffix)].replace("''", "'"))
+    return names
+
+
+def test_installer_cleanup_list_covers_every_app_language():
+    """Setup must know the names it cannot display itself."""
+    generated = _generated_shortcut_names()
+    expected = list(
+        sm.app_shortcut_names_for_cleanup(i18n.shipped_catalog_codes())
+    )
+    assert generated == expected
+    assert len(generated) == len({name.casefold() for name in generated})
+    assert sm.APP_NAME in generated
+    assert sm.DESKTOP_APP_NAME in generated
+    welsh = i18n.text_for_language("app_name", "cy")
+    assert welsh and welsh in generated
+    assert "SP Flash Tool" not in generated
+    assert sm.DESKTOP_APP_NAME_MEDIATEK not in generated
+
+
+@pytest.mark.parametrize("lang", ["cy", "id", "az"])
+def test_non_installer_language_shortcut_is_detected_in_an_owned_folder(
+    tmp_path, monkeypatch, lang
+):
+    assert not any(lang in codes for codes in sm.INNO_SHORTCUT_LANGUAGES.values())
+    monkeypatch.setattr(sm, "_is_mediatek_brand", lambda: False)
+    roots = _sandbox(tmp_path, monkeypatch)
+    localized = i18n.text_for_language("app_name", lang)
+    assert localized
+    folder = roots["menu"][0] / sm.DESKTOP_APP_NAME
+    folder.mkdir()
+    (folder / f"{localized}.lnk").write_bytes(b"x")
+
+    assert sm.get_state()[sm.APP_ID]["menu"] is True
+
+
+def test_creating_a_shortcut_removes_an_old_language_variant(tmp_path, monkeypatch):
+    monkeypatch.setattr(sm, "_is_mediatek_brand", lambda: False)
+    roots = _sandbox(tmp_path, monkeypatch)
+    monkeypatch.setattr(sm, "current_language", lambda: "ru")
+    old_name = i18n.text_for_language("app_name", "de")
+    old = roots["desktop"][0] / f"{old_name}.lnk"
+    old.write_bytes(b"x")
+    monkeypatch.setattr(
+        sm,
+        "_lnk_targets",
+        lambda files: {
+            sm._path_key(old): r"C:\Program Files\UpdaterCE\InnioasisUpdater.exe"
+        },
+    )
+
+    def write(target, shortcut_id):
+        Path(target).write_bytes(b"lnk")
+
+    monkeypatch.setattr(sm, "_write_windows_lnk", write)
+    monkeypatch.setattr(sm, "_write_linux_desktop", write)
+
+    assert sm.set_shortcut(sm.APP_ID, "desktop", True) is True
+    assert not old.exists()
+    assert sm.get_state()[sm.APP_ID]["desktop"] is True
+
+
+def test_language_change_renames_an_existing_shortcut_in_place(tmp_path, monkeypatch):
+    monkeypatch.setattr(sm, "_is_mediatek_brand", lambda: False)
+    roots = _sandbox(tmp_path, monkeypatch)
+    monkeypatch.setattr(sm, "current_language", lambda: "ru")
+    old_name = i18n.text_for_language("app_name", "de")
+    new_name = i18n.text_for_language("app_name", "ru")
+    old = roots["desktop"][0] / f"{old_name}.lnk"
+    old.write_bytes(b"original shortcut")
+    monkeypatch.setattr(
+        sm,
+        "_lnk_targets",
+        lambda files: {
+            sm._path_key(old): r"C:\Program Files\UpdaterCE\InnioasisUpdater.exe"
+        },
+    )
+
+    sm.reconcile_shortcut_names()
+
+    renamed = old.with_name(f"{new_name}.lnk")
+    assert not old.exists()
+    assert renamed.read_bytes() == b"original shortcut"
+    assert sm.get_state()[sm.APP_ID]["desktop"] is True
+
+
+def test_language_change_does_not_create_missing_shortcuts(tmp_path, monkeypatch):
+    monkeypatch.setattr(sm, "_is_mediatek_brand", lambda: False)
+    roots = _sandbox(tmp_path, monkeypatch)
+    monkeypatch.setattr(sm, "current_language", lambda: "ru")
+
+    sm.reconcile_shortcut_names()
+
+    for kind in ("desktop", "menu"):
+        assert all(not list(root.iterdir()) for root in roots[kind])
+
+
+def test_language_change_leaves_an_unrelated_shortcut_alone(tmp_path, monkeypatch):
+    monkeypatch.setattr(sm, "_is_mediatek_brand", lambda: False)
+    roots = _sandbox(tmp_path, monkeypatch)
+    monkeypatch.setattr(sm, "current_language", lambda: "ru")
+    other = roots["desktop"][0] / "Notepad.lnk"
+    other.write_bytes(b"not ours")
+    monkeypatch.setattr(
+        sm,
+        "_lnk_targets",
+        lambda files: {sm._path_key(other): r"C:\Windows\notepad.exe"},
+    )
+
+    sm.reconcile_shortcut_names()
+
+    assert other.exists()
+    assert sm.get_state()[sm.APP_ID]["desktop"] is False
+
+
+def test_language_change_updates_only_the_kind_that_exists(tmp_path, monkeypatch):
+    monkeypatch.setattr(sm, "_is_mediatek_brand", lambda: False)
+    roots = _sandbox(tmp_path, monkeypatch)
+    monkeypatch.setattr(sm, "current_language", lambda: "ru")
+    old_name = i18n.text_for_language("app_name", "de")
+    new_name = i18n.text_for_language("app_name", "ru")
+    folder = roots["menu"][0] / sm.DESKTOP_APP_NAME
+    folder.mkdir()
+    old = folder / f"{old_name}.lnk"
+    old.write_bytes(b"menu shortcut")
+
+    sm.reconcile_shortcut_names()
+
+    assert not old.exists()
+    assert (folder / f"{new_name}.lnk").read_bytes() == b"menu shortcut"
+    assert all(not list(root.iterdir()) for root in roots["desktop"])
+
+
+def test_disabling_removes_shortcuts_in_multiple_languages(tmp_path, monkeypatch):
+    monkeypatch.setattr(sm, "_is_mediatek_brand", lambda: False)
+    roots = _sandbox(tmp_path, monkeypatch)
+    monkeypatch.setattr(sm, "current_language", lambda: "ru")
+    old_names = [
+        i18n.text_for_language("app_name", "de"),
+        i18n.text_for_language("app_name", "ru"),
+    ]
+    old = [roots["menu"][0] / f"{name}.lnk" for name in old_names]
+    for path in old:
+        path.write_bytes(b"x")
+    monkeypatch.setattr(
+        sm,
+        "_lnk_targets",
+        lambda files: {
+            sm._path_key(path): r"C:\Program Files\UpdaterCE\InnioasisUpdater.exe"
+            for path in old
+        },
+    )
+
+    assert sm.set_shortcut(sm.APP_ID, "menu", False) is True
+    assert all(not path.exists() for path in old)
+    assert sm.get_state()[sm.APP_ID]["menu"] is False
+
+
 def _installer_shortcut_names():
     """The [CustomMessages] shortcut names the Windows installer compiles."""
     text = (ROOT / "scripts" / "build_windows_installer.iss").read_text(
@@ -100,12 +280,21 @@ def _installer_shortcut_names():
     return values
 
 
+def _iss_section(text, header):
+    """The body of a real Inno section, not a [Languages] mention in a comment."""
+    match = re.search(rf"^\[{re.escape(header)}\]\s*$", text, re.MULTILINE)
+    assert match, f"missing [{header}] section"
+    rest = text[match.end() :]
+    following = re.search(r"^\[[^\]]+\]\s*$", rest, re.MULTILINE)
+    return rest[: following.start()] if following else rest
+
+
 def test_installer_offers_exactly_the_shortcut_languages_we_map():
     """The Inno [Languages] list and the app's mapping must not drift apart."""
     text = (ROOT / "scripts" / "build_windows_installer.iss").read_text(
         encoding="utf-8-sig"
     )
-    section = text.split("[Languages]", 1)[1].split("[", 1)[0]
+    section = _iss_section(text, "Languages")
     offered = set(re.findall(r'^\s*Name:\s*"([^"]+)"', section, re.MULTILINE))
 
     assert offered == set(sm.INNO_SHORTCUT_LANGUAGES)
