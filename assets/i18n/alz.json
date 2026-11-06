@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Medre ku Updater",
  "linux_setup_view_log": "Nyuth lembe mi tic",
  "linux_setup_hide_log": "Kan lembe mi tic",
+ "single_instance_open_anyway": "Yab app kadi ango",
  "system_checker_title": "SP Flash Tool System Checker & Diagnostics",
  "system_checker_desc": "Kethu lembe ikum driver, kernel modules, twero, man runtime libraries pi bedo ku flashing maber.",
  "system_checker_run_btn": "Yub SP Flash Tool",

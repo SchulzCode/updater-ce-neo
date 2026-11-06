@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Συνέχεια στο Updater",
  "linux_setup_view_log": "Εμφάνιση Τεχνικών Στοιχείων",
  "linux_setup_hide_log": "Απόκρυψη τεχνικών στοιχείων",
+ "single_instance_open_anyway": "Ανοίξτε την εφαρμογή ούτως ή άλλως",
  "system_checker_title": "SP Flash Tool System Checker & Diagnostics",
  "system_checker_desc": "Ολοκληρωμένη επαλήθευση προγραμμάτων οδήγησης, λειτουργικών μονάδων πυρήνα, αδειών και βιβλιοθηκών χρόνου εκτέλεσης για να διασφαλιστεί αξιόπιστη αναλαμπή.",
  "system_checker_run_btn": "Προετοιμάστε το SP Flash Tool",

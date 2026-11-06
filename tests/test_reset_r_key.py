@@ -76,7 +76,11 @@ def test_r_key_resets_config_and_clears_caches(monkeypatch, tmp_path):
         assert w._flash_method == ("mtk" if paths.IS_MAC else "sp")
         assert w._flash_page.current_method() == w._flash_method
         assert s.value("advanced_settings", False, type=bool) is False
-        assert s.value("flash_method") is None
+        # Not absent: the reset puts the platform's own method back, and the
+        # settings page persists it on purpose so the default sticks.
+        from src.flash_service import default_flash_method
+
+        assert s.value("flash_method") == default_flash_method()
     finally:
         if w is not None:
             w.close()

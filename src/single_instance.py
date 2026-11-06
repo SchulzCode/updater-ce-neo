@@ -7,7 +7,9 @@ very tool that run is using. A second launch is therefore refused — it asks th
 copy already running to show its window and exits. It only ever ends that copy
 on request: when the running copy does not answer the focus request, the second
 launch offers to force quit it and take over, and the user has to say yes. That
-is the recovery path for a hung copy, not a routine takeover.
+is the recovery path for a hung copy, not a routine takeover. The same dialog,
+and a takeover that could not end the other copy, also offer Open App Anyway:
+the guard must never be the reason a user cannot open the app at all.
 
 The guard is deliberately biased towards *starting*. Refusing needs positive
 evidence of a live copy; every ambiguous case fails open:
@@ -130,6 +132,30 @@ def _copy_pid_from_identity(pid: int, identity: str) -> bool:
     return any(hint.replace("\\", "/") in text for hint in _COPY_COMMAND_HINTS)
 
 
+def _copy_pid_from_command(pid: int, command: str) -> bool:
+    """True only when a POSIX command line is a copy of this app itself.
+
+    A command line is not evidence: a shell, editor or file manager opened in
+    a folder called ``updater-ce``, or any program whose arguments mention the
+    app, would otherwise match and refuse a launch when no copy is running.
+    The guarded front ends and the development launcher are recognised by the
+    executable or the script they run, never by a folder name in an argument.
+    """
+    argv = str(command or "").split()
+    if not argv:
+        return False
+    image = argv[0].replace("\\", "/").rsplit("/", 1)[-1].lower()
+    if image.endswith(".exe"):
+        image = image[:-4]
+    if image in _COPY_IMAGE_NAMES:
+        return True
+    # A development copy runs as its interpreter; only the app's own script
+    # path among its first arguments makes it this program.
+    return any(
+        part.replace("\\", "/").endswith("src/app.py") for part in argv[1:4]
+    )
+
+
 def _windows_process_image_names() -> dict:
     """PID -> image name from a Toolhelp snapshot, without spawning a helper."""
     try:
@@ -231,7 +257,7 @@ def find_running_copy_pids() -> list[int]:
                 pid = int(pid_text)
             except ValueError:
                 continue
-            if pid and pid not in (me, parent) and _copy_pid_from_identity(pid, command):
+            if pid and pid not in (me, parent) and _copy_pid_from_command(pid, command):
                 found.append(pid)
     except Exception:
         logger.debug("Could not list running copies", exc_info=True)
@@ -628,7 +654,6 @@ def _pid_alive(pid: int) -> bool:
         return str(pid) in (out or "")
     try:
         os.kill(pid, 0)
-        return True
     except ProcessLookupError:
         return False
     except PermissionError:
@@ -636,6 +661,23 @@ def _pid_alive(pid: int) -> bool:
         return True
     except OSError:
         return False
+    # A zombie is not a running copy: it can never answer, so a lock left by a
+    # copy that crashed and was never reaped must not refuse launches forever.
+    try:
+        state = (
+            subprocess.run(
+                ["ps", "-o", "stat=", "-p", str(pid)],
+                capture_output=True,
+                text=True,
+                timeout=3,
+            ).stdout
+            or ""
+        ).strip().upper()
+    except Exception:
+        return True
+    if not state:
+        return True
+    return not state.startswith("Z")
 
 
 def _pid_identity(pid: int) -> str:
@@ -671,13 +713,18 @@ def _pid_identity(pid: int) -> str:
 
 
 # Anything a copy of this project runs as: the packaged front ends, the
-# development launcher, and the frozen app's own bootloader.
+# development launcher, and the frozen app's own bootloader. Deliberately not
+# generic words: a recycled pid that now belongs to some other updater or to a
+# plain Python process must read as foreign, or a stale lock refuses every
+# launch on that machine (the Linux reports: no window, still "already running").
 _OUR_APP_HINTS = (
     "innioasis",
-    "updater",
-    "mediatelkinstaller",
+    "updater-ce",
+    "updater ce",
+    "updaterce",
+    "src/app.py",
     "launcher.py",
-    "python",
+    "mediatek",
 )
 
 
@@ -818,8 +865,14 @@ def end_running_copy(pid: int, wait_s: float = 5.0) -> bool:
     return not _pid_alive(pid)
 
 
-def _explain_force_failed(pid: int = 0) -> None:
-    """Say the takeover did not work, and how to end the copy by hand."""
+def _explain_force_failed(pid: int = 0) -> bool:
+    """Say the takeover did not work, and offer to open the app anyway.
+
+    The copy that answered nothing could not be ended (another account, a
+    protected process, a wedged kernel). Refusing the launch then leaves the
+    user with no way in at all, so the notice offers Open App Anyway; True
+    means the user chose it.
+    """
     from PySide6.QtWidgets import QMessageBox
 
     from .i18n import tr
@@ -832,16 +885,24 @@ def _explain_force_failed(pid: int = 0) -> None:
         detail = f"{detail}\n\nPID: {pid}"
     box.setText(detail)
     box.setIcon(QMessageBox.Icon.Warning)
+    anyway = box.addButton(
+        tr("single_instance_open_anyway"), QMessageBox.ButtonRole.AcceptRole
+    )
+    dismiss = box.addButton(_dismiss_label(), QMessageBox.ButtonRole.RejectRole)
+    box.setDefaultButton(dismiss)
     box.exec()
+    return box.clickedButton() is anyway
 
 
 def _explain_already_running(focus_failed: bool = False, pid: int = 0) -> str:
-    """Say why this launch stops; on an unanswered focus, offer the takeover.
+    """Say why this launch stops; on an unanswered focus, offer the ways in.
 
-    Returns ``"force"`` only when the user chose to end a copy that did not
-    answer. The copy that is running can own the USB device and its own flash
-    tool, so the destructive answer is never the default and its copy says the
-    install in progress would be interrupted.
+    Returns ``"force"`` when the user chose to end a copy that did not answer,
+    and ``"anyway"`` when they chose to open this copy beside it instead. The
+    copy that is running can own the USB device and its own flash tool, so the
+    destructive answer is never the default and its copy says the install in
+    progress would be interrupted. Open App Anyway is the fallback for a copy
+    that refuses to be ended: a guard must never lock the user out.
     """
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
@@ -873,12 +934,18 @@ def _explain_already_running(focus_failed: bool = False, pid: int = 0) -> str:
 
     buttons = QHBoxLayout()
     buttons.addStretch(1)
-    choice = ""
+    # Distinct results: both ways forward accept the dialog, but only one may
+    # end the other copy.
+    force_code, anyway_code = 1, 2
     if focus_failed and pid > 0:
         force = QPushButton(tr("single_instance_force_quit"))
         force.setAutoDefault(False)
-        force.clicked.connect(dialog.accept)
+        force.clicked.connect(lambda: dialog.done(force_code))
         buttons.addWidget(force)
+        anyway = QPushButton(tr("single_instance_open_anyway"))
+        anyway.setAutoDefault(False)
+        anyway.clicked.connect(lambda: dialog.done(anyway_code))
+        buttons.addWidget(anyway)
     dismiss = QPushButton(tr("btn_cancel") if focus_failed else _dismiss_label())
     dismiss.setDefault(True)
     dismiss.setAutoDefault(True)
@@ -886,9 +953,12 @@ def _explain_already_running(focus_failed: bool = False, pid: int = 0) -> str:
     buttons.addWidget(dismiss)
     layout.addLayout(buttons)
 
-    if dialog.exec() == QDialog.DialogCode.Accepted:
-        choice = "force"
-    return choice
+    result = dialog.exec()
+    if result == force_code:
+        return "force"
+    if result == anyway_code:
+        return "anyway"
+    return ""
 
 
 def _busy_copy_running() -> bool:
@@ -981,11 +1051,14 @@ def _guarded(app, lock: Optional["InstanceLock"], quiet: bool = False) -> bool:
         if _busy_copy_running():
             _explain_busy_copy()
             return False
-        if _explain_already_running(focus_failed=True, pid=pid) != "force":
+        choice = _explain_already_running(focus_failed=True, pid=pid)
+        if choice == "anyway":
+            logger.warning("Opening beside the running copy at the user's request")
+            return True
+        if choice != "force":
             return False
         if not end_running_copy(pid):
-            _explain_force_failed(pid)
-            return False
+            return _explain_force_failed(pid)
         lock = lock or diagnosis
         lock.drop()
         if lock.acquire() and acquire_windows_mutex():
@@ -1019,14 +1092,19 @@ def _guarded(app, lock: Optional["InstanceLock"], quiet: bool = False) -> bool:
                 _explain_busy_copy()
                 lock.release()
                 return False
-            if _explain_already_running(focus_failed=True, pid=pids[0]) != "force":
+            choice = _explain_already_running(focus_failed=True, pid=pids[0])
+            if choice == "anyway":
+                logger.warning("Opening beside pid %s at the user's request", pids[0])
+                lock.release()
+                return True
+            if choice != "force":
                 lock.release()
                 return False
             for pid in pids:
                 if not end_running_copy(pid):
-                    _explain_force_failed()
+                    open_anyway = _explain_force_failed()
                     lock.release()
-                    return False
+                    return open_anyway
         _hold_lock(app, lock)
         return True
 
@@ -1061,10 +1139,13 @@ def _guarded(app, lock: Optional["InstanceLock"], quiet: bool = False) -> bool:
     if _busy_copy_running():
         _explain_busy_copy()
         return False
-    if _explain_already_running(focus_failed=True, pid=pid) != "force":
+    choice = _explain_already_running(focus_failed=True, pid=pid)
+    if choice == "anyway":
+        logger.warning("Opening beside pid %s at the user's request", pid)
+        return True
+    if choice != "force":
         return False
     if end_running_copy(pid) and lock.drop() and lock.acquire():
         _hold_lock(app, lock)
         return True
-    _explain_force_failed(pid)
-    return False
+    return _explain_force_failed(pid)

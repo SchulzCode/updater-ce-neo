@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Witer pis aktualisiire",
  "linux_setup_view_log": "Tsaych ti teknixe detaile .",
  "linux_setup_hide_log": "Teknixe detaile ferxtekele",
+ "single_instance_open_anyway": "App uf mache soo kaar",
  "system_checker_title": "SP Flash-Tool-System Kontroler & Diagnostik",
  "system_checker_desc": "Umfasent ferifikeerung fon te xraywer, kernel module, erlaupnis, un runtime biblioteeke fer ti fertrauliche fliise se sicher lose.",
  "system_checker_run_btn": "SP Flash-Tool foer perayte",

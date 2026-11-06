@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Torus ma hubani Pembaruan",
  "linux_setup_view_log": "Patuduhkon Rincian Teknis",
  "linux_setup_hide_log": "Bunihon Rincian Teknis",
+ "single_instance_open_anyway": "Buka ma aplikasi ai",
  "system_checker_title": "SP Flash Tool System Checker & Diagnostics",
  "system_checker_desc": "Verifikasi komprehensif bani driver, modul kernel, izin, pakon perpustakaan runtime laho memastikan flashing na boi ihaporsayai.",
  "system_checker_run_btn": "Pasirsirhon SP Flash Tool",

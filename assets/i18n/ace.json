@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Lanjot keu Update .",
  "linux_setup_view_log": "Peuleumah Rincian Teknis",
  "linux_setup_hide_log": "Peusom Rincian Teknis .",
+ "single_instance_open_anyway": "Buka App Pokoknya .",
  "system_checker_title": "SP Alat Kilat Sistem Peumeriksa & Diagnostik .",
  "system_checker_desc": "Verifikasi komprehensif keu driver, modul kernel, izin, ngon pustaka runtime keu geupeupasoe flashing nyang jeuet dipeucaya.",
  "system_checker_run_btn": "Siapkan Alat Flash SP .",

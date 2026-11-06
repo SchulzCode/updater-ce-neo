@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Lanjutkan ke Pembaruan",
  "linux_setup_view_log": "Tampilkan Detail Teknis",
  "linux_setup_hide_log": "Sembunyikan Detail Teknis",
+ "single_instance_open_anyway": "Tetap Buka Aplikasi",
  "system_checker_title": "Pemeriksa & Diagnostik Sistem Alat Flash SP",
  "system_checker_desc": "Verifikasi komprehensif terhadap driver, modul kernel, izin, dan pustaka runtime untuk memastikan flashing yang andal.",
  "system_checker_run_btn": "Siapkan SP FlashTool",

@@ -112,9 +112,8 @@ def _hint_text_link(href: str, text: str) -> str:
 
 #: Settings group for the install card's "read it, put it away" hints. One key
 #: per hint, so dismissing the paperclip tip never hides the microSD line.
-#: A dismissal is permanent: ``MainWindow.reset_all_configuration_and_caches``
-#: snapshots this group across its settings clear, because a hint the user has
-#: already read never needs showing again.
+#: A dismissal lasts until the user resets the app with R: that clears this
+#: group with the rest of the settings, so the tips come back for a fresh start.
 _HINT_DISMISS_GROUP = "dismissed_install_hints"
 
 

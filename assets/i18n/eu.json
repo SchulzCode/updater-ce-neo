@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Jarraitu Updater-era",
  "linux_setup_view_log": "Erakutsi xehetasun teknikoak",
  "linux_setup_hide_log": "Ezkutatu xehetasun teknikoak",
+ "single_instance_open_anyway": "Ireki aplikazioa Dena den",
  "system_checker_title": "SP Flash Tool Sistemaren egiaztatzailea eta diagnostikoa",
  "system_checker_desc": "Kontrolatzaileen, nukleoko moduluen, baimenen eta exekuzio-liburutegien egiaztapen integrala keinu fidagarria bermatzeko.",
  "system_checker_run_btn": "Prestatu SP Flash tresna",

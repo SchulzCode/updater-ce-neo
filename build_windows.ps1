@@ -34,7 +34,7 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $ProjectRoot
 
-$Version = "2.5.2"
+$Version = "2.5.3"
 $ConfigFile = Join-Path $ProjectRoot "src\config.py"
 if (Test-Path $ConfigFile) {
     $match = Select-String -Path $ConfigFile -Pattern 'APP_VERSION\s*=\s*"([^"]+)"' | Select-Object -First 1

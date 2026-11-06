@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "به Updater ادامه دهید",
  "linux_setup_view_log": "نمایش جزئیات فنی",
  "linux_setup_hide_log": "پنهان کردن جزئیات فنی",
+ "single_instance_open_anyway": "به هر حال برنامه را باز کنید",
  "system_checker_title": "SP Flash Tool System Checker & Diagnostics",
  "system_checker_desc": "تأیید جامع درایورها، ماژول‌های هسته، مجوزها و کتابخانه‌های زمان اجرا برای اطمینان از فلش قابل اعتماد.",
  "system_checker_run_btn": "SP Flash Tool را آماده کنید",

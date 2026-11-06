@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Halt fram at dagføra",
  "linux_setup_view_log": "Vís tekniskar smálutir",
  "linux_setup_hide_log": "Goym tekniskar smálutir",
+ "single_instance_open_anyway": "Opna appina allíkavæl",
  "system_checker_title": "SP Flash tól skipanarkanning og sjúkugreining",
  "system_checker_desc": "Umfatandi sannroynd av bilførarum, kjarnumodulum, loyvum og koyritíðarbókasøvnum fyri at tryggja álítandi blink.",
  "system_checker_run_btn": "Fyrireika SP Flash tólið",

@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Tovább az Updaterhez",
  "linux_setup_view_log": "Műszaki részletek megjelenítése",
  "linux_setup_hide_log": "Technikai részletek elrejtése",
+ "single_instance_open_anyway": "Nyissa meg az alkalmazást",
  "system_checker_title": "SP Flash Tool rendszerellenőrző és diagnosztika",
  "system_checker_desc": "Az illesztőprogramok, kernelmodulok, engedélyek és futásidejű könyvtárak átfogó ellenőrzése a megbízható villogás érdekében.",
  "system_checker_run_btn": "Készítse elő az SP Flash Tool-t",

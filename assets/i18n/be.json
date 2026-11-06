@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Перайсці да праграмы абнаўлення",
  "linux_setup_view_log": "Паказаць тэхнічныя дэталі",
  "linux_setup_hide_log": "Схаваць тэхнічныя дэталі",
+ "single_instance_open_anyway": "Усё роўна адкрыйце праграму",
  "system_checker_title": "Праграма праверкі і дыягностыкі сістэмы SP Flash Tool",
  "system_checker_desc": "Комплексная праверка драйвераў, модуляў ядра, дазволаў і бібліятэк часу выканання для забеспячэння надзейнага перапрашыўкі.",
  "system_checker_run_btn": "Падрыхтуйце SP Flash Tool",

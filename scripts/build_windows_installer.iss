@@ -36,7 +36,7 @@
   #define MyAppGroup MyAppName
 #endif
 #ifndef MyAppVersion
-  #define MyAppVersion "2.5.2"
+  #define MyAppVersion "2.5.3"
 #endif
 #ifndef MyAppPublisher
   #define MyAppPublisher "Ryan Specter"

@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Ituloy ti Updater",
  "linux_setup_view_log": "Ipakita dagiti Teknikal a Detalye",
  "linux_setup_hide_log": "Ilemmeng dagiti Teknikal a Detalye",
+ "single_instance_open_anyway": "Luktan ti App Aniaman",
  "system_checker_title": "SP Flash Tool Sistema nga Checker & Diagnostics",
  "system_checker_desc": "Komprehensibo a panangipaneknek kadagiti drayber, dagiti modulo ti kernel, dagiti pammalubos, ken dagiti biblioteka ti oras ti panagtaray tapno masigurado ti mapagtalkan a panagkidem.",
  "system_checker_run_btn": "Isagana ti SP Flash Tool",

@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Ҫӗнетӳҫӗ патне малалла тӑсӑр",
  "linux_setup_view_log": "Техника енчен илсен, ҫакна кӑтартӑр",
  "linux_setup_hide_log": "Техника даннӑйӗсене пытарӑр",
+ "single_instance_open_anyway": "Ҫапах та приложенине уҫӑр",
  "system_checker_title": "SP Flash Tool System Checker & Diagnostics",
  "system_checker_desc": "Драйверсене, ядро ​​модулӗсене, ирӗксене тата ӗҫ вӑхӑчӗн библиотекисене тӗплӗн тӗрӗслесси, ҫапла майпа шанчӑклӑ ҫутатассине тивӗҫтермелле.",
  "system_checker_run_btn": "SP Flash Tool хатӗрлӗр",

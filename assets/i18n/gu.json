@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "અપડેટર પર ચાલુ રાખો",
  "linux_setup_view_log": "ટેકનિકલ વિગતો બતાવો",
  "linux_setup_hide_log": "ટેકનિકલ વિગતો છુપાવો",
+ "single_instance_open_anyway": "કોઈપણ રીતે એપ્લિકેશન ખોલો",
  "system_checker_title": "એસપી ફ્લેશ ટૂલ સિસ્ટમ ચેકર અને ડાયગ્નોસ્ટિક્સ",
  "system_checker_desc": "વિશ્વસનીય ફ્લેશિંગની ખાતરી કરવા માટે ડ્રાઇવરો, કર્નલ મોડ્યુલ્સ, પરવાનગીઓ અને રનટાઇમ લાઇબ્રેરીઓની વ્યાપક ચકાસણી.",
  "system_checker_run_btn": "SP ફ્લેશ ટૂલ તૈયાર કરો",

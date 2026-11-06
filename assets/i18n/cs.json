@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Pokračujte na Updater",
  "linux_setup_view_log": "Zobrazit technické podrobnosti",
  "linux_setup_hide_log": "Skrýt technické podrobnosti",
+ "single_instance_open_anyway": "Přesto otevřete aplikaci",
  "system_checker_title": "SP Flash Tool Kontrola a diagnostika systému",
  "system_checker_desc": "Komplexní ověřování ovladačů, modulů jádra, oprávnění a runtime knihoven pro zajištění spolehlivého blikání.",
  "system_checker_run_btn": "Připravte nástroj SP Flash Tool",

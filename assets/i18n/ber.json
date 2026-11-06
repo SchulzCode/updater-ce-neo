@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "ⴽⴻⵎⵎⴻⵍ ⵙ ⵓⵙⵎⴰⵢⵏⵓⵜ",
  "linux_setup_view_log": "ⵙⴽⴻⵏ ⵜⵉⴼⵢⴰⵔ ⵜⵉⵜⵉⴽⵏⵓⵍⵓⵊⵉⵢⵉⵏ",
  "linux_setup_hide_log": "ⴼⴼⴻⵔ ⵜⵉⴼⵢⴰⵔ ⵜⵉⵜⵉⴽⵏⵓⵍⵓⴵⵉⵢⵉⵏ",
+ "single_instance_open_anyway": "ⵍⴷⵉ Asnas ⴰⴽⴽⴻⵏ ⵢⴻⴱⵖⵓ ⵢⵉⵍⵉ",
  "system_checker_title": "ⴰⵙⴻⴽⵛⴻⵎ ⵏ ⵓⵏⴰⴳⵔⴰⵡ ⵏ ⵡⴰⵍⵍⴰⵍⴻⵏ ⵏ SP ⴼⵍⴰⵙⵀ ⴷ ⵓⵙⴻⴽⵍⴻⵙ",
  "system_checker_desc": "ⴰⵙⴽⴰⵙⵉ ⴰⵖⴻⵍⵏⴰⵡ ⵏ ⵢⵉⵎⴻⵙⵏⴰⵍⵍⵓⵏⴻⵏ, ⵉⵎⵓⴹⴰⵏ ⵏ ⵜⴽⴻⵔⵔⵓⵙⵜ, ⵉⵣⴻⵔⴼⴰⵏ, ⴷ ⵜⴻⵎⴽⴰⵔⴹⵉⵢⵉⵏ ⵏ ⵡⴰⴽⵓⴷ ⵏ ⵓⵅⴻⴷⴷⵉⵎ ⴰⴽⴽⴻⵏ ⴰⴷ ⴹⴻⵎⵏⴻⵏ ⴰⵙⴻⵏⵇⴻⴷ ⵢⴻⵜⵜⵡⴰⵙⵏⴻⵏ.",
  "system_checker_run_btn": "ⵀⴻⴳⴳⵉⴷ ⴰⵍⵍⴰⵍ ⵏ SP Flash",

@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "המשך לעדכון",
  "linux_setup_view_log": "הצג פרטים טכניים",
  "linux_setup_hide_log": "הסתר פרטים טכניים",
+ "single_instance_open_anyway": "פתח את האפליקציה בכל מקרה",
  "system_checker_title": "SP Flash Tool בודק ואבחון מערכת",
  "system_checker_desc": "אימות מקיף של מנהלי התקנים, מודולי ליבה, הרשאות וספריות זמן ריצה כדי להבטיח מהבהב מהימן.",
  "system_checker_run_btn": "הכן SP Flash Tool",

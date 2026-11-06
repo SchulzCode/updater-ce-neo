@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Шэнэлэгшэдые үргэлжэлүүлхэ",
  "linux_setup_view_log": "Техническэ дэлгэрэнгы мэдээсэл харуулха",
  "linux_setup_hide_log": "Техническэ дэлгэрэнгы мэдээсэл нюуха",
+ "single_instance_open_anyway": "Ямаршье һаа апп нээхэ",
  "system_checker_title": "SP Flash Tool System Checker & Diagnostics",
  "system_checker_desc": "Найдвартай гэрэлтүүлгые хангахын тулада драйвернуудые, түб модулиие, эрхэнүүдые, гүйсэдхэлэй номой сангуудые дүүрэн шалгаха.",
  "system_checker_run_btn": "SP Flash хэрэгсэл бэлдэхэ",

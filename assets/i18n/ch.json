@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Sige ha' i Updater",
  "linux_setup_view_log": "Fa'nu'i i Detåtes Tekniku siha",
  "linux_setup_hide_log": "Na'ma'å'ñao i Detalles Tekniku siha",
+ "single_instance_open_anyway": "Abri i App Lao",
  "system_checker_title": "SP Flash Tool System Checker & Diagnostics",
  "system_checker_desc": "Kompletu na prubåba put i draiber siha, i kernel modules, i permiso siha, yan i runtime libraries para u ma asegura na siña ma konfi'a i flashing.",
  "system_checker_run_btn": "Na'listo i SP Flash Tool",

@@ -92,6 +92,22 @@ def no_running_copy(monkeypatch):
     monkeypatch.setattr(single_instance, "find_running_copy_pids", lambda: [])
 
 
+def test_a_folder_name_in_another_programs_argv_is_not_a_copy():
+    """Linux saw a second copy in every editor opened on the project folder."""
+    assert not single_instance._copy_pid_from_command(
+        4242, "/usr/bin/code /home/user/updater-ce"
+    )
+    assert not single_instance._copy_pid_from_command(
+        4242, "/usr/bin/python3 -m http.server --directory /home/user/updater-ce"
+    )
+    assert single_instance._copy_pid_from_command(
+        4242, "/usr/bin/python3 /home/user/updater-ce/src/app.py"
+    )
+    assert single_instance._copy_pid_from_command(
+        4242, "/opt/InnioasisUpdater/InnioasisUpdater"
+    )
+
+
 def test_a_responsive_copy_is_focused_and_never_ended(
     monkeypatch, free_mutex, own_process, app
 ):
@@ -132,6 +148,58 @@ def test_the_unanswered_copy_is_only_ended_when_the_user_asks(
     assert single_instance.ensure_single_instance(app, lock) is True
     assert ended == [4242]
     assert app._instance_lock is lock
+
+
+def test_open_anyway_starts_beside_an_unanswered_copy(
+    monkeypatch, free_mutex, own_process, app
+):
+    """The dialog offers a way in even when the other copy cannot be ended."""
+    monkeypatch.setattr(
+        single_instance, "_focus_running_copy", lambda *a, **k: False
+    )
+    monkeypatch.setattr(
+        single_instance, "_explain_already_running", lambda **k: "anyway"
+    )
+    monkeypatch.setattr(
+        single_instance,
+        "end_running_copy",
+        lambda pid: pytest.fail("Open App Anyway must not end the other copy"),
+    )
+
+    assert single_instance.ensure_single_instance(app, _FakeLock()) is True
+    assert not hasattr(app, "_instance_lock")
+
+
+def test_a_failed_force_quit_can_still_open_the_app(
+    monkeypatch, free_mutex, own_process, app
+):
+    """When the end really fails, the user is not locked out by the guard."""
+    monkeypatch.setattr(
+        single_instance, "_focus_running_copy", lambda *a, **k: False
+    )
+    monkeypatch.setattr(
+        single_instance, "_explain_already_running", lambda **k: "force"
+    )
+    monkeypatch.setattr(single_instance, "end_running_copy", lambda pid: False)
+    monkeypatch.setattr(single_instance, "_explain_force_failed", lambda pid=0: True)
+
+    assert single_instance.ensure_single_instance(app, _FakeLock()) is True
+    assert not hasattr(app, "_instance_lock")
+
+
+def test_a_failed_force_quit_can_still_be_declined(
+    monkeypatch, free_mutex, own_process, app
+):
+    monkeypatch.setattr(
+        single_instance, "_focus_running_copy", lambda *a, **k: False
+    )
+    monkeypatch.setattr(
+        single_instance, "_explain_already_running", lambda **k: "force"
+    )
+    monkeypatch.setattr(single_instance, "end_running_copy", lambda pid: False)
+    monkeypatch.setattr(single_instance, "_explain_force_failed", lambda pid=0: False)
+
+    assert single_instance.ensure_single_instance(app, _FakeLock()) is False
 
 
 def test_a_declined_force_quit_leaves_the_running_copy_alone(

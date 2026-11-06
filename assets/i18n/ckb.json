@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "بەردەوام بە لە Updater",
  "linux_setup_view_log": "وردەکاری تەکنیکی پیشان بدە",
  "linux_setup_hide_log": "وردەکاری تەکنیکی بشارەوە",
+ "single_instance_open_anyway": "بەهەر حاڵ ئەپ بکەرەوە",
  "system_checker_title": "SP Flash Tool پشکنەری سیستەم و دەستنیشانکردن",
  "system_checker_desc": "پشتڕاستکردنەوەی گشتگیری شۆفێران، مۆدیولەکانی ناوک، مۆڵەتەکان و کتێبخانەکانی کاتی جێبەجێکردن بۆ دڵنیابوون لە فلاشکردنی متمانەپێکراو.",
  "system_checker_run_btn": "ئامێری فلاشی SP ئامادە بکە",

@@ -1621,6 +1621,14 @@ _STRINGS: dict = {
         "de": "Beenden und neu starten",
         "ja": "強制終了して再起動",
     },
+    "single_instance_open_anyway": {
+        "en": "Open App Anyway",
+        "zh-CN": "仍然打开",
+        "fr": "Ouvrir quand même",
+        "es": "Abrir de todos modos",
+        "de": "Trotzdem öffnen",
+        "ja": "それでも開く",
+    },
     "single_instance_force_failed": {
         "en": "The running copy could not be ended. Quit it yourself, then start the updater again.",
         "zh-CN": "无法结束正在运行的副本。请手动退出它，然后重新启动更新器。",

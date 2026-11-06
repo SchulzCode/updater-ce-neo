@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "E hoʻomau i ka Updater",
  "linux_setup_view_log": "Hōʻike i nā kikoʻī ʻenehana",
  "linux_setup_hide_log": "Hūnā i nā kikoʻī ʻenehana",
+ "single_instance_open_anyway": "E wehe i ka App",
  "system_checker_title": "SP Flash Tool System Checker & Diagnostics",
  "system_checker_desc": "ʻO ka hōʻoia piha ʻana o nā mea hoʻokele, nā modula kernel, nā ʻae, a me nā hale waihona puke holo e hōʻoia i ka uila uila.",
  "system_checker_run_btn": "E hoʻomākaukau i ka mea hana SP Flash",

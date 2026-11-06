@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Trochgean nei Updater",
  "linux_setup_view_log": "Lit Technyske Details sjen",
  "linux_setup_hide_log": "Ferbergje technyske details",
+ "single_instance_open_anyway": "Iepenje App Anyway",
  "system_checker_title": "SP Flash Tool System Checker & Diagnostics",
  "system_checker_desc": "Wiidweidige ferifikaasje fan sjauffeurs, kernelmodules, tagongsrjochten en runtime-biblioteken om betrouber flitsen te garandearjen.",
  "system_checker_run_btn": "Tariede SP Flash Tool",

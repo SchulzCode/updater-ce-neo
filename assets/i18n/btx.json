@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Terusken ku Update .",
  "linux_setup_view_log": "Cidahken Rincian Teknis .",
  "linux_setup_hide_log": "Buniken Rincian Teknis .",
+ "single_instance_open_anyway": "Buka App Bagepe .",
  "system_checker_title": "SP Alat Kilat Sistem Pemeriksa & Diagnostik .",
  "system_checker_desc": "Verifikasi si komprehensif kerna driver, modul kernel, izin, ras perpustakaan runtime guna memastikan flashing si andal.",
  "system_checker_run_btn": "Sikapken Alat Kilat SP .",

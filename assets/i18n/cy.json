@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Parhewch i Updater",
  "linux_setup_view_log": "Dangos Manylion Technegol",
  "linux_setup_hide_log": "Cuddio Manylion Technegol",
+ "single_instance_open_anyway": "Ap Agored Beth bynnag",
  "system_checker_title": "SP Flash Tool System Checker & Diagnosteg",
  "system_checker_desc": "Gwiriad cynhwysfawr o yrwyr, modiwlau cnewyllyn, caniatadau, a llyfrgelloedd amser rhedeg i sicrhau fflachio dibynadwy.",
  "system_checker_run_btn": "Paratoi Offeryn Flash SP",

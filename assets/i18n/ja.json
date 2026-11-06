@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "アップデーターに進む",
  "linux_setup_view_log": "技術的な詳細を表示",
  "linux_setup_hide_log": "技術的な詳細を隠す",
+ "single_instance_open_anyway": "とにかくアプリを開く",
  "system_checker_title": "SP Flash Tool システムチェッカーと診断",
  "system_checker_desc": "ドライバー、カーネルモジュール、権限、ランタイムライブラリを包括的に検証して、信頼性の高いフラッシュを保証します。",
  "system_checker_run_btn": "SPフラッシュツールの準備",

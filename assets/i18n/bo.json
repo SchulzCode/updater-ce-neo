@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "མུ་མཐུད་དུ་གསར་བཅོས་བྱེད་པ།",
  "linux_setup_view_log": "ལག་རྩལ་ཞིབ་ཕྲ་སྟོན་པ།",
  "linux_setup_hide_log": "ལག་རྩལ་ཞིབ་ཕྲ་སྦས་པ།",
+ "single_instance_open_anyway": "གང་ལྟར་མཉེན་ཆས་ཁ་ཕྱེ།",
  "system_checker_title": "SPགློག་འོད་ལག་ཆའི་མ་ལག་ཞིབ་བཤེར་དང་ནད་རྟགས།",
  "system_checker_desc": "བརྟན་པོའི་ངང་འོད་འཕྲོ་བར་འགན་ལེན་བྱེད་པའི་ཆེད་དུ་སྒུལ་གཏོང་འཕྲུལ་ཆས་དང་།",
  "system_checker_run_btn": "SPགློག་འོད་ལག་ཆ་གྲ་སྒྲིག་བྱས།",

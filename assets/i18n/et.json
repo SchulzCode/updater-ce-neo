@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Jätkake värskendajaga",
  "linux_setup_view_log": "Näita tehnilisi üksikasju",
  "linux_setup_hide_log": "Peida tehnilised üksikasjad",
+ "single_instance_open_anyway": "Avage rakendus ikkagi",
  "system_checker_title": "SP Flash Tool süsteemikontroll ja diagnostika",
  "system_checker_desc": "Draiverite, kerneli moodulite, õiguste ja käitusaja teekide põhjalik kontrollimine, et tagada usaldusväärne vilkumine.",
  "system_checker_run_btn": "Valmistage ette SP Flash Tool",

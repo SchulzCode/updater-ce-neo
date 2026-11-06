@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "আপডেটাৰলৈ আগবাঢ়ক",
  "linux_setup_view_log": "কাৰিকৰী বিৱৰণ দেখুৱাওক",
  "linux_setup_hide_log": "কাৰিকৰী বিৱৰণ লুকুৱাওক",
+ "single_instance_open_anyway": "যিয়েই নহওক এপ খোলক",
  "system_checker_title": "SP ফ্লেচ সঁজুলি চিস্টেম পৰীক্ষক আৰু নিদান",
  "system_checker_desc": "চালক, কাৰ্ণেল মডিউল, অনুমতি, আৰু চলনসময় লাইব্ৰেৰীসমূহৰ বিস্তৃত সত্যাপন নিৰ্ভৰযোগ্য ফ্লেছিং সুনিশ্চিত কৰিবলে।",
  "system_checker_run_btn": "SP ফ্লেচ সঁজুলি প্ৰস্তুত কৰক",

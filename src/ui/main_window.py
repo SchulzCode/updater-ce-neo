@@ -2877,18 +2877,16 @@ class MainWindow(QMainWindow):
         from .. import device_tracking, downloads, config
         from ..i18n import translator
 
-        # 1. Clear QSettings across all namespaces. What the user has read and
-        # put away survives: a hint dismissed with Got it (or an X) is never
-        # shown again, and a reset clears preferences, not memory. Snapshot the
-        # dismissals, clear, then write them back.
-        from .flash_page import _HINT_DISMISS_GROUP
-
+        # 1. Clear QSettings across all namespaces. The battery reminder keeps
+        # its dismissal (closing that toast is permanent), but the install
+        # card tips do not: R is how a user who wants the How? tip or the
+        # keep-data explanation back gets them, so their dismissals go with the
+        # rest of the settings and the card offers them again.
         def _dismissals(store):
             return {
                 key: store.value(key)
                 for key in store.allKeys()
-                if key.startswith(f"{_HINT_DISMISS_GROUP}/")
-                or key == "battery_hint_dismissed"
+                if key == "battery_hint_dismissed"
             }
 
         s = QSettings("innioasis", "updater")
@@ -3007,6 +3005,27 @@ class MainWindow(QMainWindow):
             self._settings_page.refresh_settings()
         if hasattr(self, "_flash_page"):
             self._flash_page.set_method(self._flash_method)
+            # The tips were just un-dismissed, and a reveal made in this session
+            # is memory too: a card already on screen must offer its How? link
+            # and keep-data explanation again, not keep the reset-time state.
+            try:
+                if hasattr(self._flash_page, "_paperclip_revealed"):
+                    self._flash_page._paperclip_revealed = False
+                if hasattr(self._flash_page, "_keep_data_warning_revealed"):
+                    self._flash_page._keep_data_warning_revealed = False
+                # Only a card that is actually showing needs redrawing; the
+                # next visit refreshes its hints on the way in.
+                stack = getattr(self, "_stack", None)
+                if stack is None or stack.currentWidget() is self._flash_page:
+                    for name in ("_update_paperclip_hint", "_update_keep_data_warning"):
+                        refresh = getattr(self._flash_page, name, None)
+                        if callable(refresh):
+                            refresh()
+                    sync_band = getattr(self._flash_page, "_sync_wait_band_page", None)
+                    if callable(sync_band):
+                        sync_band()
+            except Exception:
+                logger.debug("Could not restore the install hints after reset", exc_info=True)
 
         self._apply_donation_visibility(False)
         if hasattr(self, "_select_page"):

@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Terus ke Update",
  "linux_setup_view_log": "Tunjukka Penerang Teknikal",
  "linux_setup_hide_log": "Lamun Penerang Teknikal",
+ "single_instance_open_anyway": "Buka App Bakani pan",
  "system_checker_title": "Pemeresa & Diagnostik Sistem Perengka Kilat SP",
  "system_checker_desc": "Pengesah ti komprehensif ba pemandu, modul kernel, pemendar, enggau librari runtime dikena nentuka flashing ti tau dikearapka.",
  "system_checker_run_btn": "Nyediaka Perengka Kilat SP .",

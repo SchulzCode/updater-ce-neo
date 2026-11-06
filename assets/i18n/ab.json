@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Арҿыцра иацҵатәуп",
  "linux_setup_view_log": "Атехникатә детальқәа аарԥштәуп",
  "linux_setup_hide_log": "Атехникатә детальқәа ҵәахтәуп",
+ "single_instance_open_anyway": "Апрограмма аарттәуп",
  "system_checker_title": "SP Flash Tool Асистема агәаҭаҩи адиагностикеи",
  "system_checker_desc": "Адрайверқәа, акернел амодульқәа, азинқәа, аусураантәи абиблиотекақәа зегь рыла рыгәаҭара, игәрагоу ацәырҵра аиқәыршәаразы.",
  "system_checker_run_btn": "SP Флеш Аинструмент азыҟаҵара",

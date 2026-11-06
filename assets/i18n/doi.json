@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "अपडेटर पर जारी रखो",
  "linux_setup_view_log": "तकनीकी विवरण दस्सो",
  "linux_setup_hide_log": "तकनीकी विवरण छिपाओ",
+ "single_instance_open_anyway": "वैसे भी ऐप खोलो",
  "system_checker_title": "एसपी फ्लैश टूल सिस्टम चेकर ते निदान",
  "system_checker_desc": "भरोसेमंद फ्लैशिंग गी सुनिश्चत करने लेई ड्राइवरें, कर्नेल मॉड्यूल, अनुमतियें, ते रनटाइम लाइब्रेरी दा व्यापक सत्यापन.",
  "system_checker_run_btn": "एसपी फ्लैश टूल तैयार करो",

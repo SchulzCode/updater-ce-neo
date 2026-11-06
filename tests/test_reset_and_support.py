@@ -530,21 +530,35 @@ def test_reset_on_r_keeps_a_dismissed_battery_reminder_away(qapp):
         qapp.processEvents()
 
 
-def test_reset_keeps_dismissed_install_hints_away(qapp):
-    """Every Got it the user has used stays used across a configuration reset."""
+def test_reset_brings_dismissed_install_hints_back(qapp, monkeypatch, tmp_path):
+    """R is how a user asks for the How? tip and the keep-data note again."""
+    from src import catalog, downloads, manifest
+
+    # Keep the reset away from the developer's real caches.
+    monkeypatch.setattr(downloads, "clear_firmware_cache", lambda: None)
+    monkeypatch.setattr(downloads, "downloads_dir", lambda: tmp_path / "downloads")
+    monkeypatch.setattr(catalog, "_app_cache_dir", lambda: tmp_path / "app_cache")
+    monkeypatch.setattr(manifest, "_cache_root", lambda: tmp_path / "manifest_cache")
+
     s = QSettings("innioasis", "updater")
     for name in ("paperclip", "microsd", "keep_data_warning"):
         s.setValue(f"dismissed_install_hints/{name}", True)
 
     win = MainWindow()
     try:
+        win._flash_page.set_model("Y1")
+        win._flash_page.show_power_off_prompt()
+        qapp.processEvents()
+        assert not win._flash_page._paperclip_help_wanted()
+
         win.reset_all_configuration_and_caches()
+        qapp.processEvents()
 
         for name in ("paperclip", "microsd", "keep_data_warning"):
             assert (
-                s.value(f"dismissed_install_hints/{name}", False, type=bool) is True
+                s.value(f"dismissed_install_hints/{name}", False, type=bool) is False
             ), name
-        assert not win._flash_page._paperclip_help_wanted()
+        assert win._flash_page._paperclip_help_wanted()
     finally:
         win.close()
         win.deleteLater()

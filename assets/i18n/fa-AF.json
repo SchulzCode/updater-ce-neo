@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "به به روز کننده ادامه دهید",
  "linux_setup_view_log": "جزئیات تخنیکی را نشان دهید",
  "linux_setup_hide_log": "پنهان کردن جزئیات تخنیکی",
+ "single_instance_open_anyway": "به هر حال اپلیکیشن را باز کنید",
  "system_checker_title": "چک کننده و تشخیص سیستم ابزار فلش SP",
  "system_checker_desc": "تأیید جامع درایورها، ماژول های هسته، اجازه ها و کتابخانه های زمان اجرا برای اطمینان از چشمک زدن قابل اعتماد.",
  "system_checker_run_btn": "ابزار فلش SP را آماده کنید",

@@ -44,6 +44,7 @@
  "linux_setup_done_btn": "Kozumanana kuchita zintu zipya",
  "linux_setup_view_log": "Tondezya makani aajatikizya zyakupanga-panga",
  "linux_setup_hide_log": "Sisa makani aajatikizya zyakupangapanga",
+ "single_instance_open_anyway": "Jula App kufumbwa mbokubede",
  "system_checker_title": "SP Flash Tool System Checker & Diagnostics",
  "system_checker_desc": "Kusinizya koonse kwama driver, ma kernel modules, zyeelelo, amalayibbulali aakubelesya muchiindi chakubeleka kuchitila kuti kube kumweka kubotu.",
  "system_checker_run_btn": "Bambila SP Flash Tool",
