@@ -1982,11 +1982,19 @@ class SelectPackagePage(QWidget):
         return str(combo.itemData(combo.currentIndex()) or combo.currentText())
 
     def _sync_brand_combo(self) -> None:
-        """Fill the brand drop-down, hiding it when the manifest has no brands."""
+        """Fill the brand drop-down from the catalogue and the registry."""
         combo = getattr(self, "_brand_combo", None)
         if combo is None:
             return
+        from .. import device_models
+
         brands = catalog.brand_names()
+        # A brand the registry knows but no release has been published for yet
+        # (Timmkoo's A5, SR1, Q3, Q5, Q8) still needs its row: its models are
+        # selectable, and without the brand filter they could not be reached.
+        for name in device_models.brand_names():
+            if not any(name.casefold() == known.casefold() for known in brands):
+                brands.append(name)
         current = self.current_brand()
         combo.blockSignals(True)
         combo.clear()
@@ -2008,9 +2016,11 @@ class SelectPackagePage(QWidget):
     def _populate_model_combo(self, refresh_selection: bool = False) -> None:
         from .. import device_models
 
+        brand = self.current_brand()
         model_ids = device_models.selectable_models(
-            available_ids=catalog.available_models(brand=self.current_brand()),
+            available_ids=catalog.available_models(brand=brand),
             fallback=DEVICE_MODELS,
+            brand=brand,
         )
         current = self._model_combo.currentText().strip()
 
@@ -2032,10 +2042,10 @@ class SelectPackagePage(QWidget):
     def _select_model_for_manual(self, model: str) -> None:
         """Point the device drop-down at a hand-imported package's model.
 
-        The drop-down offers only catalogue-backed models, so a package for a
-        device ``slidia_manifest.xml`` does not list yet (a G5, say) returns it
-        to the default row: that package's model still reaches the prompts and
-        the install through ``_current_package_model``, not through this list.
+        Every flashable registry model has a row (a G5 with no release yet
+        included). A model the registry does not know at all still reaches the
+        prompts and the install through ``_current_package_model``, so the list
+        returns to its default row rather than inventing one.
         """
         if not model:
             return

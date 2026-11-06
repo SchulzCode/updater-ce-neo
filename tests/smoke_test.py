@@ -5781,19 +5781,28 @@ def test_device_model_registry():
     assert device_models.is_flashable("A5") is True
     assert device_models.is_flashable("G5") is True
 
-    # Selection order follows the registry, and an unknown catalogue model is
-    # appended rather than hidden.
-    assert device_models.selectable_models(["A5", "Y1"]) == ["Y1", "A5"]
-    assert device_models.selectable_models(["ZZ9"]) == ["ZZ9"]
-    assert device_models.selectable_models([], fallback=("Y1", "Y2")) == ["Y1", "Y2"]
+    # Every flashable registry model is offered, catalogue or not, in registry
+    # order; an unknown catalogue model is appended rather than hidden.
+    offered = device_models.selectable_models(["A5", "Y1"])
+    assert offered[:3] == ["Y1", "Y2", "A5"], offered
+    assert "G5" in offered and "Q8" in offered, offered
+    assert device_models.selectable_models(["ZZ9"])[-1] == "ZZ9"
+    assert device_models.selectable_models([], fallback=("Y1", "Y2"))[:2] == ["Y1", "Y2"]
+    # Brand scopes the list, so a Timmkoo player is reachable from its row even
+    # while the manifest lists no release for it.
+    assert device_models.selectable_models(brand="Timmkoo") == [
+        "A5", "SR1", "Q3", "Q5", "Q8"
+    ]
+    assert device_models.brand_names() == ["Innioasis", "Timmkoo"]
 
 
-def test_model_dropdown_manifest_filtered():
-    """The device drop-down offers only models the manifest lists a release for.
+def test_model_dropdown_lists_registry_models():
+    """Every flashable model is selectable, catalogue release or not.
 
-    Firmware dropped in by hand for a model with no manifest entry must not
-    appear there: the drop-down returns to its default row and the package's
-    own model stays on the package, for the prompts and the install.
+    A player the app can write to must be reachable from the drop-down. A model
+    whose firmware has not been published keeps its row and shows an empty
+    software list, instead of disappearing and leaving the reader unable to
+    pick the device in front of them.
     """
     from PySide6.QtWidgets import QApplication
     from src import catalog
@@ -5809,18 +5818,15 @@ def test_model_dropdown_manifest_filtered():
 
         page = SelectPackagePage()
         items = [page._model_combo.itemText(i) for i in range(page._model_combo.count())]
-        assert items == ["Y2"], f"only manifest models may be offered, got {items}"
+        assert "Y2" in items and "G5" in items, items
+        assert items[0] == "Y1", items
 
-        # A hand-imported G5 package is not in the manifest, so it must not
-        # add a row: the drop-down stays on its default model.
+        # A model with nothing published keeps its row and an empty list.
         page._select_model_for_manual("G5")
-        items = [page._model_combo.itemText(i) for i in range(page._model_combo.count())]
-        assert items == ["Y2"], f"a hand-imported model must not be offered, got {items}"
-        assert page.current_model() == "Y2"
+        assert page.current_model() == "G5"
+        assert page._software_combo.count() == 0
         page.refresh_models()
-        items = [page._model_combo.itemText(i) for i in range(page._model_combo.count())]
-        assert items == ["Y2"], items
-        assert page.current_model() == "Y2"
+        assert page.current_model() == "G5"
         page.deleteLater()
     finally:
         catalog.set_live_catalog(saved)

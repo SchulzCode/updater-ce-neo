@@ -66,17 +66,25 @@ def test_untagged_releases_are_innioasis_and_brands_are_innioasis_first():
         catalog.set_live_catalog(saved)
 
 
-def test_no_brand_dropdown_without_brand_attributes():
+def test_registry_brands_keep_the_brand_row_without_manifest_tags():
+    """The registry, not the manifest, decides which brands exist.
+
+    A manifest may tag nothing at all, yet the app can still flash every
+    registry model, so its brand row has to stay: without it a Timmkoo player's
+    models would be unreachable.
+    """
     saved = list(catalog.LIVE_CATALOG)
     try:
         catalog.set_live_catalog([p for p in catalog.CATALOG if p.model == "Y1"])
         page = _page()
         try:
-            assert not page._brand_combo.count()
-            assert not page._brand_label.isVisibleTo(page)
-            assert not page._brand_combo.isVisibleTo(page)
-            # No brands means no filtering: the listing behaves as before.
-            assert page.current_brand() == ""
+            labels = [
+                page._brand_combo.itemText(i) for i in range(page._brand_combo.count())
+            ]
+            assert labels == ["Innioasis", "Timmkoo"], labels
+            assert page._brand_label.isVisibleTo(page)
+            assert page._brand_combo.isVisibleTo(page)
+            assert page.current_brand() == "Innioasis"
             assert page.current_model() == "Y1"
         finally:
             page.deleteLater()
@@ -102,6 +110,13 @@ def test_brand_dropdown_defaults_to_innioasis_and_filters_the_listing():
 
             page._brand_combo.setCurrentIndex(page._brand_combo.findData("Timmkoo"))
             assert page.current_brand() == "Timmkoo"
+            # The brand's first registry model, which this manifest has no
+            # release for: the row exists, the software list is empty.
+            assert page.current_model() == "A5"
+            assert page.current_software() == ""
+            assert page.current_package() is None
+
+            page._select_model_for_manual("Q5")
             assert page.current_model() == "Q5"
             assert page.current_software() == "Original Software"
             assert page.current_package().repo == "timmkoo/q5-stock"
@@ -152,7 +167,7 @@ def test_a_model_without_a_tag_keeps_its_registry_brand():
                 page._model_combo.itemText(i)
                 for i in range(page._model_combo.count())
             ]
-            assert models == ["A5", "Q5"]
+            assert models == ["A5", "SR1", "Q3", "Q5", "Q8"]
             assert page.current_model() == "A5"
             page._brand_combo.setCurrentIndex(page._brand_combo.findData("Innioasis"))
             assert page.current_model() == "Y1"
