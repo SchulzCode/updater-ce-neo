@@ -69,7 +69,7 @@ def test_month_goal_line_uses_the_month_rung(monkeypatch):
     from src.donors import format_goal_line, get_goal_stats
 
     _pin_gbp(monkeypatch)
-    now = datetime(2026, 11, 3, 12)
+    now = datetime(2026, 11, 1, 12)
     stats = get_goal_stats([{"amount": 40, "dt": now}], now=now)
 
     assert stats["scope"] == "monthly"
@@ -78,40 +78,42 @@ def test_month_goal_line_uses_the_month_rung(monkeypatch):
     )
 
 
-def test_the_slow_weekdays_open_on_the_day_and_the_rest_on_the_week():
+def test_every_ordinary_day_opens_on_today():
     from src.donors import goal_scope
 
-    # Tuesday, Wednesday and Saturday open on today's costs.
+    # The weekday no longer decides the opening rung: today's costs do.
+    assert goal_scope(datetime(2026, 11, 9, 12)) == "daily"
     assert goal_scope(datetime(2026, 11, 10, 12)) == "daily"
     assert goal_scope(datetime(2026, 11, 11, 12)) == "daily"
+    assert goal_scope(datetime(2026, 11, 12, 12)) == "daily"
+    assert goal_scope(datetime(2026, 11, 13, 12)) == "daily"
     assert goal_scope(datetime(2026, 11, 14, 12)) == "daily"
-
-    # Monday, Thursday, Friday and Sunday open on the week.
-    assert goal_scope(datetime(2026, 11, 9, 12)) == "weekly"
-    assert goal_scope(datetime(2026, 11, 12, 12)) == "weekly"
-    assert goal_scope(datetime(2026, 11, 13, 12)) == "weekly"
-    assert goal_scope(datetime(2026, 11, 15, 12)) == "weekly"
+    assert goal_scope(datetime(2026, 11, 15, 12)) == "daily"
 
 
-def test_the_month_summary_owns_only_the_first_and_last_three_days():
+def test_the_month_summary_owns_the_first_and_last_day():
     from src.donors import days_in_month, goal_ladder, goal_scope
 
     # November 2026 has 30 days, so the closing window is the 28th to the 30th.
     assert days_in_month(datetime(2026, 11, 12, 12)) == 30
-    for day in (1, 2, 3, 28, 29, 30):
+    for day in (1, 30):
         when = datetime(2026, 11, day, 12)
         assert goal_scope(when) == "monthly"
-        assert goal_ladder(when) == ("monthly",)
+        assert goal_ladder(when) == ("monthly", "daily")
 
-    for day in (4, 27):
-        assert goal_ladder(datetime(2026, 11, day, 12)) == (
-            "daily",
-            "weekly",
-            "monthly",
-        )
+    # The closing days can name the month, but never the week.
+    for day in (28, 29):
+        when = datetime(2026, 11, day, 12)
+        assert goal_scope(when) == "daily"
+        assert goal_ladder(when) == ("daily", "monthly")
+
+    for day in (2, 3, 4, 27):
+        when = datetime(2026, 11, day, 12)
+        assert goal_scope(when) == "daily"
+        assert goal_ladder(when) == ("daily", "weekly", "monthly")
 
 
-def test_a_short_day_asks_for_today_even_when_the_week_opened_on_weekly(monkeypatch):
+def test_a_short_day_asks_for_today(monkeypatch):
     from src.donors import get_goal_stats
 
     _pin_gbp(monkeypatch)
@@ -213,11 +215,85 @@ def test_a_completed_month_is_silent(monkeypatch):
     assert format_goal_line(stats) == ""
 
 
+def test_a_short_day_still_names_today_after_the_month_is_met(monkeypatch):
+    from src.donors import format_goal_line, get_goal_stats
+
+    _pin_gbp(monkeypatch)
+    now = datetime(2026, 11, 19, 12)
+    donations = [
+        {"amount": 300, "dt": datetime(2026, 11, 2, 9)},
+        {"amount": 5, "dt": now},
+    ]
+    stats = get_goal_stats(donations, now=now)
+
+    assert stats["month_reached"] is True
+    assert stats["scope"] == "daily"
+    assert format_goal_line(stats) == (
+        "<b>You've helped us raise £2.50 of our £10 costs for today</b>"
+    )
+
+
+def test_the_closing_days_ask_for_today_while_today_and_the_week_are_short(monkeypatch):
+    from src.donors import format_goal_line, get_goal_stats
+
+    _pin_gbp(monkeypatch)
+    now = datetime(2026, 11, 28, 12)
+    stats = get_goal_stats([], now=now)
+
+    assert stats["scope"] == "daily"
+    assert format_goal_line(stats) == (
+        "<b>You've helped us raise £0 of our £10 costs for today</b>"
+    )
+
+
+def test_the_closing_days_hand_over_to_the_month_once_today_or_the_week_is_covered(
+    monkeypatch,
+):
+    from src.donors import get_goal_stats
+
+    _pin_gbp(monkeypatch)
+    now = datetime(2026, 11, 28, 12)
+
+    covered_today = get_goal_stats([{"amount": 20, "dt": now}], now=now)
+    assert covered_today["scope"] == "monthly"
+
+    covered_week = get_goal_stats(
+        [{"amount": 100, "dt": datetime(2026, 11, 23, 9)}], now=now
+    )
+    assert covered_week["scope"] == "monthly"
+
+
+def test_the_first_and_last_day_lead_with_the_month_even_when_today_is_covered(
+    monkeypatch,
+):
+    from src.donors import get_goal_stats
+
+    _pin_gbp(monkeypatch)
+    for now in (datetime(2026, 11, 1, 12), datetime(2026, 11, 30, 12)):
+        stats = get_goal_stats([{"amount": 20, "dt": now}], now=now)
+        assert stats["scope"] == "monthly"
+
+
+def test_the_last_day_still_names_today_when_the_month_is_met(monkeypatch):
+    from src.donors import get_goal_stats
+
+    _pin_gbp(monkeypatch)
+    now = datetime(2026, 11, 30, 12)
+    donations = [
+        {"amount": 300, "dt": datetime(2026, 11, 2, 9)},
+        {"amount": 5, "dt": now},
+    ]
+    stats = get_goal_stats(donations, now=now)
+
+    assert stats["month_reached"] is True
+    assert stats["scope"] == "daily"
+
+
 def test_zero_monthly_and_covered_goals_do_not_render_a_cold_dollar_line(monkeypatch):
     from src.donors import format_goal_line, get_goal_stats
 
     _pin_gbp(monkeypatch)
-    now = datetime(2026, 11, 3, 12)
+    now = datetime(2026, 11, 1, 12)
 
     assert format_goal_line(get_goal_stats([], now=now)) == ""
     covered = get_goal_stats([{"amount": 300, "dt": now}], now=now)

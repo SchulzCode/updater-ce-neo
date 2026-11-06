@@ -121,13 +121,11 @@ def _donated_today(donations, now) -> bool:
 def _short_period_goal(donations, now) -> bool:
     from ..donors import get_goal_stats, goal_scope
 
-    scope = None
-    if donations:
-        try:
-            scope = get_goal_stats(donations, now=now).get("scope")
-        except Exception:
-            scope = None
-    return (scope or goal_scope(now)) in ("daily", "weekly")
+    try:
+        scope = get_goal_stats(donations or [], now=now).get("scope")
+    except Exception:
+        return goal_scope(now) in ("daily", "weekly")
+    return scope in ("daily", "weekly")
 
 def _choose(pool, rng=random) -> str:
     fresh = [key for key in pool if key not in _RECENT_KEYS]

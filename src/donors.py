@@ -185,17 +185,14 @@ def get_monthly_goal_stats(donations, now=None):
     return raised, remaining, percent, target
 
 
-# The monthly figure is a summary, not the everyday ask: it leads on the first
-# and last three days of a month, and otherwise appears once the smaller rungs
-# are covered. Tuesday, Wednesday and Saturday open on a single day's costs;
-# the rest of the week opens on the week. A day still short of its local
-# daily target names today's costs whichever rung it opened on, so a supporter
-# sees the smallest outstanding target rather than a whole month's.
-GOAL_MONTHLY_OPENING_DAYS = 3
+# The daily rung is the everyday ask: it leads on any day whose own costs are
+# still short, even when the month target is already met, because it is judged
+# on today's gifts alone. The month summary takes over on the first and last
+# day of the month, and on the closing days once the day or week has been
+# covered, so the end of the month names the whole remaining month rather than
+# a rung the community already passed.
+GOAL_MONTHLY_OPENING_DAYS = 1
 GOAL_MONTHLY_CLOSING_DAYS = 3
-
-# The slow weekdays whose ask opens on a single day's costs.
-GOAL_DAILY_WEEKDAYS = (1, 2, 5)  # Tuesday, Wednesday, Saturday
 
 WEEKLY_GOAL_USD = MONTHLY_GOAL_USD / 4.0
 DAILY_GOAL_USD = MONTHLY_GOAL_USD / 20.0
@@ -233,34 +230,47 @@ def days_in_month(now=None) -> int:
     return (first_next - datetime(now.year, now.month, 1)).days
 
 
+def _goal_month_position(now) -> str:
+    """Where a day sits in the month: ``"edge"``, ``"closing"`` or ``"open"``.
+
+    The first and last day may lead with the month summary regardless of the
+    smaller rungs. The last three days, excluding the last, climb to the month
+    once today or this week has been covered. Every other day opens on today.
+    """
+    total = days_in_month(now)
+    if now.day <= GOAL_MONTHLY_OPENING_DAYS or now.day >= total:
+        return "edge"
+    if now.day > total - GOAL_MONTHLY_CLOSING_DAYS:
+        return "closing"
+    return "open"
+
+
 def goal_scope(now=None) -> str:
     """The rung a day would open on before checking what is still short.
 
-    The first and last three days of a month summarise the month so far.
-    Otherwise the base hint is today's costs on Tuesday, Wednesday and
-    Saturday, and the week on the other days. The ladder always names the
-    smallest outstanding rung, so a short day hands over only once today's
-    target is covered (see :func:`get_goal_stats`).
+    The first and last day of the month open on the month summary; every other
+    day opens on today's costs. The ladder always names the first rung still
+    short, so a quiet day keeps today's ask and the closing days hand over to
+    the month once the day or week is covered (see :func:`get_goal_stats`).
     """
     now = now or datetime.now()
-    if now.day <= GOAL_MONTHLY_OPENING_DAYS:
-        return "monthly"
-    if now.day > days_in_month(now) - GOAL_MONTHLY_CLOSING_DAYS:
-        return "monthly"
-    if now.weekday() in GOAL_DAILY_WEEKDAYS:
-        return "daily"
-    return "weekly"
+    return "monthly" if _goal_month_position(now) == "edge" else "daily"
 
 
 def goal_ladder(now=None) -> tuple:
     """Rungs a day's display may name, smallest first.
 
-    Month-edge days name only the month. Every other day climbs from today's
-    costs to the week and then the month, naming the first rung still short.
+    The first and last day try the month first and can still fall back to
+    today's costs when the month is already covered. The closing days name
+    either today or the month, never the week. Every other day climbs from
+    today's costs to the week and then the month.
     """
     now = now or datetime.now()
-    if goal_scope(now) == "monthly":
-        return ("monthly",)
+    position = _goal_month_position(now)
+    if position == "edge":
+        return ("monthly", "daily")
+    if position == "closing":
+        return ("daily", "monthly")
     return ("daily", "weekly", "monthly")
 
 
@@ -358,9 +368,12 @@ def _goal_raised_by_window(donations, now):
 def get_goal_stats(donations, now=None):
     """Raised against the target this day's display should name.
 
-    The ladder follows the website's funding bar: a month-edge day always
-    names the month; otherwise the first rung still short is named, from
-    today's costs up through the week to the month. A finished month is
+    The ladder follows the website's funding bar: the first and last day lead
+    with the month while it is short; otherwise the first rung still short is
+    named, from today's costs up through the week to the month. A day still
+    short of its own target keeps naming today even after the month is met,
+    because it is judged on today's gifts alone. The closing days take the
+    month once either today or this week has been covered. A finished month is
     silent.
     """
     now = now or datetime.now()
@@ -376,9 +389,17 @@ def get_goal_stats(donations, now=None):
     raised_by = {"daily": shown_day, "weekly": shown_week, "monthly": shown_month}
     month_reached = shown_month >= targets["monthly"]
 
+    position = _goal_month_position(now)
     scope = None
-    if not month_reached:
+    if position == "closing" and not month_reached and shown_week >= targets["weekly"]:
+        # A covered week hands the closing days to the month even when today
+        # is still short: the closing stretch is about finishing the month.
+        scope = "monthly"
+    else:
         for candidate in goal_ladder(now):
+            if month_reached and candidate != "daily":
+                # Today's ask is the one rung that survives a met month.
+                continue
             if raised_by[candidate] < targets[candidate]:
                 scope = candidate
                 break
