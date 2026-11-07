@@ -205,20 +205,11 @@ def test_inno_setup_follows_windows_dark_mode():
     assert "WizardStyle=modern" in lines
 
 
-def test_inno_setup_skips_driver_install_when_already_present():
+def test_inno_setup_does_not_bundle_the_driver_installer():
     iss_path = Path(__file__).parent.parent / "scripts" / "build_windows_installer.iss"
     assert iss_path.exists()
     content = iss_path.read_text(encoding="utf-8")
 
-    # Detection logic must inspect the uninstaller
-    assert "C:\\Program Files\\MediaTek\\SP Driver\\unins000.exe" in content
-    assert "IsMediaTekDriverAlreadyInstalled" in content
-    assert "ShouldInstallDriver" in content
-
-    # Files and Run sections must gate DriverInstall.exe on ShouldInstallDriver
-    assert 'Source: "{#MyRepoRoot}tools\\DriverInstall.exe"; DestDir: "{tmp}"; Flags: ignoreversion skipifsourcedoesntexist; Check: ShouldInstallDriver' in content
-    assert 'Filename: "{tmp}\\DriverInstall.exe"; Parameters: "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART"; StatusMsg: "{cm:StepDriverInstall}"; Flags: runhidden waituntilterminated skipifdoesntexist; Check: ShouldInstallDriver; AfterInstall: MarkDriverInstalled' in content
-
-    # CurStepChanged / InstallBundledDriver must also respect ShouldInstallDriver
-    assert "if DriverInstalled or (not ShouldInstallDriver) then" in content
-
+    assert "DriverInstall.exe" not in content
+    assert "ShouldInstallDriver" not in content
+    assert "InstallBundledDriver" not in content

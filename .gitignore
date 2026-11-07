@@ -62,3 +62,6 @@ _dot_probe_cocoa.png
 GitHub.lnk
 tools/windows/SP_Flash_Tool_v5.1904_Win/nd.ini
 .dockerignore
+tools/windows/SP_Flash_Tool_v5.1904_Win/flash_tool_windows.zip
+tools/linux/tools_linux.zip
+tools/adb/adb.zip
