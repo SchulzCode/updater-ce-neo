@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows пулӑшӑвне тӗрӗслемен. Snapdragon тата RTX Spark ноутбуксенче Zadig-па Driver Signature Enforcement ӗҫлемен чухне усӑ курма пулать, ҫапла вара Device Manager-ра MT6227 Preloader хатӗрӗ валли WinUSB е libusb вырнаҫтарма пулать. Утӑмсем пирки ARM64 драйверӗн ҫул-йӗрне пӑхӑр.",
  "toast_update_version_fmt": "{app} v{version} пур.",
  "toast_update_fmt": "{app} таран ҫӗнетӳ пур.",
+ "install_card_title_fmt": "{software} за {model}",
  "sel_multiple_scatters_release_error": "Ку кӑларӑмра пӗр сапаланчӑк файл ытларах, ҫавӑнпа та Ҫӗнетӳҫӗ сирӗн плеера мӗнле раскладка кирлине калама пултараймасть. {software} хатӗрлекенӗн хӑйӗн прошивкине ҫӗнетмелле, унта пӗр сапаланчӑк файла ҫеҫ кӗртмелле.",
  "settings_run_in_background_desc": "Чӳрече хупӑннӑ хыҫҫӑн приложенине меню йӗркинче е системӑллӑ лотокра тытӑр, ҫапла вара эсир приложени тата плеер прошивкине ҫӗнетни ҫинчен пӗлтерӳсем илетӗр. Выкл: чӳречене хупсан приложени тухать.",
  "donate_goal_week_status_fmt": "<b>Эсир пире ҫак эрнере ${target} тӑкаксенчен ${raised} пухма пулӑшрӑр</b>",

@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows समर्थन परीक्षण नहीं किया गया है. स्नैपड्रैगन और आरटीएक्स स्पार्क लैपटॉप पर, डिवाइस मैनेजर में MT6227 प्रीलोडर डिवाइस के लिए WinUSB या libusb स्थापित करने के लिए ड्राइवर सिग्नेचर एनफोर्समेंट अक्षम के साथ Zadig का उपयोग किया जा सकता है। चरणों के लिए ARM64 ड्राइवर गाइड देखें।",
  "toast_update_version_fmt": "{app} v{version} उपलब्ध है।",
  "toast_update_fmt": "{app} का अपडेट उपलब्ध है।",
+ "install_card_title_fmt": "{software} के लिए {model}",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "विंडो बंद होने के बाद ऐप को मेनू बार या सिस्टम ट्रे में रखें, ताकि आपको ऐप और प्लेयर फ़र्मवेयर अपडेट सूचनाएं अभी भी मिलती रहें। बंद: विंडो बंद करने से ऐप बंद हो जाता है।",
  "donate_goal_week_status_fmt": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",

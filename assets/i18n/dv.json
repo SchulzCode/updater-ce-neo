@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 ވިންޑޯޒް ސަޕޯޓް ޓެސްޓް ނުކުރެވި ހުރެއެވެ. ސްނެޕްޑްރެގަން އަދި އާރުޓީއެކްސް ސްޕާކް ލެޕްޓޮޕްތަކުގައި ޑިވައިސް މެނޭޖަރުގައި އެމްޓީ6227 ޕްރީލޯޑަރ ޑިވައިސްއަށް ވިންޔޫއެސްބީ ނުވަތަ ލިބަސްބް އިންސްޓޯލް ކުރުމަށް ޑްރައިވަރ ސިގްނެޗާ އެންފޯސްމަންޓް ޑިސެބިލްކޮށްގެން ޒާޑިގް ބޭނުންކުރެވޭނެއެވެ. ފިޔަވަޅުތަކަށް ARM64 ޑްރައިވަރ ގައިޑް ބައްލަވާށެވެ.",
  "toast_update_version_fmt": "{app} v{version} ލިބެން ހުރެއެވެ.",
  "toast_update_fmt": "{app} އަށް އަޕްޑޭޓެއް ލިބެން ހުންނާނެއެވެ.",
+ "install_card_title_fmt": "{software} އަށް {model}",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "ވިންޑޯ ބަންދުވުމަށްފަހު މެނޫ ބާރ ނުވަތަ ސިސްޓަމް ޓްރޭގައި އެޕް ބެހެއްޓުމުން އަދިވެސް އެޕް އަދި ޕްލޭޔަރ ފާމްވޭ އަޕްޑޭޓް ނޮޓިފިކޭޝަންތައް ލިބެއެވެ. އޮފް: ވިންޑޯ ބަންދުކުރުމުން އެޕް ދޫކޮށްލައެވެ.",
  "donate_goal_week_status_fmt": "<b>މި ހަފްތާގައި އަޅުގަނޑުމެންގެ ${target} ހަރަދުތަކުގެ ${raised} ބޮޑުކުރުމަށް ތިޔަ އެހީތެރިވެދެއްވި</b>",

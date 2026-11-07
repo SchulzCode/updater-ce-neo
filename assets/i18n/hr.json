@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "Podrška za ARM64 Windows nije testirana. Na prijenosnim računalima Snapdragon i RTX Spark, Zadig se može koristiti s onemogućenom provedbom potpisa upravljačkog programa za instaliranje WinUSB-a ili libusb-a za MT6227 uređaj za predučitavanje u Upravitelju uređaja. Pogledajte vodič za upravljački program ARM64 za korake.",
  "toast_update_version_fmt": "{app} v{version} je dostupan.",
  "toast_update_fmt": "Dostupno je ažuriranje na {app}.",
+ "install_card_title_fmt": "{software} za {model}",
  "sel_multiple_scatters_release_error": "Ovo izdanje sadrži više od jedne scatter datoteke, tako da Updater ne može odrediti koji raspored treba vašem playeru. Programer {software} trebao bi ažurirati svoja izdanja firmvera kako bi uključio samo jednu scatter datoteku.",
  "settings_run_in_background_desc": "Zadržite aplikaciju na traci izbornika ili sistemskoj traci nakon što se prozor zatvori, tako da i dalje dobivate obavijesti o ažuriranju firmvera aplikacije i playera. Isključeno: zatvaranjem prozora napušta se aplikacija.",
  "donate_goal_week_status_fmt": "<b>Pomogli ste nam prikupiti ${raised} naših ${target} troškova ovog tjedna</b>",

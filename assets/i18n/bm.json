@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows dɛmɛni ma kɔrɔbɔ. Snapdragon ni RTX Spark ɔridinatɛriw kan, Zadig bɛ se ka baara kɛ ni Driver Signature Enforcement baarakɛbali ye walasa ka WinUSB walima libusb sigi MT6227 Preloader minɛn kama Device Manager kɔnɔ. Aw ye ARM64 bolicogo gafe lajɛ walasa ka fɛɛrɛw dɔn.",
  "toast_update_version_fmt": "{app} v{version} bɛ sɔrɔ.",
  "toast_update_fmt": "Kuma kura dɔ bɛ sɔrɔ {app} kan.",
+ "install_card_title_fmt": "{software} ka {model} .",
  "sel_multiple_scatters_release_error": "Nin bɔko in kɔnɔ, scatter file (fila jɛnsɛnnen) ka ca ni kelen ye, o la Updater tɛ Se k’a Dɔn i ka tulonkɛla mago bɛ layout min na. {software} dilabaga tun bɛna a ɲini k’u ka firimiw bɔlenw kuraya walasa ka scatter file kelen dɔrɔn de don a kɔnɔ.",
  "settings_run_in_background_desc": "I ka porogramu mara menu bar walima system tray kɔnɔ finɛtiri datugulen kɔfɛ, o la i ka appli ni player firmware update kunnafoniw sɔrɔ hali bi. Off: ni i ye finɛtiri datugu, o bɛ bɔ appli kɔnɔ.",
  "donate_goal_week_status_fmt": "<b>aw y' an dɛmɛ ka ${raised} wuli an ka ${target} musakaw la nin dɔgɔkun in na</b>",

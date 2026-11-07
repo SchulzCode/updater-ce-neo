@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "एआरएम64 विंडोज समर्थन अपरीक्षित अहै। स्नैपड्रैगन अऊर आरटीएक्स स्पार्क लैपटॉप पर, डिवाइस मैनेजर मा एमटी6227 प्रीलोडर डिवाइस के लिए विनयूएसबी या लिबसबी स्थापित करै के लिए ड्राइवर सिग्नेचर एनफोर्समेंट अक्षम के साथ ज़ैडिग का उपयोग कीन जा सकत है। चरणन के लिए ARM64 ड्राइवर गाइड देखौ।",
  "toast_update_version_fmt": "{app} v{version} उपलब्ध है।",
  "toast_update_fmt": "{app} का अपडेट उपलब्ध है।",
+ "install_card_title_fmt": "{software} {model} के लिए",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "विंडो बंद होए के बाद ऐप का मेनू बार या सिस्टम ट्रे मा रखौ, ताकि आपका अबहियों ऐप अऊर प्लेयर फर्मवेयर अपडेट नोटिफिकेशन मिल सकै। बंद: विंडो बंद करै से ऐप निकल जात है।",
  "donate_goal_week_status_fmt": "<b>आपने हमका ई हफ्ता हमरे ${target} लागत के ${raised} बढ़ावै मा मदद किहिन</b>",

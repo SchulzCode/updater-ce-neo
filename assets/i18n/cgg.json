@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Obushagiki bwa Windows tiburikugyezibwa. Aha laptop za Snapdragon na RTX Spark, Zadig neebaasa kukoresibwa n’okutaho omukono gw’omuvugi guremirwe kutaho WinUSB nari libusb ahabw’ekikwato kya MT6227 Preloader omu Mutegyeki w’Ekikwato. Reeba obuhabuzi bw‘omuvugi wa ARM64 ahabw‘amatembezo.",
  "toast_update_version_fmt": "{app} v{version} nikiba kiriho.",
  "toast_update_fmt": "Okugarukaho kwa {app} kuriho.",
+ "install_card_title_fmt": "{software} ahabwa {model}",
  "sel_multiple_scatters_release_error": "Ekihandiiko eki kirimu fairo z’okujanjaaza ezirikurenga ahari emwe, n’ahabw’ekyo Updater terikubaasa kumanya layout ei omuzaani waawe arikwetenga. Omukozi wa {software} naija kwetenga kuhindura ebihandiiko byabo bya firmware kubaasa kutamu fairo emwe yonka ey'okujanjaaza.",
  "settings_run_in_background_desc": "Guma app omu menyu bar nari omu system tray bwanyima y’okukinga edirisa, kugira ngu okyeyongyere kutunga amakuru g’okugaruzaho app na player firmware. Off: okukinga edirisa nikiruga omu app.",
  "donate_goal_week_status_fmt": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",

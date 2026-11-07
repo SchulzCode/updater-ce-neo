@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "اے آر ایم 64 ونڈوز ءِ کمک ءِ آزمائش نہ بوتگ۔ اسنیپ ڈریگن ءُ آر ٹی ایکس سپارک لیپ ٹاپ ءِ سرا زدیگ ءَ ڈرائیور سگنیچر انفورسمنٹ ءِ غیر فعال کنگ ءَ گوں کارمرز کنگ بیت کہ ڈیوائس مینیجر ءَ MT6227 پری لوڈر ڈیوائس ءِ ھاتر ءَ WinUSB یا libusb انسٹال کنگ بہ بیت۔ گامگیجانی واستہ ARM64 ڈرائیور گائیڈ ءَ بچار اِت۔",
  "toast_update_version_fmt": "{app} v{version} دستیاب اِنت۔",
  "toast_update_fmt": "{app} ءِ اپ ڈیٹ دستیاب اِنت۔",
+ "install_card_title_fmt": "{software} پہ {model} ءَ",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "ونڈو بند بوھگ ءَ پد ایپ ءَ مینو بار یا سسٹم ٹرے ءَ بہ دار اِت، پمیشکا ترا انگت ایپ ءُ پلیئر فرم ویئر اپ ڈیٹ ءِ نوٹیفکیشن رس اِیت۔ بند: ونڈو بند کنگ ءَ ایپ یلہ دنت۔",
  "donate_goal_week_status_fmt": "<b>تو اے ہفتگ ءَ مئے ${target} ءِ ھرچ ءُ درچ ءِ ${raised} ءِ گیش کنگ ءَ مئے کمک کتگ</b>",

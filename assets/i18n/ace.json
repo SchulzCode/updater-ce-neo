@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "Dukôngan Windows ARM64 hana geu uji. Bak laptop Snapdragon ngon RTX Spark, Zadig jeuet geungui ngon Peuneugah Tandatangan Supir nyang ka geu-peu-aktif keu geu-pasang WinUSB atawa libusb keu alat Preloader MT6227 lam Pengelola Alat. Neu kalon bak panduan driver ARM64 keu langkah-langkah jih.",
  "toast_update_version_fmt": "{app} v{version} ka na.",
  "toast_update_fmt": "Pembaroan keu {app} ka na.",
+ "install_card_title_fmt": "{software} keu {model}",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "Simpan app nyan lam menu bar atawa system tray lheuh jendela ditutop, supaya droeneuh mantong neuteumeung pemberitahuan update firmware app dan pemain. Off: meutop jendela jiteubiet dari app.",
  "donate_goal_week_status_fmt": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",

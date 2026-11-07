@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows support is untested. Sa Snapdragon ug RTX Spark laptops, ang Zadig mahimong magamit sa Driver Signature Enforcement disabled aron i-install ang WinUSB o libusb para sa MT6227 Preloader device sa Device Manager. See the ARM64 driver guide for the steps.",
  "toast_update_version_fmt": "{app} v{version} anaa.",
  "toast_update_fmt": "Anaa ang update sa {app}.",
+ "install_card_title_fmt": "{software} para sa {model}",
  "sel_multiple_scatters_release_error": "Kini nga pagpagawas adunay labaw pa sa usa ka scatter file, mao nga ang Updater dili makasulti kung unsang layout ang gikinahanglan sa imong player. Kinahanglang i-update sa developer sa {software} ang ilang firmware releases aron maapil lang ang usa ka scatter file.",
  "settings_run_in_background_desc": "Itago ang app sa menu bar o system tray pagkahuman sa pagsira sa bintana, aron makakuha ka gihapon mga abiso sa pag-update sa firmware sa app ug player. Off: ang pagsira sa bintana mohunong sa app.",
  "donate_goal_week_status_fmt": "<b>Gitabangan mo kami nga mapataas ang ${raised} sa among ${target} nga gasto karong semanaha</b>",

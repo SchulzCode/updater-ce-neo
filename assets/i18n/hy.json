@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows-ի աջակցությունը փորձարկված չէ: Snapdragon և RTX Spark նոութբուքերի վրա Zadig-ը կարող է օգտագործվել Driver Signature Enforcement-ն անջատված վիճակում՝ Device Manager-ում MT6227 Preloader սարքի համար WinUSB կամ libusb տեղադրելու համար: Քայլերի համար տես ARM64 վարորդի ուղեցույցը:",
  "toast_update_version_fmt": "{app} v{version} հասանելի է:",
  "toast_update_fmt": "Հասանելի է {app}-ի թարմացում:",
+ "install_card_title_fmt": "{software} {model} համար",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "Հավելվածը պատուհանի փակումից հետո պահեք մենյուի տողում կամ համակարգի սկուտեղում, այնպես որ դուք դեռ ստանաք հավելվածների և նվագարկչի որոնվածի թարմացման ծանուցումներ: Անջատված է. պատուհանը փակելը դուրս է գալիս հավելվածից:",
  "donate_goal_week_status_fmt": "<b>Դուք օգնեցիք մեզ այս շաբաթ հավաքել ${raised} ${target} ծախսերից</b>",

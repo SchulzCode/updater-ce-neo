@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows дестеги сынавдан кечирильмеген. Snapdragon ве RTX Spark ноутбукларында Zadig драйверлернинъ имзасыны ерине кетирювни гъайып этмекнен къулланып, MT6227 Preloader махсулаты ичюн WinUSB я да libusb махсулатларыны «Диспетчер махсулатлары»на ерлештирмек мумкюн. Адымлар акъкъында ARM64 драйверининъ ярдымджысына бакъынъыз.",
  "toast_update_version_fmt": "{app} v{version} ола биле.",
  "toast_update_fmt": "{app} гъа къадар янъыланма бар.",
+ "install_card_title_fmt": "{model} ичюн {software} .",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "Пенджере къапалгъан сонъ, къулланманы меню сатырында я да система тепсисинде сакъла, бойлеликнен, сен даа къулланма ве плеернинъ прошивкасы янъылангъаны акъкъында хаберлерни аласынъ. Сёндюрильген: пенджерени къапаткъан сонъ, къулланмадан чыкъа.",
  "donate_goal_week_status_fmt": "<b>Сиз бизге бу афта ${target} масрафларымыздан ${raised} джыймагъа ярдым эттинъиз</b>",

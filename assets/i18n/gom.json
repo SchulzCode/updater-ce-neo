@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows समर्थन चांचणी करूंक ना. Snapdragon आनी RTX Spark लॅपटॉपांचेर, डिव्हायस वेवस्थापकांत MT6227 प्रीलोडर डिव्हायसा खातीर WinUSB वा libusb प्रतिष्ठापीत करपाक ड्रायव्हर स्वाक्षरी अंमलबजावणी अक्षम करून Zadig वापरूं येता. पांवड्यां खातीर ARM64 ड्रायव्हर मार्गदर्शक पळयात.",
  "toast_update_version_fmt": "{app} v{version} हें उपलब्ध आसा.",
  "toast_update_fmt": "{app} चें अपडेट उपलब्ध आसा.",
+ "install_card_title_fmt": "{software} खातीर {model}",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "विंडो बंद जाले उपरांत ऍप्लिकेशन मेनू बार वा सिस्टीम ट्रेंत दवरात, जाका लागून तुमकां अजूनय ऍप्लिकेशन आनी प्लेयर फर्मवेअर अपडेट अधिसुचोवण्यो मेळटात. बंद: विंडो बंद केल्यार ऍप्लिकेशन सोडटा.",
  "donate_goal_week_status_fmt": "<b>तुमी आमकां ह्या सप्तकांत आमच्या ${target} खर्चाचो ${raised} वाडोवपाक मदत केल्या</b>",

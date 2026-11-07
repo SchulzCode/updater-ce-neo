@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows полыш тергыме огыл. Snapdragon да RTX Spark ноутбуклаште Zadig-ым Driver Signature Enforcement дене кучылташ лиеш, тыге MT6227 Preloader ӱзгарлан WinUSB але libusb-ым Device Manager-ыште шындаш лиеш. Ошкыл-влаклан ARM64 драйвер ручкам ончо.",
  "toast_update_version_fmt": "{app} v{version} уло.",
  "toast_update_fmt": "{app} марте уэмдымаш уло.",
+ "install_card_title_fmt": "{software} {model} верч",
  "sel_multiple_scatters_release_error": "Тиде релизыште ик утла scatter файл уло, сандене Updater тендан модшолан могай макет кӱлешым каласен ок керт. {software}-ым ыштыше еҥлан шке прошма версийжым уэмдаш кӱлеш ыле, тушко ик скатер файлым гына пурташ лиеш.",
  "settings_run_in_background_desc": "Окнам петырыме деч вара приложенийым меню панельыште але системе лончышто кучыза, тыге те эше приложений ден модшо прошма уэмдыме нерген увертарымашым налыда. Off: окнам петырен, приложений гыч лектеш.",
  "donate_goal_week_status_fmt": "<b>Тый мыланна тиде арняште ${target} роскотна гыч ${raised} погаш полшенат</b>",

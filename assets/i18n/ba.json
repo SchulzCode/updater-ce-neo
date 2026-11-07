@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows ярҙамы һынау үтмәгән. Snapdragon һәм RTX Spark ноутбуктарында Задигты драйвер ҡултамғаһын үтәү менән ҡулланырға мөмкин, ҡоролма диспетчерында MT6227 Preloader ҡоролмаһы өсөн WinUSB йәки libusb ҡуйырға. Ҡарағыҙ ARM64 драйверы өсөн ҡулланма аҙымдар.",
  "toast_update_version_fmt": "{app} v{version} бар.",
  "toast_update_fmt": "{app} тиклем яңыртыу бар.",
+ "install_card_title_fmt": "{model} өсөн {software}",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "Ҡушымта меню һыҙығында йәки система лотокында һаҡлау тәҙрә ябылғандан һуң, шулай итеп, һеҙ һаман да ҡушымта һәм плеер прошивка яңыртыу тураһында хәбәрҙәр ала. Һүндерелгән: тәҙрәне ябыу ҡушымтанан сыға.",
  "donate_goal_week_status_fmt": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",

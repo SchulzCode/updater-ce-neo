@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Kuɔɔny Wïnöth acï thëm. Në thäät ë thäät ë thäät ë thäät, Zadig alëu bï luɔ̈ɔ̈i ke thäät ë thäät ë thäät cï gël bï WinUSB wala libusb tääu thïn tënë thäät ë thäät ë MT6227 ë thäät ë thäät ë thäät ë thäät. Tïŋ ARM64 ë thäät ë thäät.",
  "toast_update_version_fmt": "{app} v{version} ë tɔ̈u.",
  "toast_update_fmt": "Aciëŋ ë {app} acï yök.",
+ "install_card_title_fmt": "{software} tën {model}",
  "sel_multiple_scatters_release_error": "Yen ë gɛ̈tgɛ̈t kënë anɔŋic kä juëc ë gɛ̈tgɛ̈t ë gɛ̈tgɛ̈t, këya Updater acïï lëu bï ŋic ye dhöl yïndë yen wïc raan ë poldu. Raan ë cak {software} abï wïc bï käken ë thäät ë thäät ë thäät ë thäät ë thäät ë thäät ë thäät ë thäät ë thäät ë thäät ë thäät.",
  "settings_run_in_background_desc": "Tääu app në thäät ë thäät yiic wala thäät ë thäät yiic të cïn ë thäät yiic thiök, ku yïn aŋot ke yï yök app ku thäät ë thäät yiic ë thäät yiic. Off: thök ë ɣöt thok acï app jäl.",
  "donate_goal_week_status_fmt": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",

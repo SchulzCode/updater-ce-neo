@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 विंडोज समर्थन अपरीक्षित ऐ। स्नैपड्रैगन ते आरटीएक्स स्पार्क लैपटॉप पर, डिवाइस प्रबंधक च MT6227 प्रीलोडर डिवाइस आस्तै WinUSB जां libusb गी इंस्टॉल करने आस्तै ड्राइवर हस्ताक्षर प्रवर्तन अक्षम कन्नै Zadig दा इस्तेमाल कीता जाई सकदा ऐ। चरणें लेई ARM64 ड्राइवर गाइड दिक्खो।",
  "toast_update_version_fmt": "{app} v{version} उपलब्ध ऐ।",
  "toast_update_fmt": "{app} दा इक अपडेट उपलब्ध ऐ।",
+ "install_card_title_fmt": "{software} {model} दे लेई",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "विंडो बंद होने दे बाद ऐप गी मेनू बार जां सिस्टम ट्रे च रक्खो, तां जे तुसेंगी अजें बी ऐप ते प्लेयर फर्मवेयर अपडेट सूचनां मिलदियां न। बंद: विंडो बंद करने कन्नै ऐप छोड़ी जंदा ऐ।",
  "donate_goal_week_status_fmt": "<b>तुसें इस हफ्ते साढ़ी ${target} लागत दा ${raised} बधाने च साढ़ी मदद कीती ऐ</b>",

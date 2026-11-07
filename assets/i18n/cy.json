@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "Mae cefnogaeth ARM64 Windows heb ei brofi. Ar gliniaduron Snapdragon a RTX Spark, gellir defnyddio Zadig gyda Gorfodaeth Llofnod Gyrwyr wedi'i analluogi i osod WinUSB neu libusb ar gyfer y ddyfais Preloader MT6227 yn y Rheolwr Dyfais. Gweler y canllaw gyrrwr ARM64 am y camau.",
  "toast_update_version_fmt": "Mae {app} v{version} ar gael.",
  "toast_update_fmt": "Mae diweddariad i {app} ar gael.",
+ "install_card_title_fmt": "{software} am {model}",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "Cadwch yr ap yn y bar dewislen neu'r hambwrdd system ar ôl i'r ffenestr gau, fel eich bod chi'n dal i gael hysbysiadau diweddaru cadarnwedd ap a chwaraewr. I ffwrdd: mae cau'r ffenestr yn rhoi'r gorau iddi yr app.",
  "donate_goal_week_status_fmt": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",

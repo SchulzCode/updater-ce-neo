@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "תמיכת ARM64 Windows לא נבדקה. במחשבים ניידים Snapdragon ו-RTX Spark, ניתן להשתמש ב-Zadig עם אכיפת חתימת מנהל התקן מושבתת כדי להתקין WinUSB או libusb עבור התקן MT6227 Preloader במנהל ההתקנים. עיין במדריך מנהל ההתקן של ARM64 עבור השלבים.",
  "toast_update_version_fmt": "{app} v{version} זמין.",
  "toast_update_fmt": "עדכון ל-{app} זמין.",
+ "install_card_title_fmt": "{software} עבור {model}",
  "sel_multiple_scatters_release_error": "מהדורה זו מכילה יותר מקובץ פיזור אחד, כך ש- Updater לא יכול לדעת איזו פריסה הנגן שלך צריך. המפתח של {software} יצטרך לעדכן את מהדורות הקושחה שלו כך שיכלול רק קובץ פיזור בודד.",
  "settings_run_in_background_desc": "השאר את האפליקציה בשורת התפריטים או במגש המערכת לאחר סגירת החלון, כך שעדיין תקבל התראות על עדכוני קושחה של אפליקציה ונגן. כבוי: סגירת החלון יוצאת מהאפליקציה.",
  "donate_goal_week_status_fmt": "<b>עזרת לנו לגייס ${raised} מהעלויות שלנו ${target} השבוע</b>",

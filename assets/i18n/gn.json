@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows pytyvõ ndojehechái. Umi portátil Snapdragon ha RTX Spark-pe, Zadig ikatu ojepuru Driver Signature Enforcement oñemboykéva reheve oñemboguapy hag̃ua WinUSB térã libusb tembipuru MT6227 Preloader-pe g̃uarã Device Manager-pe. Ehecha ARM64 controlador guía umi paso rehegua.",
  "toast_update_version_fmt": "{app} v{version} ojeguereko.",
  "toast_update_fmt": "Ojeguereko peteĩ ñembopyahu {app}-pe g̃uarã.",
+ "install_card_title_fmt": "{software} {model}-pe g̃uarã.",
  "sel_multiple_scatters_release_error": "Ko ñeguenohẽ oguereko hetave peteĩ vore isarambipávagui, upévare Updater ndaikatúi he’i mba’e diseñopa oikotevẽ ne ñembosaráihárape. {software} apohare oikotevẽta ombopyahu ifirmware ñeguenohẽ oike hag̃ua peteĩ archivo dispersión añoite.",
  "settings_run_in_background_desc": "Eñongatu pe app barra de menú térã sistema bandeja-pe oñemboty rire ventána, upéicha rehupyty gueteri momarandu firmware ñembopyahu app ha jugador rehegua. Off: oñembotývo ventána osê pe app-gui.",
  "donate_goal_week_status_fmt": "<b>Reipytyvõkuri rombyaty hag̃ua ${raised} ore ${target} repykue ko arapokõindýpe</b>",

@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "Tá tacaíocht ARM64 Windows gan tástáil. Ar ríomhairí glúine Snapdragon agus RTX Spark, is féidir Zadig a úsáid le Forfheidhmiú Síniú Tiomána díchumasaithe chun WinUSB nó libusb a shuiteáil don ghléas MT6227 Preloader i mBainisteoir Gléas. Féach ar an treoir tiománaí ARM64 le haghaidh na céimeanna.",
  "toast_update_version_fmt": "Tá {app} v{version} ar fáil.",
  "toast_update_fmt": "Tá nuashonrú ar {app} ar fáil.",
+ "install_card_title_fmt": "{software} le haghaidh {model}",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "Coinnigh an aip sa bharra roghchláir nó sa tráidire córais tar éis don fhuinneog a dhúnadh, ionas go bhfaighidh tú fós fógraí nuashonraithe firmware an aip agus an imreora. As: scoireann dúnadh na fuinneoige den aip.",
  "donate_goal_week_status_fmt": "<b>Chabhraigh tú linn ${raised} dár gcostais ${target} a ardú an tseachtain seo</b>",

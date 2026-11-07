@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "An suporta kan ARM64 Windows dai pa naprobaran. Sa mga laptop na Snapdragon asin RTX Spark, an Zadig pwedeng gamiton na naka-disable an Driver Signature Enforcement tanganing mai-install an WinUSB o libusb para sa MT6227 Preloader device sa Device Manager. Hilingon an giya kan drayber kan ARM64 para sa mga lakdang.",
  "toast_update_version_fmt": "{app} v{version} an makukua.",
  "toast_update_fmt": "An pag-update sa {app} igwa.",
+ "install_card_title_fmt": "{software} para sa {model}",
  "sel_multiple_scatters_release_error": "An pagluwas na ini igwa nin labi sa sarong scatter file, kaya dai masabi kan Updater kun arin na layout an kaipuhan kan saimong player. An developer kan {software} kaipuhan na i-update an saindang mga release kan firmware tanganing maglaog sana nin sarong scatter file.",
  "settings_run_in_background_desc": "Ibugtak an app sa menu bar o system tray pagkatapos na magsara an bintana, tanganing makakua ka pa man giraray nin mga notipikasyon sa pag-update kan firmware kan app asin player. Off: an pagsara kan bintana minahale sa app.",
  "donate_goal_week_status_fmt": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",

@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows unerxtitsung is unkeproopt. In Snapdragon un RTX Spark laptops, khan Zadig penutst wëre mit te Xraywer Sicherheets Enforcement aus kexproch fer WinUSB orer libusb fer tas MT6227 Preloader Apparat im Apparat Manager instaliire. Kuk te ARM64-treewer-guide fer ti xrite.",
  "toast_update_version_fmt": "{app} v{version} is tas.",
  "toast_update_fmt": "En aktualisierung fer {app} is tepay.",
+ "install_card_title_fmt": "{software} fer {model}",
  "sel_multiple_scatters_release_error": "Tiise puplikatsioon hot mee wii een xrayp khaste, soo tas te Updater nët saan khan was fer layout tayn player praucht. Te entwiklungs krupe fon {software} teet prauche sayn firmware-puplikatsioone aktualisiire fer ploos een eensich xtraal-file tepay se tuun.",
  "settings_run_in_background_desc": "Hal ti applicatsioon in te menü-xtel orer in te systeem-xtel noo tëm tas fënster tsuu kemacht kep is, tas tuu noch mool ti notisye fon te aktualisiirung fon te applicatsioon un player firmware kriist. Off: tas fenster tsuu mache tuut ti app lose.",
  "donate_goal_week_status_fmt": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",

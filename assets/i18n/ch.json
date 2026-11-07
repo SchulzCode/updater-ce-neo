@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "Ti maprobecha i ARM64 Windows na inayuda. Gi i Snapdragon yan RTX Spark na laptop siha, siña ma'usa i Zadig yanggen ti ma'usa i Driver Signature Enforcement para u ma'instala i WinUSB pat libusb para i MT6227 Preloader na dipattamenton gi i Device Manager. Atan i ARM64 na guinaiyan draiber para i pas.",
  "toast_update_version_fmt": "{app} v{version} esta gaige.",
  "toast_update_fmt": "Guaha un inadelanta para {app}.",
+ "install_card_title_fmt": "{software} para {model}",
  "sel_multiple_scatters_release_error": "Este na lina'la' guaha mas ki un scatter file, pues ti siña i Updater ha sangani hao hafa na layout malago' i player-mu. I manma'titinas {software} debi di u ma'adelanta i firmware-niha para u ma'ayek ha' un scatter file.",
  "settings_run_in_background_desc": "Na'i i app gi i menu bar pat gi i system tray despues di ma'a'atan i bentanå-ña, ya siempre un risibi notifikasion put i app yan i player firmware. Off: yanggen un å'atan i bentanå-mu, ti siña un hånao gi i app.",
  "donate_goal_week_status_fmt": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",

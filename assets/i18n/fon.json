@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows sín alɔdó ɔ, è ko tɛ́n kpɔ́n ǎ. Ɖo Snapdragon kpodo RTX Spark kpo ji ɔ, Zadig sixu zan kpodo alɔnuzɔwatɔ sin alɔnuzɔwatɔ kpo bo na do zé WinUSB alo libusb nu MT6227 Preloader sin azɔwanu ɔ ɖo Device Manager mɛ. Kpɔ́n alixlɛ́mɛ mɔ̌tokuntɔ́ ARM64 tɔn nú afɔ e è na ɖè lɛ é.",
  "toast_update_version_fmt": "{app} v{version} wɛ ɖò finɛ.",
  "toast_update_fmt": "Nǔjlajla ɖé ɖò {app} jí.",
+ "install_card_title_fmt": "{software} nú {model}",
  "sel_multiple_scatters_release_error": "Fímu scatter tɔn gegě ɖò ɖiɖe elɔ mɛ, enɛ wu ɔ, Updater sixu tuùn ɖiɖe e nǔxixotɔ́ towe ɖó hudo tɔn é ǎ. Mɛ e bló {software} ɔ na ɖó na jla xójlawema yetɔn lɛ ɖó bo na dó hɛn file scatter ɖokpo géé ɖ’emɛ.",
  "settings_run_in_background_desc": "Hɛn appli ɔ ɖó menu bar alǒ system tray mɛ hwenu e flɛtɛli ɔ sú gudo é, bonu a na kpó ɖò appli kpo player firmware kpo sín nǔ lɛ jlaɖó wɛ. Off: flɛtɛli ɔ súsú nɔ tɔ́n sín appli ɔ mɛ.",
  "donate_goal_week_status_fmt": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",

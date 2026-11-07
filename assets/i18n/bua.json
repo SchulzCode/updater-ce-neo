@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows дэмжэлгэ туршагдаагүй. Snapdragon болон RTX Spark ноутбугууд дээрэ Zadig-ые Driver Signature Enforcement унтараагаад хэрэглэжэ, Device Manager-да MT6227 Preloader түхеэрэмжэдэ WinUSB гү, али libusb суулгадаг. Алхамуудые ARM64 жолоошоной заабариһаа харагты.",
  "toast_update_version_fmt": "{app} v{version} бии.",
  "toast_update_fmt": "{app} хүрэтэр шэнэлэлтэ бии.",
+ "install_card_title_fmt": "{software} {model}-да",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "Сонхо хаагдаһанай һүүлдэ апп-ые меню зурлаа гү, али системын лонхо соо байлга, тиигэбэл та апп болон тоглогшын прошивкын шэнэлэлгын мэдээсэлнүүдые абахат. Унтарһан: сонхо хаахадаа апп гараха.",
  "donate_goal_week_status_fmt": "<b>Та энэ долоон хоногто ${target} гаргашануудаймнай ${raised} нэмээхэ хэрэгтэ туһалһан байнат</b>",

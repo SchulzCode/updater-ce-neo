@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Taɛiwen n Windows ur tettwajerred ara. Deg yiḍebsiyen n Snapdragon d RTX Spark, Zadig yezmer ad yettwaseqdec s Useḍru n Usemres n Uselkim yettwasfeḍen akken ad tesbeddeḍ WinUSB neɣ libusb i usmel n MT6227 Preloader deg Uselkim n Uselkim. Ẓer aḍris n uselkim ARM64 i tɣawsiwin.",
  "toast_update_version_fmt": "{app} v{version} yella.",
  "toast_update_fmt": "Asenfar n {app} yella.",
+ "install_card_title_fmt": "{software} i {model}",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "Ḥrez ahil deg tfelwit n umennuɣ neɣ deg tfelwit n unagraw deffir ma yettwaqqen usmel, akken mazal ad d-tafeḍ isalan n usnefli n uselkim d umyurar. Off: aɣellet n tfelwit yessufeɣ-d app.",
  "donate_goal_week_status_fmt": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",

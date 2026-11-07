@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 ߥߌߣߘߏߥߵ ߘߍ߬ߡߍ ߡߊ ߛߜ߭ߍߛߜ߭ߍ. Snapdragon ߊ߬ߣߌ߫ RTX Spark ߔߏߙߌߕߋߥߵ ߟߊ߫ ߑ ߖߊ߯ߘߌ ߓߋ߫ ߛߋ߫ ߞߊ߬ ߓߊ߯ߙߊ ߞߍ߫ ߣߌ߫ ߡߌ߬ߣߍ߬ߟߌ ߓߟߏߣߐ ߓߊ߯ߙߊ ߓߊߟߌߟߋ߲ ߦߋ߫ ߥߟߊߛߊ߫ ߞߊ߬ WinUSB ߥߊߟߌߡߊ߫ libusb ߛߜ߭ߌ߬ MT6227 Preloader ߡߌ߬ߣߍ߬ߟߌ ߡߌ߬ߣߍ߬ߟߌ ߡߌ߬ߣߍ߬ߟߌ ߡߌ߬ߣߍ߬ߟߌ ߡߌ߬ߣߍ߬ߟߌ ߡߌ߬ߣߍ߬ߟߌ ߡߌ߬ߣߍ߬ߟߌ ߡߌ߬ߣߍ߬ߟߌ ߡߌ߬ߣߍ߬ߟߌ ߡߌ߬ߣߍ߬ߟߌ ߡߌ߬ߣߍ߬ߟߌ ߡߌ߬ߣߍ߬ߟߌ ߡߌ߬ߣߍ߬ߟߌ ߡߌ߬ߣߍ߬ߟߌ ߡߌ߬ߣߍ߬ߟߌ ߡߌ߬ߣߍ߬ߟߌ ߡߌ߬ߣߍ߬ߟߌ ߡߌ߬ߣߍ߬ߟߌ ߡߌ߬ߣߍ߬ߟߌ ߡߌ߬ߣߍ߬ߟߌ ߡߌ߬ߣߍ߬ߟߌ ߡߌ߬ߣߍ߬ߟߌ ߡߌ߬ߣߍ߬ߟߌ. ߊߥߵ ߦߋ߫ ARM64 ߡߌ߬ߣߍ߬ߟߌ ߜ߭ߊߝߋ ߟߊߖߍ߫ ߥߟߊߛߊ߫ ߞߊ߬ ߢߍߝߐߟߌ ߞߍ߫.",
  "toast_update_version_fmt": "{app} v{version} ߓߋ߫ ߛߙߐ߬.",
  "toast_update_fmt": "{app} ߞߊ ߞߎߣߊߝߏߣߌ ߘߐ ߓߋ ߛߙߐ.",
+ "install_card_title_fmt": "{software} for {model}",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "ߟߥߊߟߌߟߊ߲ ߟߊߡߙߊ߬ ߟߐ߬ߥߟߊ߬ ߡߙߎߝߋ ߞߣߐ߫ ߥߟߊ߫ ߞߊ߲ߞߋ߫ ߓߘߎ ߞߣߐ߫ ߝߢߐߘߊ ߘߊߕߎ߲߯ ߞߐ߫߸ ߖߐ߲߬ߛߊ߫ ߌ ߘߌ߫ ߟߥߊߟߌߟߊ߲ ߣߌ߫ ߟߊ߬ߕߏ߬ߟߏ߲߬ߠߌ߲߬ߟߊ߲ ߢߍߥߟߊ ߟߊߞߎߘߦߊ ߟߊ߬ߛߏ߬ߓߌ߬ߟߌ ߟߎ߬ ߛߐ߬ߘߐ߲߬. Off: ߞߊ߬ ߝߋߣߌߕߙߌ ߘߊߕߜ߭ߎ ߏ߬ ߓߋ߫ ߔߙߏߜ߭ߙߊߡߎ ߓߐ߫.",
  "donate_goal_week_status_fmt": "<b>ߌ ߦߴߊߥߵ ߘߡߍ ߞߊ ${raised} ߘߐ ߗߊߦߊ ߊ߲ ߞߊ ${target} ߡߎߛߞߊߥߵ ߟߊ߫ ߣߌ߲ ߘߜ߭ߐߞߎ߲ ߌ߲߬ ߣߊ߫</b>",

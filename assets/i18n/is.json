@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows stuðningur er óprófaður. Á Snapdragon og RTX Spark fartölvum er hægt að nota Zadig með Driver Signature Enforcement óvirka til að setja upp WinUSB eða libusb fyrir MT6227 Preloader tækið í Device Manager. Sjá ARM64 ökumannshandbókina fyrir skrefin.",
  "toast_update_version_fmt": "{app} v{version} er í boði.",
  "toast_update_fmt": "Uppfærsla á {app} er fáanleg.",
+ "install_card_title_fmt": "{software} fyrir {model}",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "Haltu forritinu í valmyndastikunni eða kerfisbakkanum eftir að glugginn lokar, svo þú færð ennþá tilkynningar um uppfærslu á fastbúnaði forrita og spilara. Slökkt: Með því að loka glugganum er hætt í forritinu.",
  "donate_goal_week_status_fmt": "<b>Þú hefur hjálpað okkur að safna ${raised} af ${target} kostnaði okkar í þessari viku</b>",

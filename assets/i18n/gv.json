@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Ta stiurey Windows er ny phrowal. Er laptopyn Snapdragon as RTX Spark, t'eh ry-hoi ymmyd jeh Zadig lesh y stiureyder ymmydit dy s'inshley WinUSB ny libusb son y stiureyder Preloader MT6227 ayns stiurey stiureyder. Shionnee yn stiureyder ARM64 son ny steatyn.",
  "toast_update_version_fmt": "{app} v{version} ta ry gheddyn.",
  "toast_update_fmt": "Ta ymmyd jeh {app} ry-gheddyn.",
+ "install_card_title_fmt": "{software} son {model}",
  "sel_multiple_scatters_release_error": "Ta'n shliaghtey shoh ry-gheddyn ayns ny smoo na un file scatter, shen-y-fa cha vod Updater gra c'raad ta'n player ayd feme. By lhisagh y chruinneyder {software} y ghra rish y firmware oc dy row agh un file scatter ayn.",
  "settings_run_in_background_desc": "Keep y app ayns y bar menu ny y system tray erreish da'n vee-chleaysh y ghleiy, dy vod oo geddyn fysseree jeh'n app as y firmware jeh'n player. Off: cloie y veeal t'eh scughey y app.",
  "donate_goal_week_status_fmt": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",

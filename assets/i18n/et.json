@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windowsi tugi on testimata. Snapdragoni ja RTX Sparki sülearvutites saab Zadigi kasutada, kui Driver Signature Enforcement on keelatud, et installida seadmehalduris WinUSB või libusb MT6227 eellaadija jaoks. Vaadake juhiseid ARM64 draiveri juhendist.",
  "toast_update_version_fmt": "{app} v{version} on saadaval.",
  "toast_update_fmt": "Saadaval on värskendus numbrile {app}.",
+ "install_card_title_fmt": "{software} jaoks {model}",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "Hoidke rakendust pärast akna sulgemist menüüribal või süsteemses salves, et saaksite endiselt rakenduse ja pleieri püsivara värskendusteateid. Väljas: akna sulgemine sulgeb rakenduse.",
  "donate_goal_week_status_fmt": "<b>Olete aidanud meil sel nädalal koguda ${raised} meie ${target} kuludest</b>",

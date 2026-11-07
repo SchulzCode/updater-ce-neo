@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Tadukli ⵏ Windows ⵓⵔ ⵜⴻⵜⵜⵡⴰⵊⴻⵔⵔⴻⴷ ⴰⵔⴰ. ⴷⴻⴳ ⵢⵉⴹⴻⴱⵙⵉⵢⴻⵏ ⵏ Snapdragon ⴷ RTX Spark, Zadig ⵢⴻⵣⵎⴻⵔ ⴰⴷ ⵢⴻⵜⵜⵡⴰⵙⴻⵇⴷⴻⵛ ⵙ ⵓⵙⴻⴹⵔⵓ ⵏ ⵓⵙⴻⵖⵣⴰⵏ ⵏ ⵓⵎⵙⴻⴹⵔⵓ ⵢⴻⵜⵜⵡⴰⵙⴼⴻⴹⴻⵏ ⴰⴽⴽⴻⵏ ⴰⴷ ⵜⴻⵙⴱⴻⴷⴷⴻⴹ ⵡⵉⵏⵓⵙⴱ ⵏⴻⵖ ⵍⵉⴱⵓⵙⴱ ⵉ ⵓⵙⴻⵍⴽⵉⵎ MT6227 Preloader ⴷⴻⴳ ⵓⵙⴻⵍⴽⵉⵎ ⵏ ⵓⵙⴻⵍⴽⵉⵎ. ⵥⴻⵔ ⴰⴹⵔⵉⵙ ⵏ ⵓⵙⴻⵍⴽⵉⵎ ARM64 ⵉ ⵜⵖⴰⵡⵙⵉⵡⵉⵏ.",
  "toast_update_version_fmt": "{app} v{version} ⵢⴻⵍⵍⴰ.",
  "toast_update_fmt": "ⴰⵙⴻⵏⴼⴰⵔ ⵏ {app} ⵢⴻⵍⵍⴰ.",
+ "install_card_title_fmt": "{software} ⵉ {model}",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "ⵃⵔⴻⵣ ⴰⵀⵉⵍ ⴷⴻⴳ ⵜⴼⴻⵍⵡⵉⵜ ⵏ ⵜⵎⴻⵏⴹⴰⵡⵜ ⵏⴻⵖ ⴷⴻⴳ ⵜⴼⴻⵍⵡⵉⵜ ⵏ ⵓⵏⴰⴳⵔⴰⵡ ⴷⴻⴼⴼⵉⵔ ⵎⴰ ⵜⴻⵜⵜⵡⴰⴳⴷⴻⵍ ⵜⴼⴻⵍⵡⵉⵜ, ⴰⴽⴽⴻⵏ ⵎⴰⵣⴰⵍ ⴰⴷ ⴷⵜⴰⴼⴻⴹ ⵉⵙⴰⵍⴰⵏ ⵏ ⵓⵙⵏⴻⴼⵍⵉ ⵏ ⵓⵙⵎⴻⵍ ⴷ ⵓⵎⵢⵓⵔⴰⵔ. Off: ⴰⵖⴻⵍⵍⴻⵇ ⵏ ⵜⴼⴻⵍⵡⵉⵜ ⵢⴻⵜⵜⴻⴼⴼⴻⵖⴷ ⵙⴻⴳ ⵜⴻⵙⴳⵉⵍⵜ.",
  "donate_goal_week_status_fmt": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",

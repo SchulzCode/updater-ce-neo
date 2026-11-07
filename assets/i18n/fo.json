@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows stuðul er óroyndur. Á Snapdragon og RTX Spark farteldum kann Zadig brúkast við føraraundirskriftar umsiting sløkt til at seta upp WinUSB ella libusb til MT6227 Forloader tólið í Tólstjóranum. Sí ARM64 bilføraravegleiðingina fyri trin.",
  "toast_update_version_fmt": "{app} v{version} fæst.",
  "toast_update_fmt": "Ein dagføring til {app} er tøk.",
+ "install_card_title_fmt": "{software} fyri {model} .",
  "sel_multiple_scatters_release_error": "Hendan útgávan inniheldur fleiri enn eina scatter fílu, so Updater kann ikki siga hvørja uppseting tín spælari hevur brúk fyri. Forritarin av {software} skal dagføra sínar fastforrit útgávur til bert at innihalda eina spreingingsfílu.",
  "settings_run_in_background_desc": "Halt appina í valmyndastrikuni ella skipanarbakkanum eftir at vindeygað er latið aftur, so tú framvegis fært boð um dagføring av app- og spælara-fastforritum. Sløkt: um tú letur vindeygað aftur, fer appin úr.",
  "donate_goal_week_status_fmt": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",

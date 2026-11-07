@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "Az ARM64 Windows támogatás még nem tesztelt. A Snapdragon és RTX Spark laptopokon a Zadig használható a Driver Signature Enforcement letiltásával a WinUSB vagy a libusb telepítéséhez az MT6227 Preloader eszközhöz az Eszközkezelőben. A lépéseket lásd az ARM64 illesztőprogram útmutatójában.",
  "toast_update_version_fmt": "{app} v{version} elérhető.",
  "toast_update_fmt": "A {app} frissítés elérhető.",
+ "install_card_title_fmt": "{software} ehhez: {model}",
  "sel_multiple_scatters_release_error": "Ez a kiadás egynél több szórófájlt tartalmaz, így az Updater nem tudja megmondani, melyik elrendezésre van szüksége a lejátszónak. A {software} fejlesztőjének frissítenie kell a firmware-kiadásait, hogy csak egyetlen szórófájlt tartalmazzon.",
  "settings_run_in_background_desc": "Az ablak bezárása után tartsa az alkalmazást a menüsorban vagy a tálcán, hogy továbbra is kapjon értesítéseket az alkalmazások és a lejátszó firmware-frissítéséről. Ki: az ablak bezárásával kilép az alkalmazásból.",
  "donate_goal_week_status_fmt": "<b>Ön segített nekünk ezen a héten ${raised} ${target} $ költségünkből</b>",

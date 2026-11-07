@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 વિન્ડોઝ સપોર્ટ ચકાસાયેલ નથી. Snapdragon અને RTX Spark લેપટોપ્સ પર, Zadig નો ઉપયોગ ઉપકરણ સંચાલકમાં MT6227 પ્રીલોડર ઉપકરણ માટે WinUSB અથવા libusb ઇન્સ્ટોલ કરવા માટે ડ્રાઇવર હસ્તાક્ષર અમલીકરણ અક્ષમ સાથે કરી શકાય છે. પગલાંઓ માટે ARM64 ડ્રાઇવર માર્ગદર્શિકા જુઓ.",
  "toast_update_version_fmt": "{app} v{version} ઉપલબ્ધ છે.",
  "toast_update_fmt": "{app} માટે અપડેટ ઉપલબ્ધ છે.",
+ "install_card_title_fmt": "{model} માટે {software}",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "વિંડો બંધ થયા પછી એપ્લિકેશનને મેનૂ બાર અથવા સિસ્ટમ ટ્રેમાં રાખો, જેથી તમને હજી પણ એપ્લિકેશન અને પ્લેયર ફર્મવેર અપડેટ સૂચનાઓ મળે. બંધ: વિન્ડો બંધ કરવાથી એપ્લિકેશન બંધ થઈ જાય છે.",
  "donate_goal_week_status_fmt": "<b>તમે આ અઠવાડિયે અમારા ${target} ખર્ચમાંથી ${raised} એકત્ર કરવામાં અમારી મદદ કરી છે</b>",

@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "sipor Windows ARM64 pa ankor ganny teste. lo bann portab Snapdragon ek RTX Spark, Zadig i kapab ganny servi avek Driver Signature Enforcement dezaktive pou enstal WinUSB ou libusb pou laparey MT6227 Preloader dan Device Manager. vwar gid drayver ARM64 pou bann letap.",
  "toast_update_version_fmt": "{app} v{version} i disponib.",
  "toast_update_fmt": "en mizazour a {app} i disponib.",
+ "install_card_title_fmt": "{software} pou {model}",
  "sel_multiple_scatters_release_error": "sa versyon i kontenir plis ki en dosye scatter, alor Updater pa kapab dir ki laranzman ou zwer i bezwen. Devloper {software} ti pou bezwen met azour zot bann laranzman firmware pou enkli zis en sel dosye scatter.",
  "settings_run_in_background_desc": "gard sa app dan bar meni oubyen plato sistenm apre ki lafnet i fermen, pou ou ankor ganny notifikasyon azour firmware app ek zwer. tennyen: ferm lafnet i kit sa app.",
  "donate_goal_week_status_fmt": "<b>Ou'n ed nou anmas ${raised} nou ${target} kou sa semenn</b>",

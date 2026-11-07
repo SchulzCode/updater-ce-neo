@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "Ba a gwada tallafin Windows ARM64 ba. A kan kwamfutar tafi-da-gidanka na Snapdragon da RTX Spark, Zadig za a iya amfani da shi tare da naƙasasshen tilasta Sa hannun Driver don shigar da WinUSB ko libusb don na'urar Preloader na MT6227 a cikin Mai sarrafa Na'ura. Duba jagorar direba na ARM64 don matakan.",
  "toast_update_version_fmt": "Ana samun {app} v{version}.",
  "toast_update_fmt": "Akwai sabuntawa zuwa {app}.",
+ "install_card_title_fmt": "{software} for {model}",
  "sel_multiple_scatters_release_error": "Wannan sakin ya ƙunshi fayil ɗin watsawa fiye da ɗaya, don haka Updater ba zai iya faɗin tsarin da mai kunna ku ke buƙata ba. Mai haɓaka {software} zai buƙaci sabunta fitattun fitattun firmware ɗin su don haɗa fayil ɗin warwatse guda ɗaya kawai.",
  "settings_run_in_background_desc": "Ajiye ƙa'idar a cikin mashaya menu ko tiren tsarin bayan taga ta rufe, don haka har yanzu kuna samun sanarwar sabunta firmware na app da mai kunnawa. A kashe: rufe taga yana barin app.",
  "donate_goal_week_status_fmt": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",

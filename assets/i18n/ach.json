@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows miiyo kony pe ki temo. I kom cim ma ki lwongo ni Snapdragon ki RTX Spark, Zadig ki tiyo kwede ki Driver Signature Enforcement ma ki juku me keto WinUSB onyo libusb pi MT6227 Preloader device i Device Manager. Nen ARM64 ma nyutu kit me tic kwede.",
  "toast_update_version_fmt": "{app} v{version} tye.",
  "toast_update_fmt": "Lok manyen me {app} tye.",
+ "install_card_title_fmt": "{software} pi {model}",
  "sel_multiple_scatters_release_error": "Gin ma ki cwalo ni tye ki jami mapol ma ki cwalo, ki dong Updater pe twero waco kit ma latuku ni mito kwede. Ngat ma oyubu {software} omyera olok jami ma ki cwalo ni wek obed ki scatter file acel keken.",
  "settings_run_in_background_desc": "Gwok app ni i menu bar onyo system tray inge kare ma ki cego, wek ibed ka nongo ngec me medo app ki firmware pa latuku. Off: cego wang ot ni weko tic ki app ni.",
  "donate_goal_week_status_fmt": "<b>Ikonyo wa me nongo ${raised} me ${target} ma wa tiyo kwede i cabit man</b>",

@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows -tukea ei ole testattu. Snapdragon- ja RTX Spark -kannettavissa tietokoneissa Zadigia voidaan käyttää Driver Signature Enforcementin ollessa pois käytöstä WinUSB:n tai libusbin asentamiseksi MT6227 Preloader -laitteeseen Laitehallinnassa. Katso vaiheet ARM64-ohjainoppaasta.",
  "toast_update_version_fmt": "{app} v{version} on saatavilla.",
  "toast_update_fmt": "Päivitys numeroon {app} on saatavilla.",
+ "install_card_title_fmt": "{software} arvolle {model}",
  "sel_multiple_scatters_release_error": "Tämä julkaisu sisältää useamman kuin yhden scatter-tiedoston, joten Updater ei voi kertoa, minkä asettelun soittimesi tarvitsee. Ohjelmiston {software} kehittäjän on päivitettävä laiteohjelmistojulkaisunsa sisältämään vain yksi hajontatiedosto.",
  "settings_run_in_background_desc": "Pidä sovellus valikkopalkissa tai ilmaisinalueella ikkunan sulkemisen jälkeen, jotta saat edelleen ilmoituksia sovelluksen ja soittimen laiteohjelmiston päivityksistä. Pois päältä: ikkunan sulkeminen sulkee sovelluksen.",
  "donate_goal_week_status_fmt": "<b>Olet auttanut meitä keräämään ${raised} ${target} $ kuluistamme tällä viikolla</b>",

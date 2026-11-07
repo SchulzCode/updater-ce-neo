@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows-ondersteuning is ongetoets. Op Snapdragon- en RTX Spark-skootrekenaars kan Zadig gebruik word met Driver Signature Enforcement gedeaktiveer om WinUSB of libusb vir die MT6227 Preloader-toestel in Device Manager te installeer. Sien die ARM64-bestuurdergids vir die stappe.",
  "toast_update_version_fmt": "{app} v{version} is beskikbaar.",
  "toast_update_fmt": "'n Opdatering na {app} is beskikbaar.",
+ "install_card_title_fmt": "{software} vir {model}",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "Hou die toepassing in die kieslysbalk of stelselbalk nadat die venster gesluit het, sodat u steeds kennisgewings oor toepassings- en spelerfirmware-opdaterings kry. Af: die sluiting van die venster sluit die toepassing.",
  "donate_goal_week_status_fmt": "<b>Jy het ons gehelp om hierdie week ${raised} van ons ${target}-koste in te samel</b>",

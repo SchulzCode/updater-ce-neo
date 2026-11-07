@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "Dukungan ARM64 Windows lape iuji. Bani laptop Snapdragon pakon RTX Spark, Zadig boi ipakei anggo Driver Signature Enforcement lang marhorja laho manginstall WinUSB atap libusb bani perangkat MT6227 Preloader i Device Manager. Tonggor ma panduan supir ARM64 untuk langkah-langkahni.",
  "toast_update_version_fmt": "{app} v{version} domma sirsir.",
  "toast_update_fmt": "Pembaruan hubani {app} domma sirsir.",
+ "install_card_title_fmt": "{software} untuk {model}",
  "sel_multiple_scatters_release_error": "Rilis on marisi lobih humbani sada file scatter, jadi Updater lang boi patugahkon tata letak na ija do na ihaporluhon pemain nasiam. Pengembang {software} porlu do paimbaruhon rilis firmware ni sidea ase pitah memasukkon sada file scatter.",
  "settings_run_in_background_desc": "Simpan ma aplikasi ai i bilah menu atap baki sistem dob tutup jendela ai, ase totap dapot nasiam pemberitahuan pembaruan firmware aplikasi pakon pemain. Off: manutup jendela kaluar ma aplikasi ai.",
  "donate_goal_week_status_fmt": "<b>Domma iurupi ham hanami patumpuhon ${raised} humbani ${target} biaya nami bani minggu on</b>",

@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Ewe aninisin Windows ese wor sossotun. Non ekkewe laptop itan Snapdragon me RTX Spark, Zadig a tongeni aea ren ewe angangen apwonueta ewe chon uwei sepenin ese tongeni fori pwe epwe tongeni apachanong WinUSB ika libusb ren ewe pisekin angang MT6227 non ewe pisekin angang. Nengeni ewe puken emwen ren chon uwei ewe ARM64 ren ekkewe step.",
  "toast_update_version_fmt": "{app} v{version} a wor.",
  "toast_update_fmt": "Ew minefoon poraus ngeni {app} a kawor.",
+ "install_card_title_fmt": "{software} ren {model}",
  "sel_multiple_scatters_release_error": "Ei puk a wor nap seni ew file mi fitikoko, ina minne Updater ese tongeni sinei menni layout noumw we chon fiti epwe osupwang ren. Ewe chon fori ewe {software} epwe namwot epwe awenewena ar kewe pisekin pwarata pwe epwe chok pachenong ew chok file mi toropas fetan.",
  "settings_run_in_background_desc": "Kopwe isoni ewe app non ewe nenien menu ika ewe nenien system mwirin ewe winnach a katon, pwe kopwe chuen angei ekkewe esinesin usun siwinin app me chon fiti. Off: kopwe suki ewe winnach epwe tou seni ewe app.",
  "donate_goal_week_status_fmt": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",

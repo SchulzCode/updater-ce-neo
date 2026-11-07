@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows mmoa no yɛ nea wɔansɔ anhwɛ. Wɔ Snapdragon ne RTX Spark laptops so no, wobetumi de Zadig adi dwuma a Driver Signature Enforcement ayɛ adwuma de ahyɛ WinUSB anaa libusb ama MT6227 Preloader afiri no wɔ Device Manager mu. Hwɛ ARM64 draiver akwankyerɛ no ma anammɔn no.",
  "toast_update_version_fmt": "{app} v{version} na ɛwɔ hɔ.",
  "toast_update_fmt": "Nsakraeɛ a ɛkɔ {app} no wɔ hɔ.",
+ "install_card_title_fmt": "{software} ma {model} .",
  "sel_multiple_scatters_release_error": "Saa release yi kura scatter fael bɛboro baako, enti Updater ntumi nkyerɛ layout a wo player hia. Ɛho behia sɛ nea ɔyɛɛ {software} no yɛ wɔn firmware a wɔayi no adi no foforo ma ɛde scatter fael biako pɛ ka ho.",
  "settings_run_in_background_desc": "Fa app no ​​sie menu bar anaa system tray no mu bere a mfɛnsere no ato mu akyi, enti woda so ara nya app ne player firmware update amanneɛbɔ. Off: sɛ woto mfɛnsere no mu a, wufi app no ​​mu.",
  "donate_goal_week_status_fmt": "<b>Woaboa yɛn ma yɛama ${raised} a ɛwɔ yɛn ${target} ka so dapɛn yi</b>",

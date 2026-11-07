@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Xangabitte qokol mafokkaaqimta. Snapdragon kee RTX Spark laptopittel, Zadig elle geytimam, WinUSB hinnay libusb MT6227 Preloader deqsitta aalat elle geytima aracal geytimam tamixxige. ubul ARM64 saniitise miracsenta maaqattooti.",
  "toast_update_version_fmt": "{app} v{version} geytimah yan.",
  "toast_update_fmt": "asqassaabe {app} fan tan.",
+ "install_card_title_fmt": "{software} {model} fanah",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "App menu bar hinnay system tray addat hayis, tohih taagah uxih app kee player firmware uddurtiyyih maysaxxagoogi geytam faxximta. Alif: dangabi alfaanam assabalta soolisaanama.",
  "donate_goal_week_status_fmt": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",

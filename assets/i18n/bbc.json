@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "Dukungan Windows ARM64 ndang diuji. Di laptop Snapdragon dohot RTX Spark, boi do dipangke Zadig dohot Penegakan Tanda Tangan Supir na dinonaktifhon laho mamasang WinUSB manang libusb tu perangkat Preloader MT6227 di Pengurus Perangkat. Ida ma panduan supir ARM64 laho mamboto langkah-langkahna.",
  "toast_update_version_fmt": "{app} v{version} do na adong.",
  "toast_update_fmt": "Pembaruan tu {app} nunga adong.",
+ "install_card_title_fmt": "{software} untuk {model} .",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "Simpan ma aplikasi i di bilah menu manang baki sistem dung ditutup jendela, asa tongtong dapotmuna pemberitahuan pembaruan perangkat lunak aplikasi dohot pemain. Off: manutup jendela gabe kaluar ma aplikasi i.",
  "donate_goal_week_status_fmt": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",

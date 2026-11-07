@@ -800,6 +800,24 @@ def test_package_install_heading_prefers_release_name():
     assert catalog.format_install_card_title("", "", "") == "Installing software on your player"
 
 
+def test_install_card_title_translates_the_connector():
+    """The word between the software and the player is UI copy, not data."""
+    from src.i18n import translator
+
+    previous = translator().lang
+    try:
+        translator().set_language("de")
+        assert catalog.format_install_card_title("Rockbox", "3.2.1", "Y1") == "Rockbox 3.2.1 für Y1"
+        # A hand-imported manufacturer ROM goes through the same builder.
+        info = catalog.parse_manufacturer_rom_info("MX3-G1-EN-WM-V5.01-20260805")
+        assert " für " in info["title"] and " for " not in info["title"]
+
+        translator().set_language("en")
+        assert catalog.format_install_card_title("Rockbox", "3.2.1", "Y1") == "Rockbox 3.2.1 for Y1"
+    finally:
+        translator().set_language(previous or "en")
+
+
 def test_rockbox_240p_package_name_marks_small_screen_rockbox_rom():
     assert fw_package.rockbox_240p_package_name("Rockbox", "rockbox_y1_240p.zip") is True
     assert fw_package.rockbox_240p_package_name("Rockbox 2.5", "rom_240.zip") is True

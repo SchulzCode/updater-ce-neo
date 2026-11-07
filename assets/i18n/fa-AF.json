@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "پشتیبانی ویندوز ARM64 آزمایش نشده است. در لپ تاب های Snapdragon و RTX Spark، Zadig میشود که با اجرای امضاء درایور غیرفعال شده برای نصب WinUSB یا libusb برای دستگاه Preloader MT6227 در Device Manager استفاده گردد. برای مراحل راهنمای درایور ARM64 را مشاهده کنید.",
  "toast_update_version_fmt": "{app} v{version} موجود است.",
  "toast_update_fmt": "یک به روز رسانی به {app} موجود است.",
+ "install_card_title_fmt": "{software} برای {model}",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "بعد از بسته شدن پنجره، اپلیکیشن را در نوار مینو یا سینی سیستم نگه دارید، تا شما همچنان اعلان های به روز رسانی سیستم عامل اپلیکیشن و پخش کننده را دریافت کنید. خاموش: بستن پنجره اپلیکیشن را ترک میکند.",
  "donate_goal_week_status_fmt": "<b>شما به ما کمک کردید تا این هفته ${raised} از ${target} هزینه های ما را افزایش دهیم</b>",

@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows destegi sınavdan keçirilmegen. Snapdragon ve RTX Spark noutbuklarında Zadig drayverniñ imzasını yerine ketirüvni ğayıp etip, MT6227 Preloader mahsulatı içün WinUSB ya da libusb mahsulatları içün «Dispetçer mahsulatları»nda yerleştirmek içün qullanmaq mümkün. Adımlar aqqında ARM64 drayveriniñ yardımcısına baqıñız.",
  "toast_update_version_fmt": "{app} v{version} ola bile.",
  "toast_update_fmt": "{app} ğace yañılanma bar.",
+ "install_card_title_fmt": "{software} içün {model}",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "Pencere qapatılğan soñ, qullanmanı menü satırında ya da sistema tepsisinde saqla, böyleliknen, sen daa qullanma ve pleyerniñ proşivkası yañılanğanı aqqında haberlerni alasıñ. Söndürilgen: pencereni qapatmaq qullanmadan çıqa.",
  "donate_goal_week_status_fmt": "<b>Siz bizge bu afta ${target} masraflarımızdan ${raised} cıymağa yardım ettiñiz</b>",

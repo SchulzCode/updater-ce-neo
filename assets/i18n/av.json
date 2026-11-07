@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windowsалъул рахъкквей хӀалбихьун гьечӀо. На ноутбуках Snapdragon и RTX Spark Zadig можно использовать с отключением исполнения подписей драйвера для установки WinUSB или libusb для устройства MT6227 Preloader в Диспетчере устройств. Смотрите руководство по драйверу ARM64 для шагов.",
  "toast_update_version_fmt": "{app} v{version} батула.",
  "toast_update_fmt": "{app} -ялде щвезегӀан цӀигьаби батула.",
+ "install_card_title_fmt": "{software} за {model} .",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "ЦӀуне приложение менюялъул панелалда яги системаялъул лотокалда горду къалеб мехалда, гьединлъидал нужее жеги щола приложениялъул ва плеералъул прошивка цӀигьабиялъул хӀакъалъулъ лъазабиял. Выкл: горду къаялъ приложение къватӀибе уна.",
  "donate_goal_week_status_fmt": "<b>Дуца нижее кумек гьабуна гьаб анкьалъ нижер ${target} харжазул ${raised} бакӀаризе</b>",

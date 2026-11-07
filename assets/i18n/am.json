@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 የዊንዶውስ ድጋፍ አልተሞከረም። በ Snapdragon እና RTX Spark ላፕቶፖች ላይ ዛዲግ ከአሽከርካሪ ፊርማ ማስፈጸሚያ አካል ጉዳተኛ ጋር WinUSB ወይም libusb ለመጫን ለMT6227 Preloader መሳሪያ በመሣሪያ አስተዳዳሪ ውስጥ መጠቀም ይቻላል። ለደረጃዎቹ የ ARM64 አሽከርካሪ መመሪያን ይመልከቱ።",
  "toast_update_version_fmt": "{app} v{version} ይገኛል።",
  "toast_update_fmt": "የ{app} ማሻሻያ አለ።",
+ "install_card_title_fmt": "{software} for {model}",
  "sel_multiple_scatters_release_error": "ይህ ልቀት ከአንድ በላይ የተበታተነ ፋይል ይዟል፣ ስለዚህ አዘምን ተጫዋችዎ የትኛውን አቀማመጥ እንደሚፈልግ ሊያውቅ አይችልም። የ{software} ገንቢ አንድ የተበታተነ ፋይልን ብቻ ለማካተት የእነርሱን የጽኑ ትዕዛዝ ልቀቶችን ማዘመን አለባቸው።",
  "settings_run_in_background_desc": "መስኮቱ ከተዘጋ በኋላ መተግበሪያውን በምናሌ አሞሌው ወይም በሲስተም መሣቢያው ውስጥ ያቆዩት፣ ስለዚህ አሁንም የመተግበሪያ እና የተጫዋች firmware ማሻሻያ ማሳወቂያዎችን ያገኛሉ። ጠፍቷል፡ መስኮቱን መዝጋት መተግበሪያውን ያቆማል።",
  "donate_goal_week_status_fmt": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",

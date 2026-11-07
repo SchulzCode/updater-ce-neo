@@ -6848,6 +6848,17 @@ _STRINGS: dict = {
     },
     "toast_update_version_fmt": {"en": "{app} v{version} is available."},
     "toast_update_fmt": {"en": "An update to {app} is available."},
+    # The install card names a package and the player it is for. The connector
+    # is UI copy, not part of the release's title, and it keeps {software}
+    # first so a leading "Original Software" is still localised on the card.
+    "install_card_title_fmt": {
+        "en": "{software} for {model}",
+        "zh-CN": "{software}（适用于 {model}）",
+        "de": "{software} für {model}",
+        "fr": "{software} pour {model}",
+        "es": "{software} para {model}",
+        "ja": "{software}（{model} 用）",
+    },
 }
 
 

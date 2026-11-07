@@ -1350,7 +1350,7 @@ def parse_manufacturer_rom_info(name_or_path: str) -> dict | None:
         if m_date:
             date_str = m_date.group(1)
 
-    title = f"Original Software {version} for {model}" if version else f"Original Software for {model}"
+    title = format_install_card_title("Original Software", version, model)
     return {
         "model": model,
         "version": version,
@@ -1430,7 +1430,13 @@ def format_install_card_title(software: str, version_label: str = "", model: str
     ``version_label`` is the Choose Software list string (semantic version or
     datestamp). The word "firmware" is not added; MediaTek branding uses the
     software title it already has.
+
+    The connector between software and player is UI copy ("for" is "für" in
+    German, "用" in Japanese), so it comes from the catalog rather than being
+    glued on in English.
     """
+    from .i18n import tr
+
     name = re.sub(r"\s*\([^)]*\)\s*$", "", str(software or "")).strip()
     version = str(version_label or "").strip()
     device = str(model or "").strip()
@@ -1440,7 +1446,11 @@ def format_install_card_title(software: str, version_label: str = "", model: str
         version = ""
     title = " ".join(part for part in (name, version) if part)
     if device:
-        title = f"{title} for {device}" if title else device
+        title = (
+            tr("install_card_title_fmt").format(software=title, model=device)
+            if title
+            else device
+        )
     return title
 
 

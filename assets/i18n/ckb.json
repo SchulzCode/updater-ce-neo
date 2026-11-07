@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "پشتگیری ویندۆزی ARM64 تاقی نەکراوەتەوە. لە لاپتۆپەکانی Snapdragon و RTX Spark دەتوانرێت Zadig بەکاربهێنرێت لەگەڵ Driver Signature Enforcement لەکارکەوتوو بۆ دامەزراندنی WinUSB یان libusb بۆ ئامێری MT6227 Preloader لە Device Manager. بۆ زانینی هەنگاوەکان سەیری ڕێنمایی شۆفێری ARM64 بکە.",
  "toast_update_version_fmt": "{app} v{version} بەردەستە.",
  "toast_update_fmt": "نوێکردنەوەیەک بۆ {app} بەردەستە.",
+ "install_card_title_fmt": "{software} بۆ {model}",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "دوای داخستنی پەنجەرەکە ئەپەکە لە مینیو بار یان سینی سیستەمدا بهێڵەرەوە، بۆ ئەوەی هێشتا ئاگادارکردنەوەکانی نوێکردنەوەی فیرموێری ئەپ و پلەیەر بەدەست دەهێنیت. کوژاوە: داخستنی پەنجەرەکە لە ئەپەکە دەردەچێت.",
  "donate_goal_week_status_fmt": "<b>ئێوە یارمەتیدەرمان بوون لە کۆکردنەوەی ${raised} لە تێچووی ${target} لەم هەفتەیەدا</b>",

@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "Podpora ARM64 Windows není testována. Na noteboocích Snapdragon a RTX Spark lze Zadig použít s vypnutým vynucení podpisu ovladače k ​​instalaci WinUSB nebo libusb pro zařízení MT6227 Preloader ve Správci zařízení. Postup naleznete v příručce ovladače ARM64.",
  "toast_update_version_fmt": "{app} v{version} je k dispozici.",
  "toast_update_fmt": "K dispozici je aktualizace na {app}.",
+ "install_card_title_fmt": "{software} za {model}",
  "sel_multiple_scatters_release_error": "Toto vydání obsahuje více než jeden rozptylový soubor, takže Updater nedokáže určit, jaké rozložení váš přehrávač potřebuje. Vývojář {software} by musel aktualizovat své verze firmwaru tak, aby obsahovaly pouze jeden rozptylový soubor.",
  "settings_run_in_background_desc": "Po zavření okna ponechte aplikaci na liště nabídek nebo na systémové liště, abyste stále dostávali upozornění na aktualizaci firmwaru aplikace a přehrávače. Vypnuto: zavřením okna ukončíte aplikaci.",
  "donate_goal_week_status_fmt": "<b>Tento týden jste nám pomohli zvýšit ${raised} z našich nákladů ${target}</b>",

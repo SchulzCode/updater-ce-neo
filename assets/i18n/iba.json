@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "Sukung Windows ARM64 bedau diuji. Ba laptop Snapdragon enggau RTX Spark, Zadig ulih dikena enggau Penerit Tandatangan Pemandu ti enda ulih dikena masang WinUSB tauka libusb ungkup perengka Preloader MT6227 dalam Pengurus Peranti. Peda panduan pemandu ARM64 ke langkah-langkah iya.",
  "toast_update_version_fmt": "{app} v{version} bisi disediaka.",
  "toast_update_fmt": "Pemadah ngagai {app} bisi disediaka.",
+ "install_card_title_fmt": "{software} ungkup {model}",
  "sel_multiple_scatters_release_error": "Pengelepas tu ngundan lebih ari siti fail scatter, nya alai Updater enda ulih nemu ni bagi layout ti diguna pemain nuan. Pemansang {software} deka begunaka ngemaruka pengelepas firmware sida ngambika semina nyengkaum siti fail scatter.",
  "settings_run_in_background_desc": "Simpan app nya ba menu bar tauka dulang sistem pengudah jendela ditutup, ngambika nuan agi bulih notifikasyen pemadah firmware app enggau pemain. Off: nutup jendela pansut ari app.",
  "donate_goal_week_status_fmt": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",

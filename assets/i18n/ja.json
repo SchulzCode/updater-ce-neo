@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows サポートはテストされていません。 Snapdragon および RTX Spark ラップトップでは、ドライバー署名強制を無効にして Zadig を使用して、デバイス マネージャーで MT6227 プリローダー デバイスの WinUSB または libusb をインストールできます。手順については、ARM64 ドライバー ガイドを参照してください。",
  "toast_update_version_fmt": "{app}v{version}が利用可能です。",
  "toast_update_fmt": "{app} へのアップデートが利用可能です。",
+ "install_card_title_fmt": "{software}（{model} 用）",
  "sel_multiple_scatters_release_error": "このリリースには複数の scatter ファイルが含まれているため、Updater はプレーヤーに必要なレイアウトを特定できません。{software} の開発者は、scatter ファイルを 1 つだけ含めるようファームウェアのリリースを更新する必要があります。",
  "settings_run_in_background_desc": "ウィンドウが閉じた後もアプリをメニュー バーまたはシステム トレイに保持しておくと、アプリとプレーヤーのファームウェアの更新通知を引き続き受け取ることができます。オフ: ウィンドウを閉じるとアプリが終了します。",
  "donate_goal_week_status_fmt": "<b>今週：${raised} / ${target}</b>",

@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows i suanlɛ’n w’a yoman like fi. Snapdragon nin RTX Spark be ɔrdinatɛli’m be su’n, be kwla fa Zadig be di junman naan b’a fa WinUSB annzɛ libusb b’a sie i MT6227 Preloader i mannzin’n su Device Manager nun. Nian ARM64 i loto nun cisanfuɛ’m be fluwa’n nun naan w’a wun ajalɛ sɔ mun.",
  "toast_update_version_fmt": "{app} v{version} yɛ ɔ o lɛ ɔ.",
  "toast_update_fmt": "Ɔ le {app} i su ndɛ uflɛ.",
+ "install_card_title_fmt": "{software} ti {model}",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "Kɛ fenɛtri’n ko kata’n, fa appli’n sie i menu bar annzɛ système tray nun, naan w’a ɲan appli nin player be logiciel’n be su ndɛ’n. Off: kɛ a kata fenɛtri’n su’n, ɔ fin appli’n nun.",
  "donate_goal_week_status_fmt": "<b>A ukali e naan y’a ɲan ${raised} e ${target} i su sika’n le mɔcuɛ nga nun</b>",

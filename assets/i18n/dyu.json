@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows dɛmɛ ma kɔrɔbɔ. Snapdragon ani RTX Spark ɔridinatɛriw kan, Zadig be se ka baara kɛ ni bolifɛnw ka bolonɔw labatoli ye min tɛ se ka kɛ ka WinUSB wala libusb don MT6227 Preloader ka minan kɔnɔ minanw marayɔrɔ la. ARM64 bolifɛnw ka gafe lajɛ k’a lɔn o be se ka kɛ cogo min na.",
  "toast_update_version_fmt": "{app} v{version} be sɔrɔ.",
  "toast_update_fmt": "{app} yɛlɛmani be sɔrɔ.",
+ "install_card_title_fmt": "{software} ka {model}",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "Application to menu bar wala système tray kɔnɔ fenɛtiri datugunin kɔ, o la, i bele be appli ni player ka porogramu fitinin kurakurayali kunnafoniw sɔrɔ. Off: n’i ye finɛtiri datugu, o be bɔ appli kɔnɔ.",
  "donate_goal_week_status_fmt": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",

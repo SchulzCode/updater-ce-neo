@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "Ukwafwilisha kwa Windows ukwa ARM64 takweshiwe. Pa fipe fya kupangapanga ifya Snapdragon na RTX Spark, Zadig kuti abomfiwa ne fya kupangapanga ifya kupangapanga ifya kupangapanga ifya kupangapanga ifya kupangapanga ifya kupangapanga ifya kupangapanga ifya kupangapanga. Moneni ubutungulushi bwa ARM64 pa lwa ntampulo.",
  "toast_update_version_fmt": "{app} v{version} cilipo.",
  "toast_update_fmt": "Ukubwekeshapo ukufika kuli {app} kulipo.",
+ "install_card_title_fmt": "{software} for {model}",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "Sunga app mu menyu nelyo mu cipe ca fipe panuma ya kwisala iwindo, pakuti ucili ulepokelela ifishibisho fyakubwekeshapo ifya app ne fyakutambisha. Ukucima: ukufunga iwindo kulafumyapo app.",
  "donate_goal_week_status_fmt": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",

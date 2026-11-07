@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 veitokoni ni katubaleka e sega ni vakatovolei. Ena Snapdragon kei na RTX Spark laptops, Zadig e rawa ni vakayagataki vata kei na draiva ni saini ni veivakasaurarataki vakaleqai me vakacuruma na WinUSB se libusb me baleta na iyaya ni Preloader ni MT6227 ena Manidia ni iyaya. Raica na idusidusi ni draiva ni ARM64 me baleta na ikalawa.",
  "toast_update_version_fmt": "{app} v{version} sa vakarautaki tu.",
  "toast_update_fmt": "E dua na vakavoui ki na {app} sa vakarautaki tu.",
+ "install_card_title_fmt": "{software} me baleta na {model}",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "Maroroya na app ena menu se na ivakarau ni teveli ni oti na sogo ni katubaleka, me rawa ni o se rawata tikoga na app kei na dauqito firmware vakavoui ni veivakadeitaki. Off: sogota na katubaleka e biuta na app.",
  "donate_goal_week_status_fmt": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",

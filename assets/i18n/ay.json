@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows yanapt’awix janiw yant’atäkiti. Snapdragon ukat RTX Spark laptops ukanx Zadig ukax Driver Signature Enforcement ukamp jan ch’amanchataw apnaqasispa WinUSB jan ukax libusb ukax MT6227 Preloader dispositivo ukatakix Device Manager ukan uñstayañataki. Uñxatt’añataki ARM64 apnaqiri guia ukaxa lurawinakata.",
  "toast_update_version_fmt": "{app} v{version} ukax utjiwa.",
  "toast_update_fmt": "Mä actualización {app} ukax utjiwa.",
+ "install_card_title_fmt": "{software} ukax {model} ukhawa.",
  "sel_multiple_scatters_release_error": "Aka mistuwix mä ch’iqiyañ qillqatat sipans juk’ampiwa, ukhamax Updater ukax janiw kawkir layouts anatañanx munaski ukx yatkaspati. {software} ukan lurayiripax firmware ukan mistuwinakap machaqar tukuyañaw wakisispa, mä sapa ch’iqiyañ qillqat uñt’ayañataki.",
  "settings_run_in_background_desc": "App ukax barra de menú jan ukax sistema bandeja ukan ventana jist’antat qhipat imañamawa, ukhamat wali app ukat reproductor firmware actualización yatiyawinak katuqañataki. Off: ventana jist’antañax app ukat mistu.",
  "donate_goal_week_status_fmt": "<b>Jumax aka simanax ${raised} jiwasan ${target} qullqinak apthapiñ yanapt’apxista</b>",

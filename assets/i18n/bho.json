@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 विंडोज सपोर्ट के परीक्षण ना भइल बा। स्नैपड्रैगन अवुरी आरटीएक्स स्पार्क लैपटॉप प, डिवाइस मैनेजर में MT6227 प्रीलोडर डिवाइस खाती WinUSB चाहे libusb इंस्टॉल करे खाती ड्राइवर सिग्नेचर एनफोर्समेंट के अक्षम क के Zadig के इस्तेमाल कईल जा सकता। स्टेप खातिर ARM64 ड्राइवर गाइड देखल जाव।",
  "toast_update_version_fmt": "{app} v{version} उपलब्ध बा।",
  "toast_update_fmt": "{app} के अपडेट उपलब्ध बा।",
+ "install_card_title_fmt": "{model} के लिए {software} बा।",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "विंडो बंद होखला के बाद एप्प के मेनू बार चाहे सिस्टम ट्रे में राखी, ताकि आपके अभी भी ऐप अवुरी प्लेयर के फर्मवेयर अपडेट के सूचना मिल जाई। बंद: विंडो बंद कइला से ऐप निकल जाला।",
  "donate_goal_week_status_fmt": "<b>रउआ एह हफ्ता हमनी के ${target} लागत के ${raised} बढ़ावे में मदद कइले बानी</b>",

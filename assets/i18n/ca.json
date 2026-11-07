@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "El suport de Windows ARM64 no s'ha provat. Als ordinadors portàtils Snapdragon i RTX Spark, Zadig es pot utilitzar amb Driver Signature Enforcement desactivat per instal·lar WinUSB o libusb per al dispositiu MT6227 Preloader al Gestor de dispositius. Consulteu la guia del controlador ARM64 per veure els passos.",
  "toast_update_version_fmt": "{app} v{version} està disponible.",
  "toast_update_fmt": "Hi ha disponible una actualització de {app}.",
+ "install_card_title_fmt": "{software} per {model}",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "Manteniu l'aplicació a la barra de menús o a la safata del sistema després que es tanqui la finestra, de manera que encara rebeu notificacions d'actualització del microprogramari de l'aplicació i del reproductor. Desactivat: tancant la finestra s'obre l'aplicació.",
  "donate_goal_week_status_fmt": "<b>Ens heu ajudat a recaptar ${raised} dels nostres costos ${target} aquesta setmana</b>",

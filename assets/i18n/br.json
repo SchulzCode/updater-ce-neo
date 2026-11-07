@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "N'eo ket bet amprouet ar skoazell Windows ARM64. War an urzhiataerioù hezoug Snapdragon ha RTX Spark e c'haller implijout Zadig gant Driver Signature Enforcement diweredekaet evit staliañ WinUSB pe libusb evit an urzhiataer MT6227 Preloader e Device Manager. Sellit ouzh ar sturier ARM64 evit gouzout hiroc'h diwar-benn ar pazennoù.",
  "toast_update_version_fmt": "{app} v{version} a c'haller kaout.",
  "toast_update_fmt": "Un hizivadenn betek {app} a c'haller kaout.",
+ "install_card_title_fmt": "{software} evit {model}",
  "sel_multiple_scatters_release_error": "En embannadur-mañ ez eus muioc'h eget ur restr skignañ, setu ne c'hall ket Updater lâret peseurt tres a rank ho lenner. Ret e vefe d'an diorroer {software} hizivaat e embannadurioù firmware evit lakaat ur restr skignañ hepken.",
  "settings_run_in_background_desc": "Mirout an arload e varrenn al lañserioù pe e bladenn ar reizhiad goude ma vo serret ar prenestr, evit ma resevot c'hoazh kemennadennoù hizivaat arloadoù hag ar c'hoarier. Diweredekaet : serriñ ar prenestr a guita an arload.",
  "donate_goal_week_status_fmt": "<b>Sikouret hoc'h eus ac'hanomp da zastum ${raised} eus hor c'houstoù ${target} ar sizhun-mañ</b>",

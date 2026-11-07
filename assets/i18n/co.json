@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "U supportu ARM64 Windows ùn hè micca pruvatu. Nantu à i laptop Snapdragon è RTX Spark, Zadig pò esse usatu cù Driver Signature Enforcement disattivatu per installà WinUSB o libusb per u dispositivu MT6227 Preloader in Device Manager. Vede a guida di u driver ARM64 per i passi.",
  "toast_update_version_fmt": "{app} v{version} hè dispunibule.",
  "toast_update_fmt": "Un aghjurnamentu à {app} hè dispunibule.",
+ "install_card_title_fmt": "{software} per {model}",
  "sel_multiple_scatters_release_error": "Questa liberazione cuntene più di un schedariu scatter, cusì Updater ùn pò micca dì quale layout hà bisognu di u vostru lettore. U sviluppatore di {software} averia bisognu di aghjurnà e so versioni di firmware per include solu un solu schedariu scatter.",
  "settings_run_in_background_desc": "Mantene l'app in a barra di menu o in a barra di u sistema dopu chì a finestra si chjude, cusì avete sempre riceve notificazioni di l'aghjurnamentu di l'app è u firmware di u lettore. Off: chjude a finestra esce da l'app.",
  "donate_goal_week_status_fmt": "<b>Avete aiutatu à cullà ${raised} di i nostri ${target} costi sta settimana</b>",

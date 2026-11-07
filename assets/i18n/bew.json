@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "Dukungan Windows ARM64 belom diuji. Di laptop Snapdragon dan RTX Spark, Zadig bisa dipake dengan Driver Signature Enforcement yang dinonaktifin buat masang WinUSB atau libusb buat perangkat Preloader MT6227 di Device Manager. Liat panduan driver ARM64 buat langkah-langkahnya.",
  "toast_update_version_fmt": "{app} v{version} udah tersedia.",
  "toast_update_fmt": "Pembaruan ke {app} udah tersedia.",
+ "install_card_title_fmt": "{software} buat {model}",
  "sel_multiple_scatters_release_error": "Rilis ini berisi lebih dari satu file scatter, jadi Updater kagak bisa ngasih tau tata letak mana yang dibutuhin pemain lu. Pengembang {software} perlu memperbarui rilis firmware mereka untuk cuma memasukkan satu file scatter.",
  "settings_run_in_background_desc": "Simpan aplikasi di bilah menu atau baki sistem setelah jendela ditutup, jadi lu masih dapet pemberitahuan pembaruan firmware aplikasi dan pemain. Mati: nutup jendela keluar aplikasi.",
  "donate_goal_week_status_fmt": "<b>Lu udah bantuin kite ngumpulin ${raised} dari biaya ${target} kite minggu ini</b>",

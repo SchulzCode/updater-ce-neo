@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows সমৰ্থন পৰীক্ষা কৰা হোৱা নাই। Snapdragon আৰু RTX Spark লেপটপসমূহত, Zadig ডিভাইচ ব্যৱস্থাপকত MT6227 প্ৰিলোডাৰ ডিভাইচৰ বাবে WinUSB বা libusb সংস্থাপন কৰিবলে ড্ৰাইভাৰ স্বাক্ষৰ বলবৎকৰণ নিষ্ক্ৰিয় কৰি ব্যৱহাৰ কৰিব পাৰি। পদক্ষেপসমূহৰ বাবে ARM64 ড্ৰাইভাৰ সহায়ক চাওক।",
  "toast_update_version_fmt": "{app} v{version} উপলব্ধ।",
  "toast_update_fmt": "{app} লৈ এটা আপডেট উপলব্ধ।",
+ "install_card_title_fmt": "{software} ৰ বাবে {model}",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "উইণ্ড' বন্ধ হোৱাৰ পিছত এপটো মেনু বাৰ বা চিস্টেম ট্ৰেত ৰাখক, যাতে আপুনি এতিয়াও এপ আৰু প্লেয়াৰ ফাৰ্মৱেৰ আপডেট জাননীসমূহ পায়। অফ: উইণ্ড' বন্ধ কৰিলে এপটো ওলাই যায়।",
  "donate_goal_week_status_fmt": "<b>আপুনি এই সপ্তাহত আমাৰ ${target} খৰচৰ ${raised} বৃদ্ধি কৰাত সহায় কৰিছে</b>",

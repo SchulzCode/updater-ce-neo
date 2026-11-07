@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ʻAʻole i hoʻāʻo ʻia ke kākoʻo Windows ARM64. Ma nā polokalamu kamepiula ʻo Snapdragon a me RTX Spark, hiki ke hoʻohana ʻia ʻo Zadig me ka Driver Signature Enforcement disabled e hoʻokomo iā WinUSB a i ʻole libusb no ka mea MT6227 Preloader ma ka Mana Pūnaewele. E ʻike i ke alakaʻi alakaʻi hoʻokele ARM64 no nā ʻanuʻu.",
  "toast_update_version_fmt": "Loaʻa ka {app} v{version}.",
  "toast_update_fmt": "Loaʻa ka hōʻano hou i {app}.",
+ "install_card_title_fmt": "{software} no {model}",
  "sel_multiple_scatters_release_error": "Aia kēia hoʻokuʻu i ʻoi aku ma mua o hoʻokahi faila scatter, no laila ʻaʻole hiki i ka Updater ke haʻi i ka hoʻolālā e pono ai kāu mea pāʻani. Pono ka mea hoʻomohala o {software} e hōʻano hou i kā lākou hoʻopuka paʻa paʻa no ka hoʻokomo ʻana i hoʻokahi faila scatter.",
  "settings_run_in_background_desc": "E mālama i ka polokalamu ma ka papa kuhikuhi a i ʻole ka pā ʻōnaehana ma hope o ka pani ʻana o ka puka makani, no laila e loaʻa mau iā ʻoe nā leka uila a me nā mea pāʻani firmware. Paʻa: ʻo ka pani ʻana i ka puka makani e haʻalele i ka polokalamu.",
  "donate_goal_week_status_fmt": "<b>Ua kōkua mai ʻoe iā mākou e hoʻonui i ${raised} o kā mākou ${target} koina i kēia pule</b>",

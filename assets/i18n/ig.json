@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 nkwado Windows anaghị anwale. Na kọmpụta Snapdragon na RTX Spark, enwere ike iji Zadig nwere nkwarụ mbinye aka ọkwọ ụgbọ ala iji wụnye WinUSB ma ọ bụ libusb maka ngwaọrụ Preloader MT6227 na Njikwa Ngwaọrụ. Hụ ntuziaka ọkwọ ụgbọ ala ARM64 maka usoro ndị a.",
  "toast_update_version_fmt": "{app} v{version} dị.",
  "toast_update_fmt": "Mmelite na {app} dị.",
+ "install_card_title_fmt": "{software} maka {model}",
  "sel_multiple_scatters_release_error": "Ntọhapụ a nwere ihe karịrị otu faịlụ gbasasịa, yabụ Updater enweghị ike ịkọ ụdị nhazi ọkpụkpọ gị chọrọ. Onye nrụpụta {software} ga-adị mkpa imelite mwepụta firmware ha ka ọ bụrụ naanị otu faịlụ mgbasasasị.",
  "settings_run_in_background_desc": "Debe ngwa ahụ n'ime mmanya menu ma ọ bụ tray sistemu mgbe mpio mechiri, ka ị ka na-enweta ọkwa mmelite firmware ngwa na ọkpụkpọ. Gbanyụọ: imechi windo kwụsịrị ngwa ahụ.",
  "donate_goal_week_status_fmt": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",

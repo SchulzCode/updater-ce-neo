@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 ཝིན་ཌོ་རྒྱབ་སྐྱོར་ཚོད་ལྟ་བྱས་མེད། གློག་ཀླད་ཀྱི་Snapdragonདང་RTX Sparkགློག་ཀླད་ཐོག་ལ་ཟ་ཌིག་དེ་བཀོལ་སྤྱོད་བྱེད་མཁན་གྱི་མིང་རྟགས་ལག་བསྟར་བྱེད་མི་ཐུབ་པའི་སྐབས་བེད་སྤྱོད་བྱེད་ཐུབ། གོམ་པ་དེ་དག་གི་ཆེད་དུ་ARM64སྒུལ་གཏོང་ལམ་སྟོན་ལ་གཟིགས།",
  "toast_update_version_fmt": "{app} v{version} བཅས་ཡོད།",
  "toast_update_fmt": "{app} ལ་གསར་བརྗེ་བྱས་ཡོད།",
+ "install_card_title_fmt": "{software} {model} ཆེད་དུ།",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "སྒེའུ་ཁུང་ཁ་རྒྱག་རྗེས་མཉེན་ཆས་དེ་རེའུ་མིག་ཕྲ་རིང་ཡང་ན་མ་ལག་གི་ཕོར་པའི་ནང་དུ་བཞག་རོགས། ཁ་བསྡམས། སྒེའུ་ཁུང་ཁ་རྒྱག་ན་མཉེན་ཆས་ལས་ཕྱིར་ཐོན་འགྲོ་གི་རེད།",
  "donate_goal_week_status_fmt": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",

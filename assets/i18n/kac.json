@@ -995,5 +995,6 @@
  "linux_platform_label": "Linux x86_64",
  "settings_arm64_driver_note": "ARM64 Windows hpe madi shadaw ai lam hpe n chyam yu shi ai. Snapdragon hte RTX Spark laptop ni hta, Zadig hpe Driver Signature Enforcement hpe pat da ai sha lang nna, Device Manager kaw MT6227 Preloader jak a matu WinUSB (sh) libusb hpe bang mai ai. Lahkam ni hpe ARM64 driver guide hpe yu u.",
  "toast_update_version_fmt": "{app} v{version} nga ai.",
- "toast_update_fmt": "{app} de update galaw da sai."
+ "toast_update_fmt": "{app} de update galaw da sai.",
+ "install_card_title_fmt": "{model} a matu {software}"
 }

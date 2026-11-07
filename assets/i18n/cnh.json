@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows bawmhnak cu hneksak a si rih lo. Snapdragon le RTX Spark laptop ah, Zadig cu Driver Signature Enforcement phih in hman khawh a si i Device Manager ah MT6227 Preloader thilri caah WinUSB asiloah libusb install tuah khawh a si. Step pawl caah ARM64 mawngtu lamhruainak kha zoh.",
  "toast_update_version_fmt": "{app} v{version} a um.",
  "toast_update_fmt": "{app} tiang tharchuahnak a um.",
+ "install_card_title_fmt": "{software} caah {model}",
  "sel_multiple_scatters_release_error": "Hi chuahmi nih hin scatter file pakhat nak tam a ngei, cucaah Updater nih na player nih zei layout dah a herh ti a chim kho lo. {software} sertu nih an firmware chuahmi kha scatter file pakhat lawng telh chih dingin an thlen a hau lai.",
  "settings_run_in_background_desc": "Window a khar hnu zongah app cu menu bar asiloah system tray ah chiah, cuticun app le player firmware tharchuahnak thawngthanhnak na hmuh rih lai. Off: window khar tikah app cu a chuak.",
  "donate_goal_week_status_fmt": "<b>Tu zarh chung ah kan ${target} dihmi chungin ${raised} hmuh khawhnak dingah na kan bawmh</b>",

@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "Dukungan Windows ARM64 durung kauji. Ring laptop Snapdragon lan RTX Spark, Zadig prasida kaanggen antuk Penegakan Tanda Tangan Pengemudi sane ka-nonaktifang antuk masang WinUSB utawi libusb antuk piranti Preloader MT6227 ring Pangatur Piranti. Cingak panduan pengemudi ARM64 antuk langkah-langkahnyané.",
  "toast_update_version_fmt": "{app} v{version} sampun wenten.",
  "toast_update_fmt": "Pembaruan ka {app} sampun wénten.",
+ "install_card_title_fmt": "{software} anggén {model}",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "Simpen aplikasi ring bilah menu utawi baki sistem risampuné jendela matutup, mangda Sameton tetep ngamolihang pawarah-warah pembaruan perangkat lunak aplikasi lan pamuter. Mati: nutup jendéla pacang medal saking apl.",
  "donate_goal_week_status_fmt": "<b>You've helped us raise ${raised} of our ${target} costs this week</b>",

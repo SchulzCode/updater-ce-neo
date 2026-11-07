@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows-en euskarria probatu gabe dago. Snapdragon eta RTX Spark ordenagailu eramangarrietan, Zadig erabil daiteke Driver Signature Enforcement desgaituta dagoela WinUSB edo libusb instalatzeko MT6227 Preloader gailurako Gailu-kudeatzailean. Ikusi ARM64 gidariaren gida urratsak ikusteko.",
  "toast_update_version_fmt": "{app} v{version} eskuragarri dago.",
  "toast_update_fmt": "{app} eguneratzea eskuragarri dago.",
+ "install_card_title_fmt": "{software} {model}rentzat",
  "sel_multiple_scatters_release_error": "Argitalpen honek sakabanaketa fitxategi bat baino gehiago ditu, beraz, Updater-ek ezin du esan zein diseinu behar duen zure jokalariak. {software} garatzaileak bere firmware bertsioak eguneratu beharko lituzke dispertsio fitxategi bakarra sartzeko.",
  "settings_run_in_background_desc": "Mantendu aplikazioa menu-barran edo sistemaren erretiluan leihoa itxi ondoren, aplikazioen eta erreproduzigailuaren firmware eguneratzearen jakinarazpenak jasotzeko. Desaktibatuta: leihoa ixteak aplikaziotik irtengo da.",
  "donate_goal_week_status_fmt": "<b>Aste honetan gure ${target} kostuetatik ${raised} igotzen lagundu diguzu</b>",

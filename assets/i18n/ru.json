@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "Поддержка ARM64 Windows не тестировалась. На ноутбуках Snapdragon и RTX Spark Zadig можно использовать с отключенным контролем подписи драйверов для установки WinUSB или libusb для устройства MT6227 Preloader в диспетчере устройств. Инструкции см. в руководстве по драйверу ARM64.",
  "toast_update_version_fmt": "{app} v{version} доступен.",
  "toast_update_fmt": "Доступно обновление до {app}.",
+ "install_card_title_fmt": "{software} для {model}",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "Держите приложение в строке меню или на панели задач после закрытия окна, чтобы вы по-прежнему получали уведомления об обновлении прошивки приложения и плеера. Выкл.: закрытие окна завершает работу приложения.",
  "donate_goal_week_status_fmt": "Расходы за неделю: ${raised} / ${target}",

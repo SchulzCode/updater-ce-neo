@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows kev txhawb nqa tsis raug kuaj. Ntawm Snapdragon thiab RTX Spark laptops, Zadig tuaj yeem siv nrog Tus Tsav Tsheb Kos Npe Enforcement neeg xiam rau nruab WinUSB lossis libusb rau MT6227 Preloader ntaus ntawv hauv Device Manager. Saib ARM64 cov lus qhia tsav tsheb rau cov kauj ruam.",
  "toast_update_version_fmt": "{app} v{version} muaj.",
  "toast_update_fmt": "Qhov hloov tshiab rau {app} muaj.",
+ "install_card_title_fmt": "{software} rau {model}",
  "sel_multiple_scatters_release_error": "Qhov kev tso tawm no muaj ntau dua ib cov ntaub ntawv tawg, yog li Updater tsis tuaj yeem qhia qhov twg koj tus neeg ua si xav tau. Tus tsim tawm ntawm {software} yuav tsum tau hloov kho lawv cov firmware tso tawm kom tsuas yog suav nrog ib cov ntaub ntawv tawg.",
  "settings_run_in_background_desc": "Khaws lub app nyob rau hauv cov ntawv qhia zaub mov bar lossis system tais tom qab lub qhov rais kaw, yog li koj tseem tau txais app thiab player firmware hloov tshiab cov ntawv ceeb toom. Off: kaw lub qhov rais quits lub app.",
  "donate_goal_week_status_fmt": "<b>Koj tau pab peb nce ${raised} ntawm peb tus nqi ${target} lub lim tiam no</b>",

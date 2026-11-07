@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 kony pa Windows podi jutemo ngo. I kum laptop pa Snapdragon man RTX Spark, Zadig copo tiyo ku Driver Signature Enforcement ma juketho ngo pi ketho WinUSB nyo libusb pi MT6227 Preloader device i Device Manager. Nen ARM64 driver guide pi timo lembe.",
  "toast_update_version_fmt": "{app} v{version} utiye.",
  "toast_update_fmt": "Lembe manyen ni {app} utiye.",
+ "install_card_title_fmt": "{software} pi {model}",
  "sel_multiple_scatters_release_error": "Lembe maeni uketho i iye scatter file mapol, ci Updater copo ngo ni ngeyo layout ango ma player peri mitu. Juyiku {software} umitu elok firmware migi kara ebed ku scatter file acel kende.",
  "settings_run_in_background_desc": "Keth app i menu bar nyo system tray ingey window cego, wek ibed inwang app man player firmware manyen. Off: cego wang dirisa weko app.",
  "donate_goal_week_status_fmt": "<b>Ikonyo wa ni ketho ${raised} pa ${target} ma watiyo kudu i yenga maeni</b>",

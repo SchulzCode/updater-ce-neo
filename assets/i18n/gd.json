@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "Tha taic ARM64 Windows gun dearbhadh. Air coimpiutairean-glùine Snapdragon agus RTX Spark, faodar Zadig a chleachdadh le Co-èigneachadh Signature Driver ciorramach gus WinUSB no libusb a chuir a-steach airson an inneal MT6227 Preloader ann am Manaidsear an inneal. Faic an stiùireadh dràibhear ARM64 airson na ceumannan.",
  "toast_update_version_fmt": "Tha {app} v{version} ri fhaighinn.",
  "toast_update_fmt": "Tha ùrachadh gu {app} ri fhaighinn.",
+ "install_card_title_fmt": "{software} airson {model}",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "Cùm an aplacaid anns a’ bhàr clàr no treidhe an t-siostaim às deidh don uinneag dùnadh, gus am faigh thu fhathast fiosan ùrachadh firmware app is cluicheadair. dheth: ma dhùineas an uinneag stad an aplacaid.",
  "donate_goal_week_status_fmt": "<b>Tha thu air ar cuideachadh gus ${raised} de na cosgaisean ${target} againn a thogail an t-seachdain-sa</b>",

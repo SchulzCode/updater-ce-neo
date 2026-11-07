@@ -996,6 +996,7 @@
  "settings_arm64_driver_note": "ARM64 Windows sipò pa teste. Sou òdinatè pòtab Snapdragon ak RTX Spark, Zadig ka sèvi ak Driver Signature Enforcement andikape pou enstale WinUSB oswa libusb pou aparèy MT6227 Preloader nan Manadjè Aparèy. Gade gid chofè ARM64 pou etap sa yo.",
  "toast_update_version_fmt": "{app} v{version} disponib.",
  "toast_update_fmt": "Gen yon aktyalizasyon {app} ki disponib.",
+ "install_card_title_fmt": "{software} pou {model}",
  "sel_multiple_scatters_release_error": "This release contains more than one scatter file, so Updater cannot tell which layout your player needs. The developer of {software} would need to update their firmware releases to only include a single scatter file.",
  "settings_run_in_background_desc": "Kenbe aplikasyon an nan ba meni an oswa plato sistèm lan apre fenèt la fèmen, konsa ou toujou jwenn notifikasyon aktyalizasyon app ak mikrolojisyèl jwè yo. Off: fèmen fenèt la kite aplikasyon an.",
  "donate_goal_week_status_fmt": "<b>Ou te ede nou ogmante ${raised} nan ${target} depans nou yo semèn sa a</b>",
