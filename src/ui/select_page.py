@@ -2929,7 +2929,11 @@ class SelectPackagePage(QWidget):
     def _update_see_more_link(self):
         rel = self._current_selected_rel
         url = str((rel or {}).get("html_url") or "") if rel else ""
-        if not url:
+        # English only: outside English the line under the notes already opens
+        # this same release page in Google Translate ("View in browser"), so a
+        # second link to it would offer the identical action twice.
+        lang = (translator().lang or "en").strip()
+        if not url or not is_english_language(lang):
             self._see_more_label.setVisible(False)
             self._see_more_label.setText("")
             return

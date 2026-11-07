@@ -249,6 +249,34 @@ def test_release_notes_link_names_the_site_page():
     assert docs_source.release_notes_url("", "v1") == ""
 
 
+def test_translated_release_notes_open_the_site_page():
+    """Google's view of the notes is our reader page, not a github.com page."""
+    from src.translate import get_google_translate_release_url
+
+    url = get_google_translate_release_url(
+        {"source_repo": "y1-community/y1-stock-rom", "tag_name": "3.2.1", "name": "3.2.1"},
+        "fi",
+    )
+    parts = urlsplit(url)
+    assert parts.netloc == "innioasis-app.translate.goog"
+    assert parts.path == "/release_notes.html"
+    query = parse_qs(parts.query)
+    assert query["repo"] == ["y1-community/y1-stock-rom"]
+    assert query["tag"] == ["3.2.1"]
+    assert query["_x_tr_sl"] == ["auto"]
+    assert query["_x_tr_tl"] == ["fi"]
+
+    # Without ``source_repo`` the release page still names its repository, and
+    # the tag comes from the release URL itself.
+    from_page = get_google_translate_release_url(
+        {"html_url": "https://github.com/jarvissax/rondo/releases/tag/v1.2.0"}, "de"
+    )
+    query = parse_qs(urlsplit(from_page).query)
+    assert query["repo"] == ["jarvissax/rondo"]
+    assert query["tag"] == ["v1.2.0"]
+    assert query["_x_tr_tl"] == ["de"]
+
+
 def test_post_install_page_carries_the_document_and_its_section():
     url = docs_source.post_install_page_url(
         RONDO, software="Rondo", model="Y1"

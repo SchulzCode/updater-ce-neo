@@ -1978,14 +1978,18 @@ class UpdateAvailableDialog(QDialog):
             translation_ready = is_translation_available()
         except Exception:
             translation_ready = True
-        # Open the release page itself in Google's translator (the same host
-        # rewrite the Select Software links use), not the default Y1 repo.
-        page = self._info.html_url or ""
-        url = (
-            page.replace("https://github.com/", "https://github-com.translate.goog/", 1)
-            + f"?_x_tr_sl=auto&_x_tr_tl={lang}&_x_tr_hl={lang}&_x_tr_pto=wapp"
-            if page
-            else ""
+        # Our own release-notes page in Google's translator: the same reader
+        # page the See More link uses, named by its repository and tag, rather
+        # than a github.com page.
+        from ..translate import get_google_translate_release_url
+
+        url = get_google_translate_release_url(
+            {
+                "tag_name": self._info.tag,
+                "name": self._info.name,
+                "html_url": self._info.html_url,
+            },
+            lang,
         )
         open_txt = tr("open_in_google_translate")
         link_style = f"color:{t.fg}; font-weight:700; text-decoration:none;"

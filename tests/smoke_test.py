@@ -5848,13 +5848,19 @@ def test_release_notes_translation():
         "body": "General performance and stability improvements",
     }
     fi_url = translate.get_google_translate_release_url(rel_sample, "fi")
-    assert fi_url == "https://github-com.translate.goog/y1-community/y1-stock-rom/releases/3.2.1?_x_tr_sl=auto&_x_tr_tl=fi&_x_tr_hl=fi&_x_tr_pto=wapp"
+    # Google's view of our own release-notes reader, with the release named in
+    # its query — never a github.com page.
+    assert fi_url.startswith("https://innioasis-app.translate.goog/release_notes.html?")
+    assert "repo=y1-community%2Fy1-stock-rom" in fi_url
+    assert "tag=3.2.1" in fi_url
+    assert fi_url.endswith("_x_tr_sl=auto&_x_tr_tl=fi&_x_tr_hl=fi&_x_tr_pto=wapp")
 
     en_url = translate.get_google_translate_release_url(rel_sample, "en")
-    assert en_url == "https://github-com.translate.goog/y1-community/y1-stock-rom/releases/3.2.1?_x_tr_sl=auto&_x_tr_tl=en&_x_tr_hl=en&_x_tr_pto=wapp"
+    assert "innioasis-app.translate.goog/release_notes.html" in en_url
+    assert en_url.endswith("_x_tr_sl=auto&_x_tr_tl=en&_x_tr_hl=en&_x_tr_pto=wapp")
 
     es_url = translate.get_google_translate_release_url(rel_sample, "es")
-    assert "tl=es" in es_url and "hl=es" in es_url and "github-com.translate.goog" in es_url
+    assert "tl=es" in es_url and "hl=es" in es_url and "innioasis-app.translate.goog" in es_url
 
     # 2. In-memory translation helper
     cached_val = translate.fetch_google_translation("General performance and stability improvements", "es")
@@ -5895,7 +5901,7 @@ def test_release_notes_translation():
         translator().set_language("es")
         page._update_translate_link()
         assert not page._translate_label.isHidden()
-        assert "https://github-com.translate.goog" in page._translate_label.text()
+        assert "innioasis-app.translate.goog/release_notes.html" in page._translate_label.text()
         assert "3.2.1" in page._translate_label.text()
 
         # Clicking translate link opens browser and loads translated notes

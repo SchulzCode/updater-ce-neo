@@ -122,10 +122,63 @@ def _urlopen(req: urllib.request.Request, timeout: float = 4.5):
         raise
 
 
+def _release_repo(rel: Optional[dict]) -> str:
+    """``owner/repo`` for a release dict, from its field or its page URL."""
+    from .docs_source import normalize_repo, repo_from_url
+
+    repo = normalize_repo((rel or {}).get("source_repo"))
+    return repo or repo_from_url(str((rel or {}).get("html_url") or ""))
+
+
+def _release_tag(rel: Optional[dict]) -> str:
+    """The release's tag, from its field or its ``/releases/tag/<tag>`` page."""
+    tag = str((rel or {}).get("tag_name") or "").strip()
+    if tag:
+        return tag
+    parts = urllib.parse.urlsplit(str((rel or {}).get("html_url") or ""))
+    segments = [segment for segment in parts.path.split("/") if segment]
+    if "tag" in segments:
+        index = segments.index("tag")
+        if index + 1 < len(segments):
+            return segments[index + 1]
+    return ""
+
+
+def _translated_page_url(page: str, lang: str) -> str:
+    """Google's proxy view of ``page`` in ``lang`` (``""`` without a host)."""
+    parts = urllib.parse.urlsplit(str(page or ""))
+    host = parts.netloc.lower()
+    if not host:
+        return ""
+    params = urllib.parse.parse_qsl(parts.query, keep_blank_values=True)
+    params += [
+        ("_x_tr_sl", "auto"),
+        ("_x_tr_tl", lang),
+        ("_x_tr_hl", lang),
+        ("_x_tr_pto", "wapp"),
+    ]
+    return urllib.parse.urlunsplit(
+        (
+            parts.scheme or "https",
+            f"{host.replace('.', '-')}.translate.goog",
+            parts.path,
+            urllib.parse.urlencode(params),
+            parts.fragment,
+        )
+    )
+
+
 def get_google_translate_release_url(
     rel: Optional[dict] = None, target_lang: Optional[str] = None
 ) -> str:
-    """Build the Google Translate URL for a given GitHub release."""
+    """The Google Translate view of a release's notes on our own site.
+
+    The page a reader lands on is ``innioasis.app/release_notes.html``, named
+    by ``repo`` and ``tag``: the site reads that release's title and notes and
+    renders them with our styling and its own download buttons. Google's proxy
+    serves that same page translated, so "View in browser" never opens a
+    github.com page either.
+    """
     try:
         from .remote_flags import is_remote_flag_active
 
@@ -142,23 +195,15 @@ def get_google_translate_release_url(
         except Exception:
             lang = "en"
 
-    repo = (rel or {}).get("source_repo") or "y1-community/y1-stock-rom"
-    tag = (rel or {}).get("tag_name") or ""
+    from .docs_source import release_notes_url
 
-    if tag:
-        path = f"/{repo}/releases/{tag}"
-    else:
-        path = f"/{repo}/releases"
-
-    params = urllib.parse.urlencode(
-        {
-            "_x_tr_sl": "auto",
-            "_x_tr_tl": lang,
-            "_x_tr_hl": lang,
-            "_x_tr_pto": "wapp",
-        }
+    page = release_notes_url(
+        _release_repo(rel),
+        _release_tag(rel),
+        name=str((rel or {}).get("name") or ""),
     )
-    return f"https://github-com.translate.goog{path}?{params}"
+    # A release the site cannot name keeps its own page as the translated view.
+    return _translated_page_url(page or str((rel or {}).get("html_url") or ""), lang)
 
 
 # --- Individual free no-auth translation providers --------------------------

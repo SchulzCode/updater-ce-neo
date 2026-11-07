@@ -1047,8 +1047,8 @@ def test_guided_power_off_and_keep_data_flow(qapp):
         win.close()
 
 
-def test_release_notes_see_more_follows_language(qapp):
-    """The GitHub page is English, but its link label belongs to this UI."""
+def test_release_notes_see_more_is_english_only(qapp):
+    """Outside English "View in browser" already opens the release page."""
     from types import SimpleNamespace
 
     from PySide6.QtWidgets import QLabel
@@ -1057,16 +1057,32 @@ def test_release_notes_see_more_follows_language(qapp):
     from src.ui.select_page import SelectPackagePage
 
     holder = SimpleNamespace(
-        _current_selected_rel={"html_url": "https://github.com/example/release"},
+        _current_selected_rel={
+            "html_url": "https://github.com/y1-community/y1-stock-rom/releases/tag/3.2.1",
+            "source_repo": "y1-community/y1-stock-rom",
+            "tag_name": "3.2.1",
+            "name": "3.2.1",
+        },
         _see_more_label=QLabel(),
     )
     previous = translator().lang
     try:
         translator().set_language("de")
         SelectPackagePage._update_see_more_link(holder)
+        # The translated view of the same page is the line under the notes, so
+        # a second link to it would be the same action twice.
+        assert holder._see_more_label.isHidden()
+        assert holder._see_more_label.text() == ""
+
+        translator().set_language("en")
+        SelectPackagePage._update_see_more_link(holder)
         text = holder._see_more_label.text()
+        assert not holder._see_more_label.isHidden()
         assert tr("notices_see_more") in text
-        assert "See More" not in text
+        assert "innioasis.app/release_notes.html" in text
+        assert "repo=y1-community%2Fy1-stock-rom" in text
+        assert "tag=3.2.1" in text
+        assert "github.com" not in text
     finally:
         translator().set_language(previous or "en")
 
@@ -1105,10 +1121,23 @@ def test_select_page_release_notes_layout_no_overlap(qapp):
 
         notes_geom = page._notes.geometry()
         trans_geom = page._translate_label.geometry()
-        see_more_geom = page._see_more_label.geometry()
 
         assert notes_geom.bottom() < trans_geom.top()
-        assert trans_geom.bottom() < see_more_geom.top()
+        # Outside English there is no second link under the notes: "View in
+        # browser" above already opens this release's page on the site.
+        assert page._see_more_label.isHidden()
+
+        # In English the See More link takes that row instead.
+        translator().set_language("en")
+        page._current_selected_rel["html_url"] = "https://github.com/example/release"
+        page._update_translate_link()
+        qapp.processEvents()
+        win._fit_window_to_select_content()
+        page._scroll_content.layout().activate()
+        page._notes_group.layout().activate()
+        qapp.processEvents()
+        assert not page._see_more_label.isHidden()
+        assert page._notes.geometry().bottom() < page._see_more_label.geometry().top()
     finally:
         # The page's connectivity probe is a shared background QThread. The
         # worker is daemon-like in the app, but a test process that exits with
