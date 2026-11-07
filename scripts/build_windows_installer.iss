@@ -33,7 +33,11 @@
   #endif
 #endif
 #ifndef MyAppGroup
-  #define MyAppGroup MyAppName
+  #ifdef MyIsMediaTek
+    #define MyAppGroup MyAppName
+  #else
+    #define MyAppGroup "Innioasis Updater"
+  #endif
 #endif
 #ifndef MyAppVersion
   #define MyAppVersion "2.5.3"
@@ -749,10 +753,13 @@ Source: "{#MyDistDir}\_internal\mtkclient\*"; DestDir: "{app}\_internal\mtkclien
 Source: "{#MyRepoRoot}tools\DriverInstall.exe"; DestDir: "{tmp}"; Flags: ignoreversion skipifsourcedoesntexist; Check: ShouldInstallDriver
 
 [Icons]
+; One folder, one entry. The app shortcut is the only Start Menu entry Setup
+; writes; legacy SP Flash Tool and uninstaller shortcuts are removed by
+; PurgeLegacyMenuEntries before this section runs.
 #ifdef MyIsMediaTek
-Name: "{userprograms}\Innioasis Updater"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: startmenuicon; Check: ShouldInstallMainApp
+Name: "{group}\Innioasis Updater"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: startmenuicon; Check: ShouldInstallMainApp
 #else
-Name: "{userprograms}\{cm:AppShortcutName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: startmenuicon; Check: ShouldInstallMainApp
+Name: "{group}\{cm:AppShortcutName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: startmenuicon; Check: ShouldInstallMainApp
 #endif
 #ifdef MyIsMediaTek
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; Check: ShouldInstallMainApp
@@ -1174,6 +1181,68 @@ begin
   PurgeLocalizedAppShortcutsAt(ExpandConstant('{commondesktop}'), 0);
 end;
 
+{ Older installers put SP Flash Tool and an uninstall entry beside the app in
+  the Start Menu root. Remove those retired files, and any empty folder they
+  leave, without touching another application's shortcuts. The app shortcut
+  itself is handled by PurgeLocalizedAppShortcuts; a fresh install uses
+  PurgeRetiredShortcuts instead. }
+function IsLegacyMenuShortcut(const Name: String): Boolean;
+begin
+  Result :=
+    IsShortcutFile(Name) and (
+      NameContains(Name, 'SP Flash') or
+      NameContains(Name, 'Innioasis Updater CE') or
+      NameContains(Name, 'MediaTek Installer') or
+      (NameContains(Name, 'Innioasis Updater') and not IsLocalizedAppShortcut(Name))
+    );
+end;
+
+function IsOwnedMenuFolder(const Name: String): Boolean;
+begin
+  Result :=
+    NameContains(Name, 'Innioasis') or
+    NameContains(Name, 'Updater CE') or
+    NameContains(Name, 'MediaTek Installer') or
+    NameContains(Name, 'SP Flash');
+end;
+
+procedure PurgeLegacyMenuEntriesAt(const Root: String; Depth: Integer);
+var
+  FindRec: TFindRec;
+  Path: String;
+begin
+  if (Root = '') or (Depth > MaxShortcutPurgeDepth) or (not DirExists(Root)) then
+    Exit;
+  if not FindFirst(Root + '\*', FindRec) then
+    Exit;
+  try
+    repeat
+      if (FindRec.Name = '.') or (FindRec.Name = '..') then
+        Continue;
+      if (FindRec.Attributes and FILE_ATTRIBUTE_REPARSE_POINT) <> 0 then
+        Continue;
+      Path := Root + '\' + FindRec.Name;
+      if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) <> 0 then
+      begin
+        if IsOwnedMenuFolder(FindRec.Name) then
+          PurgeLegacyMenuEntriesAt(Path, Depth + 1);
+      end
+      else if IsLegacyMenuShortcut(FindRec.Name) then
+        DeleteFile(Path);
+    until not FindNext(FindRec);
+  finally
+    FindClose(FindRec);
+  end;
+  if Depth > 0 then
+    RemoveDir(Root);
+end;
+
+procedure PurgeLegacyMenuEntries;
+begin
+  PurgeLegacyMenuEntriesAt(ExpandConstant('{userprograms}'), 0);
+  PurgeLegacyMenuEntriesAt(ExpandConstant('{commonprograms}'), 0);
+end;
+
 function DirHasRetiredShortcut(const Dir: String): Boolean;
 var
   FindRec: TFindRec;
@@ -1540,13 +1609,17 @@ begin
     ShowStep('StepShortcuts');
     { An update keeps the shortcut placements the user already has. A fresh
       install clears the old Innioasis / SP Flash entries and folders first. }
-    if ShouldPreserveUserData and IsUpdaterCeBrand then
+    if ShouldPreserveUserData then
     begin
       { The app may have created a shortcut under any catalog language, so an
         update that changes language must remove the old exact name too. A
         fresh install has no previous app shortcut and keeps its hands off
         generic names such as "Updater". }
-      PurgeLocalizedAppShortcuts;
+      if IsUpdaterCeBrand then
+        PurgeLocalizedAppShortcuts;
+      { Drop the retired SP Flash Tool and uninstall entries that older
+        installers left in the Start Menu root. }
+      PurgeLegacyMenuEntries;
     end;
     if not ShouldPreserveUserData then
     begin

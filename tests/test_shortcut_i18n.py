@@ -307,6 +307,41 @@ def _iss_section(text, header):
     return rest[: following.start()] if following else rest
 
 
+def test_installer_writes_only_the_app_in_one_start_menu_folder():
+    text = (ROOT / "scripts" / "build_windows_installer.iss").read_text(
+        encoding="utf-8-sig"
+    )
+    icons = _iss_section(text, "Icons")
+    entries = [
+        line.strip()
+        for line in icons.splitlines()
+        if line.strip().startswith("Name:")
+    ]
+    menu = [
+        line
+        for line in entries
+        if '"{group}' in line
+        or '"{userprograms}' in line
+        or '"{commonprograms}' in line
+    ]
+
+    assert menu
+    assert all(line.startswith('Name: "{group}\\') for line in menu)
+    assert all("{#MyAppExeName}" in line for line in menu)
+    assert '"{userprograms}' not in icons
+    assert '"{commonprograms}' not in icons
+    assert not any(
+        "SP Flash" in line or "SP_Flash_Tool" in line for line in entries
+    )
+    assert not any(
+        "unins" in line.lower() or "uninstall" in line.lower() for line in entries
+    )
+
+    assert "DefaultGroupName={#MyAppGroup}" in text
+    assert re.search(r'#define MyAppGroup "Innioasis Updater"', text)
+    assert "PurgeLegacyMenuEntries;" in text
+
+
 def test_installer_offers_exactly_the_shortcut_languages_we_map():
     """The Inno [Languages] list and the app's mapping must not drift apart."""
     text = (ROOT / "scripts" / "build_windows_installer.iss").read_text(
