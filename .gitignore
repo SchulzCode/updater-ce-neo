@@ -62,3 +62,6 @@ _dot_probe_cocoa.png
 GitHub.lnk
 tools/windows/SP_Flash_Tool_v5.1904_Win/nd.ini
 .dockerignore
+tools/.DS_Store
+.DS_Store
+.DS_Store
