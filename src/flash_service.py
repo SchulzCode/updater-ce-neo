@@ -3608,6 +3608,11 @@ def _build_gpt_blobs_from_scatter(
     return bytes(primary_blob), backup_addr, backup_blob, new_cache
 
 
+def is_legacy_da_session(daloader=None) -> bool:
+    """True when the run is using the bundled fork's ``DALegacy`` driver."""
+    return daloader is not None and type(daloader).__name__ == "DALegacy"
+
+
 def should_probe_live_table(plan, daloader=None) -> bool:
     """Whether to read the device's own MBR/EBR chain before writing.
 
@@ -3620,7 +3625,7 @@ def should_probe_live_table(plan, daloader=None) -> bool:
     """
     if not plan:
         return False
-    if daloader is not None and type(daloader).__name__ == "DALegacy":
+    if is_legacy_da_session(daloader):
         return False
     return True
 
@@ -7241,6 +7246,14 @@ class FlashWorker(QThread):
             return current
         if current is None:
             current = self._configure_scatter_user_addressing(scatter_path)
+        if is_legacy_da_session(getattr(mtk, "daloader", None)):
+            # The 1.1.7 legacy DA writes the package layout directly. A table
+            # read before the first write drops the player off the USB bus.
+            self._log(
+                "  Legacy DA session: using the package addresses; "
+                "skipping the live MBR probe"
+            )
+            return current
         if is_overlay_package(scatter_path, parts):
             # Overlay packages (Y2Linux/Reborn) carry their own absolute install
             # map. Reading the device's stock MBR/EBR before that map is used
