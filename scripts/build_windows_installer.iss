@@ -746,9 +746,9 @@ ukrainian.RestartPcToFinish=Перезавантажити ПК для заве�
 ; ignoreversion replaces older files, so this same installer updates in place.
 #ifdef MyIsMediaTek
 Source: "{#MyDistDir}\SP_Flash_Tool\*"; DestDir: "{app}\SP_Flash_Tool"; Components: sp_flash_tool; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "{#MyDistDir}\*"; Excludes: "SP_Flash_Tool\*,mtkclient\*,_internal\mtkclient\*,1.*.exe,2.*.exe,1. Install*,2. Install*"; DestDir: "{app}"; Components: mediatek_installer; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#MyDistDir}\*"; Excludes: "SP_Flash_Tool\*,mtkclient\*,_internal\mtkclient\*,1.*.exe,2.*.exe,1. Install*,2. Install*,UpdaterCE-Windows-Portable.zip*"; DestDir: "{app}"; Components: mediatek_installer; Flags: ignoreversion recursesubdirs createallsubdirs
 #else
-Source: "{#MyDistDir}\*"; Excludes: "mtkclient\*,_internal\mtkclient\*,1.*.exe,2.*.exe,1. Install*,2. Install*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#MyDistDir}\*"; Excludes: "mtkclient\*,_internal\mtkclient\*,1.*.exe,2.*.exe,1. Install*,2. Install*,UpdaterCE-Windows-Portable.zip*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 #endif
 ; UnRAR tool for .rar firmware package extraction compatibility
 Source: "{#MyRepoRoot}tools\windows\UnRAR.exe"; DestDir: "{app}\tools"; Flags: ignoreversion skipifsourcedoesntexist

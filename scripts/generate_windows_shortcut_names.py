@@ -40,6 +40,45 @@ from src import shortcut_manager as sm  # noqa: E402
 OUTPUT = ROOT / "scripts" / "build_windows_shortcut_names.iss"
 MESSAGES = ROOT / "scripts" / "build_windows_installer_names.iss"
 
+# Inno's language files are optional in its installer: a compiler installation
+# may omit translations that another version ships. The main script already
+# guards its [Languages] entries with FileExists; these guards keep the
+# generated [CustomMessages] in step with it instead of failing on a language
+# the compiler does not have.
+_INNO_LANGUAGE_FILES = {
+    "arabic": "Arabic.isl",
+    "armenian": "Armenian.isl",
+    "brazilianportuguese": "BrazilianPortuguese.isl",
+    "bulgarian": "Bulgarian.isl",
+    "catalan": "Catalan.isl",
+    "chinesesimplified": "ChineseSimplified.isl",
+    "chinesetraditional": "ChineseTraditional.isl",
+    "corsican": "Corsican.isl",
+    "czech": "Czech.isl",
+    "danish": "Danish.isl",
+    "dutch": "Dutch.isl",
+    "finnish": "Finnish.isl",
+    "french": "French.isl",
+    "german": "German.isl",
+    "hebrew": "Hebrew.isl",
+    "hungarian": "Hungarian.isl",
+    "icelandic": "Icelandic.isl",
+    "italian": "Italian.isl",
+    "japanese": "Japanese.isl",
+    "korean": "Korean.isl",
+    "norwegian": "Norwegian.isl",
+    "polish": "Polish.isl",
+    "portuguese": "Portuguese.isl",
+    "russian": "Russian.isl",
+    "slovak": "Slovak.isl",
+    "slovenian": "Slovenian.isl",
+    "spanish": "Spanish.isl",
+    "swedish": "Swedish.isl",
+    "tamil": "Tamil.isl",
+    "turkish": "Turkish.isl",
+    "ukrainian": "Ukrainian.isl",
+}
+
 
 def _pascal_string(value: str) -> str:
     if "\n" in value or "\r" in value:
@@ -81,8 +120,13 @@ def render_messages() -> str:
                 break
         if not name:
             continue
+        isl_name = _INNO_LANGUAGE_FILES[inno_name]
+        lines.append(
+            f'#if FileExists(AddBackslash(CompilerPath) + "Languages\\{isl_name}")'
+        )
         lines.append(f"{inno_name}.AppShortcutName={name}")
         lines.append(f"{inno_name}.DesktopAppShortcutName={name}")
+        lines.append("#endif")
     lines.append("")
     return "\n".join(lines)
 

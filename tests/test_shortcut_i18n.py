@@ -306,8 +306,9 @@ def test_installer_custom_messages_include_has_only_valid_entries():
 
     assert lines
     assert all(
-        line.startswith(";") or "=" in line for line in lines
-    ), "[CustomMessages] allows ; comments and key=value entries only"
+        line.startswith(";") or line.startswith("#") or "=" in line
+        for line in lines
+    ), "[CustomMessages] allows ; comments, preprocessor guards and key=value entries only"
 
 
 def _iss_section(text, header):
