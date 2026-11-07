@@ -220,6 +220,155 @@ def test_english_is_never_written_to_a_user_catalog(tmp_path, monkeypatch):
     assert not (tmp_path / "i18n").exists()
 
 
+_POWER_ON_TEMPLATE = (
+    "Unplug your {label}, then hold the {button} until it turns on."
+)
+
+
+def _patch_template_sources(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        i18n,
+        "english_sources",
+        lambda: {_POWER_ON_TEMPLATE: ("install_power_on_steps_fmt",)},
+    )
+    monkeypatch.setattr(i18n, "english_templates", lambda: (_POWER_ON_TEMPLATE,))
+    monkeypatch.setattr(i18n, "translation_for_english", lambda text, lang: "")
+    monkeypatch.setattr(i18n, "user_catalog_dir", lambda: tmp_path / "i18n")
+    i18n._CATALOGS.pop("ru", None)
+
+
+def test_english_templates_include_the_power_on_sentence():
+    assert _POWER_ON_TEMPLATE in i18n.english_templates()
+
+
+def test_runtime_translator_matches_a_formatted_sentence_and_renders_its_values(
+    app, tmp_path, monkeypatch
+):
+    """The completion card shows a formatted template, not the English source."""
+    _patch_template_sources(monkeypatch, tmp_path)
+    calls = []
+
+    def fetch(text, lang):
+        calls.append(text)
+        assert "{" not in text  # the provider never sees a placeholder
+        return "Отключите ⟦0⟧, затем удерживайте ⟦1⟧, пока он не включится."
+
+    box = QWidget()
+    label = QLabel(
+        "Unplug your Y2, then hold the кнопка питания until it turns on.", box
+    )
+    translator = RuntimeTranslator(
+        cache_path=tmp_path / "template.json",
+        fetch=fetch,
+        scan_interval_ms=600_000,
+    )
+    try:
+        translator.start("ru")
+        translator.scan(box)
+        QTest.qWait(700)
+
+        assert label.text() == (
+            "Отключите Y2, затем удерживайте кнопка питания, пока он не включится."
+        )
+        assert calls == ["Unplug your ⟦0⟧, then hold the ⟦1⟧ until it turns on."]
+    finally:
+        translator.stop()
+        i18n._CATALOGS.pop("ru", None)
+
+
+def test_a_template_translation_that_loses_a_placeholder_leaves_english(
+    app, tmp_path, monkeypatch
+):
+    _patch_template_sources(monkeypatch, tmp_path)
+    original = "Unplug your Y2, then hold the кнопка питания until it turns on."
+
+    box = QWidget()
+    label = QLabel(original, box)
+    translator = RuntimeTranslator(
+        cache_path=tmp_path / "damaged.json",
+        fetch=lambda text, lang: "Отключите ⟦0⟧ и включите его снова.",
+        scan_interval_ms=600_000,
+    )
+    try:
+        translator.start("ru")
+        translator.scan(box)
+        QTest.qWait(700)
+
+        assert label.text() == original
+        assert not (tmp_path / "damaged.json").exists()
+    finally:
+        translator.stop()
+        i18n._CATALOGS.pop("ru", None)
+
+
+def test_a_learned_template_replaces_a_catalog_value_still_in_english(
+    tmp_path, monkeypatch
+):
+    """An English cell is a gap, not curated copy: learning may repair it."""
+    _patch_template_sources(monkeypatch, tmp_path)
+    russian = "Отключите {label}, затем удерживайте {button}, пока он не включится."
+    # The shipped catalog is complete now; isolate the rule under test with a
+    # catalog cell that is still the English source, as a failed pass leaves it.
+    monkeypatch.setattr(
+        i18n,
+        "catalog",
+        lambda code: {"install_power_on_steps_fmt": _POWER_ON_TEMPLATE},
+    )
+    try:
+        assert i18n.remember_translations("ru", {_POWER_ON_TEMPLATE: russian}) == 1
+        stored = json.loads(
+            (tmp_path / "i18n" / "ru.json").read_text(encoding="utf-8")
+        )
+        assert stored["install_power_on_steps_fmt"] == russian
+    finally:
+        i18n._CATALOGS.pop("ru", None)
+
+
+def test_the_russian_completion_sentence_is_fully_translated():
+    """Regression for the card that mixed English into a Russian install."""
+    old = i18n.current_language()
+    i18n.translator().set_language("ru")
+    try:
+        from src.config import install_power_on_steps
+
+        text = install_power_on_steps("Y2")
+        assert "Unplug" not in text
+        assert "Y2" in text
+        assert "питания" in text
+    finally:
+        i18n.translator().set_language(old)
+
+
+def test_the_mixed_completion_sentence_is_translated_from_the_catalog(app, tmp_path):
+    """The screenshot case: English template, Russian button value already in it."""
+    calls = []
+    box = QWidget()
+    label = QLabel(
+        "Unplug your Y2, then hold the кнопка питания until it turns on.", box
+    )
+    translator = RuntimeTranslator(
+        cache_path=tmp_path / "catalog.json",
+        fetch=lambda text, lang: calls.append(text) or "unused",
+        scan_interval_ms=600_000,
+    )
+    old = i18n.current_language()
+    i18n.translator().set_language("ru")
+    try:
+        translator.start("ru")
+        translator.scan(box)
+
+        # Values are substituted verbatim; `install_power_on_steps` supplies
+        # the accusative `кнопку питания`, while this literal label carries the
+        # nominative form it was built with.
+        assert label.text() == (
+            "Отключите Y2, затем удерживайте кнопка питания, пока он не включится."
+        )
+        assert calls == []  # the bundled catalog already has the template
+    finally:
+        translator.stop()
+        i18n.translator().set_language(old)
+
+
 def test_shortcut_card_relabels_without_rebuilding_its_layout(app):
     old = i18n.current_language()
     i18n.translator().set_language("ru")

@@ -16,6 +16,7 @@ startup. ``tr()`` prefers the catalog, then the tables here, then English.
 import json
 import logging
 import os
+import re
 import string
 import sys
 from pathlib import Path
@@ -7220,6 +7221,7 @@ class _Translator:
 
 
 _ENGLISH_SOURCES: dict[str, tuple] | None = None
+_PLACEHOLDER_FIELD = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)(?::[^{}]*)?\}")
 
 
 def english_sources() -> dict[str, tuple]:
@@ -7245,6 +7247,34 @@ def english_sources() -> dict[str, tuple]:
                     keys.append(key)
         _ENGLISH_SOURCES = {text: tuple(keys) for text, keys in grouped.items()}
     return _ENGLISH_SOURCES
+
+
+_ENGLISH_TEMPLATES: tuple[str, ...] | None = None
+
+
+def english_templates() -> tuple[str, ...]:
+    """English UI strings carrying ``{placeholders}``, most specific first.
+
+    A sentence built from a template ("Unplug your Y2, then hold the кнопка
+    питания until it turns on.") never equals the template it came from, so the
+    runtime gap-filler cannot match it exactly. Matching it structurally needs
+    the source templates, ordered by how much literal copy they carry: a short
+    generic pattern must never win over the sentence that actually produced the
+    text.
+    """
+    global _ENGLISH_TEMPLATES
+    if _ENGLISH_TEMPLATES is None:
+        templates = [
+            text for text in english_sources() if _PLACEHOLDER_FIELD.search(text)
+        ]
+        templates.sort(
+            key=lambda text: (
+                -len(re.findall(r"[A-Za-z]", _PLACEHOLDER_FIELD.sub("", text))),
+                -len(text),
+            )
+        )
+        _ENGLISH_TEMPLATES = tuple(templates)
+    return _ENGLISH_TEMPLATES
 
 
 def text_for_language(key: str, lang: str) -> str:
@@ -7305,7 +7335,12 @@ def remember_translations(lang: str, mapping: dict) -> int:
         if not value or value == source:
             continue
         for key in sources.get(source, ()):
-            if table.get(key):
+            english = (_STRINGS.get(key) or {}).get("en") or ""
+            current = table.get(key) or ""
+            # A catalog value identical to its English source is a gap left by
+            # a failed machine-translation pass, not curated copy: it is safe
+            # (and necessary) to replace. Real translations still win.
+            if current and current != english:
                 continue
             table[key] = value
             learned[key] = value

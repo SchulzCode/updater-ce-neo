@@ -46,6 +46,13 @@ from src.translate import _urlopen  # noqa: E402
 
 BATCH_SIZE = 40
 PAUSE_SECONDS = 0.15
+#: Product names stay in English in every catalog, even when a translation
+#: pass is refreshing cells that still match the English source.
+KEEP_ENGLISH = {
+    "flash_method_sp",
+    "nav_sp_flash_tool_gui",
+    "settings_shortcut_sp_flash",
+}
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
@@ -71,6 +78,37 @@ def _one(text: str, lang: str, timeout: float) -> str:
     from src.translate import fetch_google_translation
 
     return fetch_google_translation(text, lang, timeout=timeout)
+
+
+#: A token Google leaves alone, so it cannot rename ``{label}`` to ``{кнопку}``.
+_PROTECTED = "\u27e6{}\u27e7"
+
+
+def _protect(text: str) -> tuple[str, dict]:
+    """Hide ``{placeholders}`` behind opaque tokens before a provider call."""
+    tokens: dict[str, str] = {}
+
+    def replace(match: re.Match) -> str:
+        token = _PROTECTED.format(len(tokens))
+        tokens[token] = match.group(0)
+        return token
+
+    return re.sub(r"\{[^{}]+\}", replace, text or ""), tokens
+
+
+def _restore(text: str, tokens: dict) -> str:
+    for token, literal in tokens.items():
+        text = text.replace(token, literal)
+    return text
+
+
+def _one_protected(text: str, lang: str, timeout: float) -> str:
+    payload, tokens = _protect(text)
+    value = _one(payload, lang, timeout)
+    if not tokens or not value:
+        return value
+    restored = _restore(value, tokens)
+    return restored if _safe_translation(text, restored) else text
 
 
 def _placeholders(text: str):
@@ -114,16 +152,19 @@ def _repair(source: str, translated: str, lang: str, timeout: float) -> str:
         return value if _safe_translation(source, value) else source
 
     if not translated or translated == source:
-        return checked(_one(source, lang, timeout))
+        return checked(_one_protected(source, lang, timeout))
     if source.count("\n") != translated.count("\n"):
         lines = source.split("\n")
-        done = [_one(line, lang, timeout) if line.strip() else line for line in lines]
+        done = [
+            _one_protected(line, lang, timeout) if line.strip() else line
+            for line in lines
+        ]
         joined = "\n".join(done)
         if _safe_translation(source, joined):
             return joined
-        return checked(_one(source, lang, timeout))
+        return checked(_one_protected(source, lang, timeout))
     if not _safe_translation(source, translated):
-        return checked(_one(source, lang, timeout))
+        return checked(_one_protected(source, lang, timeout))
     return translated
 
 
@@ -133,19 +174,29 @@ def translate(texts, lang: str, *, timeout: float = 15.0, pause: float = PAUSE_S
     url = TRANSLATE_URL.format(lang=urllib.parse.quote(lang))
     for start in range(0, len(texts), BATCH_SIZE):
         chunk = texts[start : start + BATCH_SIZE]
+        payloads = [_protect(text) for text in chunk]
         got = None
         try:
-            data = _post(url, chunk, timeout)
+            data = _post(url, [payload for payload, _tokens in payloads], timeout)
             if (
                 isinstance(data, list)
                 and len(data) == len(chunk)
                 and all(isinstance(item, str) for item in data)
             ):
-                got = [_repair(src, dst, lang, timeout) for src, dst in zip(chunk, data)]
+                got = [
+                    _repair(src, _restore(dst, tokens), lang, timeout)
+                    for src, dst, (_payload, tokens) in zip(chunk, data, payloads)
+                ]
         except Exception as exc:  # batching is an optimisation, never a blocker
             print(f"    batch failed ({exc}); retrying one at a time")
         if got is None:
-            got = [_one(text, lang, timeout) for text in chunk]
+            got = [_one_protected(text, lang, timeout) for text in chunk]
+        # A trailing space in the source is deliberate (`{top_prefix}{anchor}`);
+        # Google trims it, so put it back where English had one.
+        got = [
+            f"{value} " if src.endswith(" ") and value and not value.endswith(" ") else value
+            for src, value in zip(chunk, got)
+        ]
         out.extend(got)
         if pause:
             time.sleep(pause)
@@ -181,6 +232,11 @@ def write_catalog(code: str, mapping: dict, order) -> Path:
     CATALOGS.mkdir(parents=True, exist_ok=True)
     path = CATALOGS / f"{code}.json"
     ordered = {key: mapping[key] for key in order if key in mapping}
+    # Keep legacy ids that the English table no longer carries: a catalog file
+    # is also read by older builds and by feature code that still asks for
+    # them, and dropping them turns a translation into an English fallback.
+    for key, value in mapping.items():
+        ordered.setdefault(key, value)
     path.write_text(
         json.dumps(ordered, ensure_ascii=False, indent=1) + "\n", encoding="utf-8"
     )
@@ -270,7 +326,14 @@ def curated_strings(code: str) -> dict:
     }
 
 
-def fill_language(code: str, source: dict, *, force: bool, timeout: float) -> dict:
+def fill_language(
+    code: str,
+    source: dict,
+    *,
+    force: bool,
+    timeout: float,
+    english_gaps: bool = False,
+) -> dict:
     """Translate one language, reusing whatever its catalog already has."""
     existing = read_catalog(code)
     for key, value in curated_strings(code).items():
@@ -278,6 +341,18 @@ def fill_language(code: str, source: dict, *, force: bool, timeout: float) -> di
             existing[key] = value
     if force:
         wanted = list(source)
+    elif english_gaps:
+        # A cell equal to its English source is a gap a failed pass left
+        # behind, not copy in that language. Missing cells count as gaps too.
+        wanted = [
+            key
+            for key in source
+            if key not in KEEP_ENGLISH
+            and (
+                not (existing.get(key) or "").strip()
+                or existing.get(key) == source[key]
+            )
+        ]
     else:
         wanted = [key for key in source if not (existing.get(key) or "").strip()]
     if not wanted:
@@ -347,6 +422,11 @@ def main(argv=None) -> int:
         default=[],
         help="refresh only these string ids in every language",
     )
+    parser.add_argument(
+        "--english-gaps",
+        action="store_true",
+        help="retranslate cells still identical to their English source",
+    )
     args = parser.parse_args(argv)
     PAUSE_SECONDS = args.pause
 
@@ -405,7 +485,13 @@ def main(argv=None) -> int:
 
     def run(code: str) -> bool:
         try:
-            fill_language(code, source, force=args.force, timeout=args.timeout)
+            fill_language(
+                code,
+                source,
+                force=args.force,
+                timeout=args.timeout,
+                english_gaps=args.english_gaps,
+            )
             return True
         except Exception as exc:
             print(f"{code}: failed ({exc}); continuing")

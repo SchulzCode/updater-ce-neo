@@ -103,6 +103,18 @@ def test_ticker_templates_keep_the_placeholders_the_code_fills():
                     assert "{%s}" % field in value, f"{lang}:{key} lost {{{field}}}"
 
 
+def test_supporter_prefix_keeps_the_space_before_the_donor_name():
+    """The ticker template places ``{top_prefix}{anchor}`` directly together."""
+    from src.donation_dialog import _supporter_prefix
+
+    old = i18n.current_language()
+    i18n.translator().set_language("ru")
+    try:
+        assert _supporter_prefix() == "Лучший сторонник "
+    finally:
+        i18n.translator().set_language(old)
+
+
 def test_the_support_appeal_uses_one_complete_sentence_and_keeps_its_bold_lead():
     """The old pair split a sentence mid-clause; translators ended it there."""
     from src.ui.support_appeal import support_appeal_html

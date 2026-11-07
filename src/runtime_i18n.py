@@ -60,6 +60,9 @@ class _TextTarget:
     key: tuple
     read: Callable[[], str]
     write: Callable[[str], None]
+    # Set for a sentence built from an English template: the provider returns
+    # the translated template and this renders the captured values into it.
+    render: Optional[Callable[[str], str]] = None
 
 
 class _TranslationWorker(QThread):
@@ -82,14 +85,15 @@ class _TranslationWorker(QThread):
         for source in self._sources:
             if self.isInterruptionRequested():
                 return
+            payload, tokens = _protect_placeholders(source)
             try:
                 if self._fetch is not None:
-                    result = self._fetch(source, self._lang)
+                    result = self._fetch(payload, self._lang)
                 else:
                     from .translate import fetch_google_translation
 
                     result = fetch_google_translation(
-                        source,
+                        payload,
                         self._lang,
                         timeout=4.5,
                         raise_on_error=True,
@@ -99,6 +103,14 @@ class _TranslationWorker(QThread):
                 self.failed.emit(self._lang, source)
                 continue
             value = result.strip() if isinstance(result, str) else ""
+            if tokens:
+                value = _restore_placeholders(value, tokens)
+                if not _template_survived(source, value):
+                    logger.debug(
+                        "Runtime translation of %r damaged its placeholders", source
+                    )
+                    self.failed.emit(self._lang, source)
+                    continue
             if value and value != source:
                 self.translated.emit(self._lang, source, value)
             else:
@@ -132,6 +144,8 @@ class RuntimeTranslator(QObject):
         self._applied: dict[tuple, tuple[_TextTarget, str, str]] = {}
         self._failed: set[tuple[str, str]] = set()
         self._active_sources: set[str] = set()
+        self._template_patterns: dict[str, Optional[re.Pattern]] = {}
+        self._template_lookup: dict[str, Optional[tuple]] = {}
         self._worker: Optional[_TranslationWorker] = None
         self._dots = 0
         self._event_filter_installed = False
@@ -392,13 +406,30 @@ class RuntimeTranslator(QObject):
 
         source = self._source_for(text)
         if not source:
-            return
+            # The catalogs only lost the *template*: the label shows the
+            # formatted sentence, with values the template cannot contain.
+            match = self._template_match(text)
+            if match is None:
+                return
+            source, values = match
+            target = _TextTarget(
+                target.key,
+                target.read,
+                target.write,
+                render=lambda translated, values=values: _render_template(
+                    translated, values
+                ),
+            )
         if (self._lang, source) in self._failed:
             return
 
         translated = self._cached_translation(source)
         if translated:
-            self._write_translation(target, source, translated, text)
+            if self._write_translation(target, source, translated, text):
+                return
+            # A catalog translation that cannot render its values is unusable;
+            # do not ask the same provider for it on every scan.
+            self._failed.add((self._lang, source))
             return
 
         self._queue(target, source)
@@ -437,6 +468,27 @@ class RuntimeTranslator(QObject):
             label_target.write("".join(parts))
 
         return _TextTarget((*label_target.key, "rich", index), read, write)
+
+    def _template_match(self, text: str) -> Optional[tuple[str, dict]]:
+        """Find the English template that produced a formatted sentence."""
+        if text in self._template_lookup:
+            return self._template_lookup[text]
+        found = None
+        for template in i18n.english_templates():
+            pattern = self._template_patterns.get(template, _UNSET)
+            if pattern is _UNSET:
+                pattern = _compile_template(template)
+                self._template_patterns[template] = pattern
+            if pattern is None:
+                continue
+            match = pattern.fullmatch(text)
+            if match is not None:
+                found = (template, dict(match.groupdict()))
+                break
+        if len(self._template_lookup) >= 2000:
+            self._template_lookup.clear()
+        self._template_lookup[text] = found
+        return found
 
     def _source_for(self, text: str) -> str:
         sources = i18n.english_sources()
@@ -507,17 +559,26 @@ class RuntimeTranslator(QObject):
 
     def _write_translation(
         self, target: _TextTarget, source: str, translated: str, original: str
-    ) -> None:
+    ) -> bool:
+        value = translated
+        if target.render is not None:
+            try:
+                value = target.render(translated)
+            except Exception:
+                value = ""
+        if not value:
+            return False
         try:
-            target.write(translated)
+            target.write(value)
         except Exception:
-            return
-        self._applied[target.key] = (target, original, translated)
+            return False
+        self._applied[target.key] = (target, original, value)
         self._queued_keys.pop(target.key, None)
         self._loading.pop(target.key, None)
         self._remove_from_pending(target.key, source)
         if not self._loading:
             self._loading_timer.stop()
+        return True
 
     def _remove_from_pending(self, key: tuple, source: str) -> None:
         remaining = [
@@ -570,7 +631,13 @@ class RuntimeTranslator(QObject):
                 self._forget_loading(target.key)
                 continue
             if current == original or current.startswith(original + " "):
-                self._write_translation(target, source, translated, original)
+                if not self._write_translation(target, source, translated, original):
+                    self._failed.add((lang, source))
+                    try:
+                        target.write(original)
+                    except Exception:
+                        pass
+                    self._forget_loading(target.key)
             else:
                 self._forget_loading(target.key)
         self._pending.pop(source, None)
@@ -694,6 +761,76 @@ class RuntimeTranslator(QObject):
             os.replace(temporary, self._cache_path)
         except Exception:
             logger.debug("Could not save runtime translations", exc_info=True)
+
+
+_UNSET = object()
+_TEMPLATE_FIELD = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)(?::[^{}]*)?\}")
+_TEMPLATE_SPLIT = re.compile(r"(\{[A-Za-z_][A-Za-z0-9_]*(?::[^{}]*)?\})")
+# A token the translation service leaves alone, so it cannot rename {fields}.
+_TEMPLATE_TOKEN = "\u27e6{}\u27e7"
+
+
+def _protect_placeholders(text: str) -> tuple[str, dict]:
+    """Replace ``{field}`` with opaque tokens before a provider sees them."""
+    tokens: dict[str, str] = {}
+
+    def replace(match: re.Match) -> str:
+        token = _TEMPLATE_TOKEN.format(len(tokens))
+        tokens[token] = match.group(1)
+        return token
+
+    return _TEMPLATE_FIELD.sub(replace, text), tokens
+
+
+def _restore_placeholders(text: str, tokens: dict) -> str:
+    for token, field in tokens.items():
+        text = text.replace(token, "{" + field + "}")
+    return text
+
+
+def _template_survived(source: str, translated: str) -> bool:
+    """Every field (and no invented one) survived the provider round trip."""
+    if not translated or "\u27e6" in translated or "\u27e7" in translated:
+        return False
+    return set(_TEMPLATE_FIELD.findall(translated)) == set(
+        _TEMPLATE_FIELD.findall(source)
+    )
+
+
+def _compile_template(template: str) -> Optional[re.Pattern]:
+    """A regex that captures each placeholder from a rendered sentence."""
+    pieces = []
+    names: set[str] = set()
+    literal = []
+    for part in _TEMPLATE_SPLIT.split(template):
+        if not part:
+            continue
+        field = _TEMPLATE_FIELD.fullmatch(part)
+        if field is None:
+            literal.append(part)
+            pieces.append(re.escape(part))
+            continue
+        name = field.group(1)
+        if name in names:
+            pieces.append(f"(?P={name})")
+        else:
+            names.add(name)
+            pieces.append(f"(?P<{name}>.+?)")
+    # A pattern with almost no literal copy ("{task} ({pct}%)") would match
+    # unrelated labels and translate text the app does not own.
+    if not names or len(re.findall(r"[A-Za-z]", "".join(literal))) < 4:
+        return None
+    try:
+        return re.compile("".join(pieces), re.DOTALL)
+    except re.error:
+        return None
+
+
+def _render_template(translated: str, values: dict) -> str:
+    try:
+        return translated.format(**values)
+    except Exception:
+        return ""
 
 
 def _looks_like_markup(text: str) -> bool:

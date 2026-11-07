@@ -43,6 +43,18 @@ from .ui.glass import apply_dialog_theme
 logger = logging.getLogger(__name__)
 
 
+def _supporter_prefix() -> str:
+    """``Top supporter`` with exactly one space before the donor's name.
+
+    The ticker templates place ``{top_prefix}{anchor}`` directly against each
+    other, so the prefix owns the separating space. Catalogs and translation
+    services trim trailing whitespace; without this the line read
+    "Лучший сторонникNathan P".
+    """
+    label = tr("donate_top_supporter_prefix").strip()
+    return f"{label} " if label else ""
+
+
 class _DonationRefreshBridge(QObject):
     updated = Signal(object)
 
@@ -677,7 +689,7 @@ class DonationStatusBar(QStatusBar):
                 anchor = make_anchor(display_name, url)
             else:
                 anchor = make_anchor(raw_name, url)
-                top_prefix = tr("donate_top_supporter_prefix") if is_top else ""
+                top_prefix = _supporter_prefix() if is_top else ""
             when = format_donation_when(dt)
             methods_norm = {m.lower() for m in methods}
             coffee_kinds = {coffee_method(m) for m in methods_norm}
