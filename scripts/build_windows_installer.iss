@@ -133,7 +133,13 @@ OutputBaseFilename={#MyOutputBase}-{#MyAppVersion}
 SetupIconFile={#MyRepoRoot}assets\icon.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
+; Follow the Windows light/dark setting. Inno Setup 6.6 introduced dark
+; mode; older compilers keep the light-only modern wizard.
+#if Ver >= EncodeVer(6,6,0)
+WizardStyle=modern dynamic
+#else
 WizardStyle=modern
+#endif
 ; Target Windows 8.1 and later (NT 6.3+). Blocks unsupported Windows 7, Vista, and XP.
 MinVersion=6.3
 ; The application is 64-bit only (PySide6 ships no 32-bit Windows wheels).

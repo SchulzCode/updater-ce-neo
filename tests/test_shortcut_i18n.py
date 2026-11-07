@@ -298,6 +298,18 @@ def _installer_shortcut_names():
     return values
 
 
+def test_installer_custom_messages_include_has_only_valid_entries():
+    text = (ROOT / "scripts" / "build_windows_installer_names.iss").read_text(
+        encoding="utf-8-sig"
+    )
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+
+    assert lines
+    assert all(
+        line.startswith(";") or "=" in line for line in lines
+    ), "[CustomMessages] allows ; comments and key=value entries only"
+
+
 def _iss_section(text, header):
     """The body of a real Inno section, not a [Languages] mention in a comment."""
     match = re.search(rf"^\[{re.escape(header)}\]\s*$", text, re.MULTILINE)

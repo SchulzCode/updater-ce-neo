@@ -4,7 +4,7 @@ import sys
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtWidgets import QApplication, QPushButton, QWidget
 
-from src.ui.widgets import AppUpdateToast
+from src.ui.widgets import AppUpdateToast, UpdateModelToast
 from src.ui.select_page import SelectPackagePage
 from src.updates import UpdateInfo
 
@@ -33,6 +33,28 @@ def test_app_update_toast_widget():
     toast.close_clicked.connect(lambda: close_clicked.append(True))
     close_btn.click()
     assert close_clicked == [True]
+
+
+def test_update_model_toast_keeps_its_segmented_pair_together():
+    app = QApplication.instance() or QApplication(sys.argv)
+    toast = UpdateModelToast(
+        {"model": "Y2", "software": "Reborn (Y2Linux)", "tag": "v3.2.1"}
+    )
+    toast.show()
+    app.processEvents()
+    try:
+        assert toast._later._companion is toast._install
+        assert toast._install._companion is toast._later
+        assert toast._actions_layout.spacing() == 0
+        assert (
+            toast._actions_layout.indexOf(toast._later) + 1
+            == toast._actions_layout.indexOf(toast._install)
+        )
+        assert toast._install.x() == toast._later.x() + toast._later.width()
+    finally:
+        toast.close()
+        toast.deleteLater()
+        app.processEvents()
 
 
 def test_app_update_toast_precedence_over_device_update():

@@ -5866,6 +5866,7 @@ class FlashPage(QWidget):
         """Repaint status lines from the live theme. No opaque backdrop."""
         names = (
             "_prep_pkg_label", "_prep_step", "_wait_pkg_label", "_wait_prompt_label",
+            "_wait_question_label", "_wait_question_heading",
             "_flash_pkg_label", "_step_label", "_eta_label", "_partition_progress_label",
             "_warning", "_download_pkg_label", "_download_status_label", "_download_heading",
             "_appeal_label", "_appeal_body", "_appeal_signature", "_completion_guide_hint",

@@ -981,8 +981,18 @@ class UpdateModelToast(QFrame):
         self._install.clicked.connect(lambda: self.install_clicked.emit(self._offer))
         self._later.set_segmented_pair(companion=self._install, is_leading=True)
         self._install.set_segmented_pair(companion=self._later, is_leading=False)
-        row.addWidget(self._later, 0, Qt.AlignVCenter)
-        row.addWidget(self._install, 0, Qt.AlignVCenter)
+        # The two chips are one segmented control. Give the pair its own
+        # zero-spacing row: the toast's normal spacing would otherwise paint
+        # two separate buttons with a gap through the middle of the capsule.
+        self._actions = QWidget(self)
+        self._actions.setObjectName("updateModelToastActions")
+        self._actions.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self._actions_layout = QHBoxLayout(self._actions)
+        self._actions_layout.setContentsMargins(0, 0, 0, 0)
+        self._actions_layout.setSpacing(0)
+        self._actions_layout.addWidget(self._later, 0, Qt.AlignVCenter)
+        self._actions_layout.addWidget(self._install, 0, Qt.AlignVCenter)
+        row.addWidget(self._actions, 0, Qt.AlignVCenter)
         self._apply_copy()
 
     def offer(self) -> dict:

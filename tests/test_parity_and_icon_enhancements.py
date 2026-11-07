@@ -195,6 +195,16 @@ def test_write_scatter_without_preloader_disables_download_both_formats(tmp_path
     assert "is_download: true" in lines2[mbr_idx2 + 2]
 
 
+def test_inno_setup_follows_windows_dark_mode():
+    iss_path = Path(__file__).parent.parent / "scripts" / "build_windows_installer.iss"
+    assert iss_path.exists()
+    lines = [line.strip() for line in iss_path.read_text(encoding="utf-8").splitlines()]
+
+    assert "#if Ver >= EncodeVer(6,6,0)" in lines
+    assert "WizardStyle=modern dynamic" in lines
+    assert "WizardStyle=modern" in lines
+
+
 def test_inno_setup_skips_driver_install_when_already_present():
     iss_path = Path(__file__).parent.parent / "scripts" / "build_windows_installer.iss"
     assert iss_path.exists()
