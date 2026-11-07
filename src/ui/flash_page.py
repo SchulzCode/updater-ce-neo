@@ -2984,7 +2984,8 @@ class FlashPage(QWidget):
                     if getattr(self, "_stop_open", False):
                         saved = getattr(self, "_stop_saved", None)
                         if saved:
-                            self._stop_saved = (text, saved[1], saved[2], saved[3], saved[4])
+                            saved["label_text"] = text
+                            self._stop_saved = saved
                     else:
                         self._wait_prompt_label.setText(text)
                 # On a prompt-only card the band carries this sentence, so a
@@ -5866,6 +5867,7 @@ class FlashPage(QWidget):
         """Repaint status lines from the live theme. No opaque backdrop."""
         names = (
             "_prep_pkg_label", "_prep_step", "_wait_pkg_label", "_wait_prompt_label",
+            "_wait_question_label", "_wait_question_heading", "_stop_question",
             "_flash_pkg_label", "_step_label", "_eta_label", "_partition_progress_label",
             "_warning", "_download_pkg_label", "_download_status_label", "_download_heading",
             "_appeal_label", "_appeal_body", "_appeal_signature", "_completion_guide_hint",
@@ -6183,6 +6185,21 @@ class FlashPage(QWidget):
             button.setAccessibleName(tr(key))
         self._stop_actions = _GlyphActions([self._stop_back, self._stop_continue])
         self._stop_actions.hide()
+        # The stop question takes the band's row rather than borrowing the
+        # status line: it is the one thing the card is asking, and the two
+        # answers belong on its axis. Created once and reparented to whichever
+        # progress card is asking, so every stop check reads the same.
+        self._stop_question = QLabel("")
+        self._stop_question.setObjectName("installStopQuestion")
+        self._stop_question.setWordWrap(True)
+        self._stop_question.setTextFormat(Qt.TextFormat.PlainText)
+        self._stop_question.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self._stop_question.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred
+        )
+        self._stop_question.setMaximumWidth(INSTALL_TEXT_WIDTH)
+        _style_card_heading(self._stop_question)
+        self._stop_question.hide()
         self._stop_host = None
         self._stop_continue.clicked.connect(self._accept_stop)
         self._stop_back.clicked.connect(self._reject_stop)
@@ -6202,37 +6219,45 @@ class FlashPage(QWidget):
             button.setToolTip(tr(key))
             button.setAccessibleName(tr(key))
 
-    def _place_stop_actions(self, column, row=None) -> None:
-        """Buttons sit beside the message while the card is wide enough.
+    def _stop_column_widgets(self, column):
+        """The cards' copy widgets, which step aside while the stop question asks."""
+        if column is None:
+            return []
+        widgets = []
+        for index in range(column.count()):
+            item = column.itemAt(index)
+            widget = item.widget() if item is not None else None
+            if widget is not None:
+                widgets.append(widget)
+        return widgets
 
-        Right of the copy when there is horizontal room, in the order they were
-        given; otherwise the same buttons stack under the copy, in that same
-        order, as a traffic-light column.
+    def _place_stop_actions(self, row=None) -> None:
+        """Put the question and its two answers on the card's head row.
+
+        The stop question stands where the progress band is while the run is
+        working, and the segmented pair follows it immediately. That is the
+        same shape as the keep-data question: one line asks, the two answers
+        sit on its axis, and the rest of the running card stays out of the way.
         """
-        card = getattr(self, "_stop_card", None)
-        room = card.width() if card is not None and card.width() > 0 else 0
-        count = len(getattr(self._stop_actions, "_buttons", ())) or 2
-        buttons_w = count * ROUND_NEXT_BUTTON_PX + (count - 1) * 10
-        # Copy column, the buttons, and the icon plus card padding beside them.
-        beside = row is not None and room >= self.text_column_width() + buttons_w + 80
-        target = row if beside else column
-        host = getattr(self, "_stop_host", None)
-        if host is not None and host is not target:
-            host.removeWidget(self._stop_actions)
-            host.addStretch(1)
-        if self._stop_host is not target:
-            if beside:
-                # Just left of the card's own cancel chip, which is hidden while
-                # the stop check is open.
-                target.insertWidget(max(0, target.count() - 1), self._stop_actions)
-            else:
-                # Under the copy, against the right edge of the column.
-                target.addWidget(self._stop_actions, 0, Qt.AlignRight)
-            self._stop_host = target
-        self._stop_actions.set_stacked(not beside)
-        self._stop_actions.show()
-        self._stop_continue.show()
-        self._stop_back.show()
+        if row is None:
+            row = getattr(self, "_stop_host", None)
+        if row is None:
+            return
+        question = getattr(self, "_stop_question", None)
+        actions = getattr(self, "_stop_actions", None)
+        if question is not None:
+            if row.indexOf(question) < 0:
+                row.insertWidget(2, question, 0, Qt.AlignVCenter)
+            question.show()
+        if actions is not None:
+            if row.indexOf(actions) < 0:
+                row.insertWidget(3, actions, 0, Qt.AlignVCenter)
+            actions.set_stacked(False)
+            actions.show()
+        self._stop_host = row
+        if hasattr(self, "_stop_continue"):
+            self._stop_continue.show()
+            self._stop_back.show()
 
     def _stop_target(self):
         """The progress card that should host the stop check."""
@@ -6296,36 +6321,49 @@ class FlashPage(QWidget):
             return False
         self._ensure_stop_buttons()
         card, row, label, bar, cancel, extra, column = self._stop_target()
+        identity = (
+            row.itemAt(1).widget()
+            if row is not None and row.count() > 1
+            else None
+        )
+        column_widgets = self._stop_column_widgets(column)
         self._stop_open = True
         self._update_paperclip_hint()
         self._stop_message = message or ""
-        flow = getattr(self, "_status_flow", None)
-        if flow is not None:
-            flow.set_forced_stacked(True)
         self._stop_callback = on_continue
         self._stop_card = card
         self._stop_label = label
         self._stop_bar = bar
         self._stop_cancel = cancel
         self._stop_extra = extra
-        self._stop_saved = (
-            label.text() if label is not None else "",
-            label.wordWrap() if label is not None else False,
-            bar.isVisible() if bar is not None else False,
-            cancel.isVisible() if cancel is not None else False,
-            extra.isVisible() if extra is not None else False,
-        )
-        if label is not None:
-            label.setWordWrap(True)
-            label.setText(self._stop_message)
-        # The progress bar stays visible during the stop check so the card
-        # does not suffer a layout shift while the run is still in progress.
+        self._stop_identity = identity
+        self._stop_column = column
+        self._stop_saved = {
+            "label_text": label.text() if label is not None else "",
+            "label_wrap": label.wordWrap() if label is not None else False,
+            "bar_hidden": bar.isHidden() if bar is not None else False,
+            "cancel_hidden": cancel.isHidden() if cancel is not None else False,
+            "extra_hidden": extra.isHidden() if extra is not None else False,
+            "column_widgets": [(w, w.isHidden()) for w in column_widgets],
+            "identity_hidden": identity.isHidden() if identity is not None else False,
+        }
+        # The question takes the head's own row, where the progress band
+        # stands while the run is working. The title and the body describe the
+        # running install, not the question of whether to stop it.
+        if identity is not None:
+            identity.hide()
+        for widget in column_widgets:
+            widget.hide()
         if cancel is not None:
             cancel.hide()
         if extra is not None:
             extra.hide()
+        question = getattr(self, "_stop_question", None)
+        if question is not None:
+            question.setText(self._stop_message)
+            question.setAccessibleName(self._stop_message)
         self._retranslate_stop_buttons()
-        self._place_stop_actions(column, row)
+        self._place_stop_actions(row)
         self._relayout_for_text()
         fade_in(card)
         if not wait:
@@ -6338,24 +6376,26 @@ class FlashPage(QWidget):
         return bool(self._stop_result)
 
     def _apply_stop_hold(self) -> None:
-        """Keep the sanity check in place if a progress update repaints the card."""
+        """Keep the stop question in the head row if a progress update repaints."""
         if not getattr(self, "_stop_open", False):
             return
-        label = getattr(self, "_stop_label", None)
-        if label is not None:
-            label.setText(self._stop_message)
+        question = getattr(self, "_stop_question", None)
+        if question is not None:
+            question.setText(self._stop_message)
+            question.setAccessibleName(self._stop_message)
+        identity = getattr(self, "_stop_identity", None)
+        if identity is not None:
+            identity.hide()
+        column = getattr(self, "_stop_column", None)
+        for widget in self._stop_column_widgets(column):
+            widget.hide()
         cancel = getattr(self, "_stop_cancel", None)
         if cancel is not None:
             cancel.hide()
         extra = getattr(self, "_stop_extra", None)
         if extra is not None:
             extra.hide()
-        actions = getattr(self, "_stop_actions", None)
-        if actions is not None:
-            actions.show()
-        if hasattr(self, "_stop_continue"):
-            self._stop_continue.show()
-            self._stop_back.show()
+        self._place_stop_actions(getattr(self, "_stop_host", None))
 
     def _finish_stop(self, accepted: bool) -> None:
         """✕ stops the run; ← puts the check away and leaves the run alone.
@@ -6386,36 +6426,41 @@ class FlashPage(QWidget):
             return
         self._stop_result = accepted
         self._stop_open = False
-        self._update_paperclip_hint()
-        saved = getattr(self, "_stop_saved", None)
+        saved = getattr(self, "_stop_saved", None) or {}
         label = getattr(self, "_stop_label", None)
         bar = getattr(self, "_stop_bar", None)
         cancel = getattr(self, "_stop_cancel", None)
         extra = getattr(self, "_stop_extra", None)
+        identity = getattr(self, "_stop_identity", None)
+        column = getattr(self, "_stop_column", None)
         card = getattr(self, "_stop_card", None)
-        if saved:
-            text, wrap, bar_visible, cancel_visible, extra_visible = saved
-            if label is not None:
-                label.setWordWrap(wrap)
-                label.setText(text)
-            if bar is not None:
-                bar.setVisible(bar_visible)
-            if cancel is not None:
-                cancel.setVisible(cancel_visible)
-            if extra is not None:
-                extra.setVisible(extra_visible)
-        flow = getattr(self, "_status_flow", None)
-        if flow is not None:
-            flow.set_forced_stacked(False)
-            flow.refresh()
         host = getattr(self, "_stop_host", None)
         actions = getattr(self, "_stop_actions", None)
-        if host is not None and actions is not None:
-            host.removeWidget(actions)
-        if actions is not None:
-            actions.hide()
-            actions.setParent(None)
+        question = getattr(self, "_stop_question", None)
+        for widget in (question, actions):
+            if widget is None:
+                continue
+            if host is not None and host.indexOf(widget) >= 0:
+                host.removeWidget(widget)
+            widget.hide()
+            widget.setParent(None)
         self._stop_host = None
+        if saved:
+            if label is not None:
+                label.setWordWrap(bool(saved.get("label_wrap", False)))
+                label.setText(saved.get("label_text", ""))
+            if bar is not None:
+                bar.setVisible(not saved.get("bar_hidden", False))
+            if cancel is not None:
+                cancel.setVisible(not saved.get("cancel_hidden", False))
+            if extra is not None:
+                extra.setVisible(not saved.get("extra_hidden", False))
+            if identity is not None:
+                identity.setVisible(not saved.get("identity_hidden", False))
+            for widget, hidden in saved.get("column_widgets", ()):
+                widget.setVisible(not hidden)
+        self._stop_identity = None
+        self._stop_column = None
         loop = getattr(self, "_stop_loop", None)
         if loop is not None and loop.isRunning():
             loop.quit()
@@ -6423,5 +6468,9 @@ class FlashPage(QWidget):
         # dismissed check on the connect screen cannot leave the stop sentence
         # (or the software title with it) on screen until the next tick.
         self._sync_wait_band_page()
+        # The paperclip guide lives in the copy column, so refresh it only
+        # after that column has been restored; otherwise its own hide-state is
+        # put back over the fresh answer and the tip stays gone.
+        self._update_paperclip_hint()
         if card is not None:
             fade_in(card)

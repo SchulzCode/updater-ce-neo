@@ -64,17 +64,17 @@ if ($isArm64 -and -not ($setupBaseName -match "-arm64$")) {
     $setupBaseName += "-arm64"
 }
 
-# Locate ISCC.exe
+# Locate ISCC.exe. Stay on Inno Setup 6: 7.1.1's SetupLdr helper is blocked
+# by Application Control when it is copied to %TEMP% (error 4551), while the
+# 6.x helper is what the installers that work were built with. Do not fall
+# back to 7 just because it is installed.
 function Find-ISCC {
     $cmd = Get-Command iscc.exe -ErrorAction SilentlyContinue
-    if ($cmd) { return $cmd.Source }
+    if ($cmd -and ($cmd.Source -notmatch 'Inno Setup 7')) { return $cmd.Source }
     foreach ($p in @(
-        "C:\Program Files\Inno Setup 7\ISCC.exe",
-        "C:\Program Files (x86)\Inno Setup 7\ISCC.exe",
+        (Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 6\ISCC.exe"),
         "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
-        "C:\Program Files\Inno Setup 6\ISCC.exe",
-        (Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 7\ISCC.exe"),
-        (Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 6\ISCC.exe")
+        "C:\Program Files\Inno Setup 6\ISCC.exe"
     )) {
         if (Test-Path $p) { return $p }
     }

@@ -1116,8 +1116,25 @@ def theme_foreground() -> QColor:
     return QColor(t.fg if dark else "#111111")
 
 
+def theme_text_color() -> QColor:
+    """The host's own text role for labels in a card.
+
+    Unlike :func:`theme_foreground`, this does not decide the colour from its
+    lightness. A desktop theme may use a colour such as Plasma's accent blue
+    for ordinary text; labels that bake an explicit colour must keep that
+    colour so they read like the copy around them. The fallback is only for
+    an app without a usable palette.
+    """
+    app = QApplication.instance()
+    if app is not None:
+        color = app.palette().color(QPalette.ColorRole.WindowText)
+        if color.isValid() and color.alpha() > 0:
+            return QColor(color)
+    return theme_foreground()
+
+
 def apply_explicit_foreground(widget, extra: str = "") -> None:
-    """Keep text on the theme foreground.
+    """Keep text on the host's text colour.
 
     An empty stylesheet inherits ``color`` from the window rule. The next
     application stylesheet polish then writes white into the label palette,
@@ -1126,7 +1143,7 @@ def apply_explicit_foreground(widget, extra: str = "") -> None:
     """
     if widget is None:
         return
-    fg = theme_foreground()
+    fg = theme_text_color()
     widget.setAutoFillBackground(False)
     widget.setStyleSheet(f"color: {fg.name()};{extra}")
     pal = widget.palette()

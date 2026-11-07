@@ -14,7 +14,7 @@ The codebase ships two brand targets from a single shared engine:
 
 | Target Platform | Primary Flash Engine | Fallback / Secondary Engine | Archive Unpacking | Drivers / USB Access |
 | :--- | :--- | :--- | :--- | :--- |
-| **Windows x86 / x64** | **SP Flash Tool v5.1904** (Console Mode) | MTKClient (optional, shed on verified installs) | `zipfile` (ZIP) / `tools\UnRAR.exe` (RAR) | Bundled `DriverInstall.exe` (MediaTek VCOM) |
+| **Windows x86 / x64** | **SP Flash Tool v5.1904** (Console Mode) | MTKClient (optional, shed on verified installs) | `zipfile` (ZIP) / `tools\UnRAR.exe` (RAR) | MediaTek VCOM driver installed separately |
 | **Windows ARM64** | **MTKClient** | SP Flash Tool (experimental via Prism emulation) | `zipfile` (ZIP) / `tools\UnRAR.exe` (RAR) | WinUSB / PyUSB via bundled `libusb-1.0.dll` |
 | **macOS (Universal 2)** | **MTKClient** | None (SP Flash Tool does not ship for Darwin) | `zipfile` (ZIP) / `tools/unar` (RAR) | PyUSB via bundled Universal 2 `libusb-1.0.dylib` |
 | **Linux (x86_64)** | **SP Flash Tool** | MTKClient | `zipfile` (ZIP) / `tools/unar` (RAR) | `udev` rules + host `libusb-1.0.so.0` |
@@ -97,18 +97,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\build_windows.ps1 -Brand b
 ### Windows Packaging Specifics
 
 1. **Subprocess Silence**:
-   All child processes (`adb.exe`, `flash_tool.exe`, `DriverInstall.exe`, `powershell.exe`) run with `STARTF_USESHOWWINDOW` (`wShowWindow = SW_HIDE`) and `CREATE_NO_WINDOW (0x08000000)` via `src/quiet_subprocess.py` to prevent CMD console windows from flashing on screen.
+   All child processes (`adb.exe`, `flash_tool.exe`, `powershell.exe`) run with `STARTF_USESHOWWINDOW` (`wShowWindow = SW_HIDE`) and `CREATE_NO_WINDOW (0x08000000)` via `src/quiet_subprocess.py` to prevent CMD console windows from flashing on screen.
 2. **MediaTek SP Flash Tool Payload**:
    The x86 SP Flash Tool binary (`SP_Flash_Tool\flash_tool.exe`) and download agent binaries (`MTK_AllInOne_DA.bin`, `DA_PL.bin`, `DA_SWSEC.bin`) are automatically verified and placed beside the main executable.
 3. **UnRAR Packaging**:
    `tools\windows\UnRAR.exe` is bundled into `tools\UnRAR.exe` to allow extraction of `.rar` firmware packages matching the Chinese market release behavior.
-4. **Driver Check & Inno Setup Finish Page**:
-   Inno Setup verifies if MediaTek drivers are already installed by searching:
-   - `{pf}\MediaTek\SP Flash\unins000.exe`
-   - `{pf}\MediaTek\SP Driver\unins000.exe`
-   - `{pf32}\MediaTek\SP Flash\unins000.exe`
-   - `{pf64}\MediaTek\SP Flash\unins000.exe`
-   If the driver was installed during setup, Inno Setup automatically suppresses "Launch Updater CE" and offers a "Restart PC to finish setup" option instead.
+4. **MediaTek Driver**:
+   Setup does not install or execute a bundled MediaTek VCOM driver. Install the driver separately before flashing. This also keeps Setup from running an unsigned helper from `{tmp}`. Portable builds still contain a manual `1. Install Driver First and Reboot PC.exe` entry for users who need it.
 5. **Conditional MTKClient Delivery**:
    On x86/x64 Windows systems, `mtkclient` is excluded during Inno Setup installation to reduce install size. On ARM64 Windows systems (`ProcessorArchitecture = paARM64`), `mtkclient` is installed. When running on an x86/x64 machine, the application will also shed redundant `mtkclient` folders on startup.
 6. **Cache & Settings Cleanup on Upgrade & Uninstall**:

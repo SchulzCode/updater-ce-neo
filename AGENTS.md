@@ -36,6 +36,20 @@
   (`'#fff' not in styleSheet`, `640 == 680` window width) rather than regressions — check individually
   with `pytest tests/test_native_ux_enhancements.py::<name>` before blaming a change.
 
+## Native-first UI (all platforms)
+- The app must feel like a native desktop app, not a web page wrapped in Qt. Standard controls, menus,
+  focus rings, tooltips, scrollbars and window chrome come from the host `QStyle`/palette; do not
+  restyle them into app-drawn equivalents.
+- Never bake a black or white text colour into a label, card, toast or prompt. Use the live host text
+  role (`QPalette.WindowText` via `theme_text_color()`/`apply_explicit_foreground`) or a QSS
+  `palette(window-text)` rule, and re-apply it on `PaletteChange`/`ApplicationPaletteChange` and in
+  `refresh_theme()`. This is what carries a KDE theme's accent-coloured text and macOS light/dark
+  switches into action lines such as connect, power-off and Keep Data questions.
+- When two round chips form one segmented control, lay them out in a zero-spacing container and call
+  `set_segmented_pair` on both. A surrounding row's general spacing must not separate the halves.
+- Verify appearance with a non-default host palette (for example accent-coloured Plasma text) and a
+  live light/dark switch, not only the default theme.
+
 ## Native macOS UI (PyObjC is bundled — AppKit is fair game)
 - Prefer real OS controls: PyObjC/Cocoa is available and already used (`src/ui/glass.py` NSView interop).
   The user asks for OS-native tooltips, switches and iconography over hand-painted ones.

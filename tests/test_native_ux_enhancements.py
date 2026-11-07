@@ -1773,7 +1773,7 @@ def test_progress_cancel_stays_in_the_card():
 
         page._on_cancel()
         app.processEvents()
-        prompt = page._step_label
+        question = page._stop_question
         package = page._flash_pkg_label
         assert page._stop_open
         assert page._stop_continue.isVisible()
@@ -1792,19 +1792,20 @@ def test_progress_cancel_stays_in_the_card():
         assert "cancel" in page._stop_message.lower()
         assert "install" in page._stop_message.lower()
         assert "firmware" not in page._stop_message.lower()
-        assert prompt.wordWrap() and package.wordWrap()
-        assert prompt.foregroundRole() == QPalette.ColorRole.WindowText
-        assert "#fff" not in prompt.styleSheet().lower()
+        assert question.wordWrap()
+        assert question.foregroundRole() == QPalette.ColorRole.WindowText
+        assert "#fff" not in question.styleSheet().lower()
+        assert not package.isVisible()
+        assert not page._step_label.isVisible()
+        assert not page._progress_bar.isVisible()
+        assert page._flash_row.indexOf(question) >= 0
+        assert (
+            page._flash_row.indexOf(page._stop_actions)
+            == page._flash_row.indexOf(question) + 1
+        )
 
-        wrap_w = max(prompt.sizeHint().width(), prompt.minimumWidth(), 160)
-        line = prompt.fontMetrics().height()
-        prompt_h = prompt.heightForWidth(wrap_w)
-        assert prompt.minimumSizeHint().height() >= prompt_h - 2
-        if prompt.fontMetrics().horizontalAdvance(prompt.text()) > wrap_w + 8:
-            assert prompt_h > line + 2
-        assert package.fontMetrics().horizontalAdvance(long_name) > package.sizeHint().width()
-        assert package.minimumSizeHint().height() > line + 2
-
+        line = question.fontMetrics().height()
+        assert question.minimumSizeHint().height() >= line
         card = page._progress_card
         card_h = max(card.sizeHint().height(), card.minimumSizeHint().height())
         buttons_h = max(page._stop_continue.height(), page._stop_back.height())
@@ -1818,11 +1819,13 @@ def test_progress_cancel_stays_in_the_card():
         assert list(page._stop_actions._buttons) == [page._stop_back, page._stop_continue]
         assert page._stop_back._accent is True
         assert page._stop_continue._accent is False
-        # They sit beside the copy, so they no longer add a row to the card:
-        # the height is the wrapped copy plus the card's own padding.
-        assert card_h >= prompt.minimumSizeHint().height() + package.minimumSizeHint().height() - 8
-        assert card_h > buttons_h + line
-        assert window.minimumHeight() >= page.sizeHint().height()
+        # The question is the card's only row while it asks, with the pair on
+        # that row rather than in a block below a progress band.
+        assert card_h >= question.minimumSizeHint().height()
+        assert card_h > buttons_h
+        # The stacked page keeps the size hint of its other screens; the stop
+        # card itself is the only content this frame has to fit.
+        assert window.minimumHeight() >= card_h
         assert window.minimumWidth() >= 600
 
         # The back arrow only puts the check away: the install keeps running.
@@ -1833,6 +1836,10 @@ def test_progress_cancel_stays_in_the_card():
         assert window._stack.currentIndex() == _PAGE_FLASH
         assert not page._stop_open
         assert not page._stop_actions.isVisible()
+        assert page._stop_question.isHidden()
+        assert page._flash_pkg_label.isVisible()
+        assert page._progress_bar.isVisible()
+        assert page._step_label.isVisible()
         assert page._stop_label.text() != page._stop_message
 
         # ...and the cross is the one that confirms the stop.
@@ -1865,6 +1872,9 @@ def test_progress_cancel_stays_in_the_card():
         app.processEvents()
         page._on_cancel_download()
         app.processEvents()
+        assert page._stop_question.isVisible()
+        assert not page._download_pkg_label.isVisible()
+        assert not page._download_progress.isVisible()
         status = page._download_status_label
         status_h = status.heightForWidth(max(status.sizeHint().width(), 160))
         assert status.minimumSizeHint().height() >= status_h - 2
@@ -1882,6 +1892,9 @@ def test_progress_cancel_stays_in_the_card():
         app.processEvents()
         assert "download" not in calls
         assert window._download_active
+        assert page._download_pkg_label.isVisible()
+        assert page._download_progress.isVisible()
+        assert page._stop_question.isHidden()
         page._on_cancel_download()
         app.processEvents()
         page._stop_continue.click()

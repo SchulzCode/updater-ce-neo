@@ -7,6 +7,7 @@ begin
   Names.Add('Agjiornadôr');
   Names.Add('Aktualisierung');
   Names.Add('Aktualizátor');
+  Names.Add('Ak’ob’resinb’il CE .');
   Names.Add('Amsmayni');
   Names.Add('Asqassaabe');
   Names.Add('Ažuriranje');
@@ -18,6 +19,7 @@ begin
   Names.Add('Frissítő');
   Names.Add('Hesɗitinoowo');
   Names.Add('Hizivaer');
+  Names.Add('Hkrang nnan gram lajang ai CE');
   Names.Add('Innioasis Updater');
   Names.Add('Innioasis Updater CE');
   Names.Add('Jami manyen');
@@ -27,8 +29,10 @@ begin
   Names.Add('Mizajou');
   Names.Add('Mizazour');
   Names.Add('Mmelite');
+  Names.Add('Muntu ya ke yidika mambu CE');
   Names.Add('Nganyarang');
   Names.Add('Nuashonróir');
+  Names.Add('Nutaannguriaqtittiji CE');
   Names.Add('Omugaruza busya');
   Names.Add('Opdateerder');
   Names.Add('Opdaterer');
@@ -82,7 +86,9 @@ begin
   Names.Add('અપડેટર');
   Names.Add('གསར་བཅོས་བྱེད་མཁན');
   Names.Add('དུས་མཐུན་བཟོ་མི།');
+  Names.Add('განახლებული CE');
   Names.Add('አዘምን');
+  Names.Add('ᓄᑖᙳᕆᐊᖅᑎᑦᑎᔨ CE');
   Names.Add('ⴰⵎⵙⵎⴰⵢⵏⵓ');
   Names.Add('アップデーター');
   Names.Add('更新程序');

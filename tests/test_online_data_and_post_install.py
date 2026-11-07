@@ -1047,8 +1047,89 @@ def test_guided_power_off_and_keep_data_flow(qapp):
         win.close()
 
 
-def test_release_notes_see_more_is_english_only(qapp):
-    """Outside English "View in browser" already opens the release page."""
+def _keep_data_window(tmp_path):
+    """A window with a real scatter folder and the Rondo Y1 package selected."""
+    from src.ui.main_window import MainWindow
+
+    pkgs = manifest.load_snapshot_manifest()
+    catalog.LIVE_CATALOG = pkgs
+    rondo_pkg = next(p for p in pkgs if "rondo" in p.name.lower())
+    firmware = tmp_path / "rondo_firmware"
+    firmware.mkdir()
+    (firmware / "MT6572_Android_scatter.txt").write_text(SCATTER, encoding="utf-8")
+
+    win = MainWindow()
+    win._package_name = "Rondo 1.0.0 for Y1"
+    win._package_model = "Y1"
+    win._package_path = str(firmware)
+    win._select_page._details_package = rondo_pkg
+    win._select_page._current_selected_rel = {
+        "tag_name": "v1.0.0",
+        "html_url": "https://github.com/fake",
+    }
+    # The prep card is what this test inspects; do not start a backend.
+    win._begin_flash_flow = lambda: None
+    return win, rondo_pkg
+
+
+def test_accepting_an_update_notification_prechecks_keep_data(qapp, tmp_path):
+    win, rondo_pkg = _keep_data_window(tmp_path)
+    try:
+        calls = []
+        win._select_page.start_install_for_release = lambda **kwargs: calls.append(kwargs)
+        win._select_page._on_model_toast_install({
+            "model": "Y1",
+            "software": rondo_pkg.name,
+            "tag": "v2.0.0",
+            "release": {
+                "tag_name": "v2.0.0",
+                "download_url": "https://example.test/rom.zip",
+            },
+            "package": rondo_pkg,
+        })
+
+        assert calls and calls[0]["keep_settings"] is True
+        # This is the handoff MainWindow performs when the package is ready.
+        win._on_package_selected(
+            win._package_path, "Rondo 1.0.0 for Y1", "Y1"
+        )
+        assert win._keep_settings_default is True
+        win._show_device_prep()
+        assert win._flash_page._keep_data_cb.isChecked()
+
+        win._on_power_off_continue()
+        assert win._keep_data is True
+        assert win._keep_data_confirm_pending is False
+    finally:
+        win.close()
+
+
+def test_reinstalling_the_tracked_firmware_prechecks_keep_data(qapp, tmp_path, monkeypatch):
+    from src.keep_data import tracked_is_same
+
+    win, rondo_pkg = _keep_data_window(tmp_path)
+    try:
+        monkeypatch.setattr(
+            "src.keep_data.get_device_install",
+            lambda *args, **kwargs: {
+                "software_name": rondo_pkg.name,
+                "package_slug": rondo_pkg.slug,
+            },
+        )
+        assert tracked_is_same("Y1", rondo_pkg) is True
+        win._keep_settings_default = False
+        win._show_device_prep()
+        assert win._flash_page._keep_data_cb.isChecked()
+
+        win._on_power_off_continue()
+        assert win._keep_data is True
+        assert win._keep_data_confirm_pending is False
+    finally:
+        win.close()
+
+
+def test_release_notes_see_more_follows_language(qapp):
+    """The GitHub page is English, but its link label belongs to this UI."""
     from types import SimpleNamespace
 
     from PySide6.QtWidgets import QLabel
@@ -1057,32 +1138,16 @@ def test_release_notes_see_more_is_english_only(qapp):
     from src.ui.select_page import SelectPackagePage
 
     holder = SimpleNamespace(
-        _current_selected_rel={
-            "html_url": "https://github.com/y1-community/y1-stock-rom/releases/tag/3.2.1",
-            "source_repo": "y1-community/y1-stock-rom",
-            "tag_name": "3.2.1",
-            "name": "3.2.1",
-        },
+        _current_selected_rel={"html_url": "https://github.com/example/release"},
         _see_more_label=QLabel(),
     )
     previous = translator().lang
     try:
         translator().set_language("de")
         SelectPackagePage._update_see_more_link(holder)
-        # The translated view of the same page is the line under the notes, so
-        # a second link to it would be the same action twice.
-        assert holder._see_more_label.isHidden()
-        assert holder._see_more_label.text() == ""
-
-        translator().set_language("en")
-        SelectPackagePage._update_see_more_link(holder)
         text = holder._see_more_label.text()
-        assert not holder._see_more_label.isHidden()
         assert tr("notices_see_more") in text
-        assert "innioasis.app/release_notes.html" in text
-        assert "repo=y1-community%2Fy1-stock-rom" in text
-        assert "tag=3.2.1" in text
-        assert "github.com" not in text
+        assert "See More" not in text
     finally:
         translator().set_language(previous or "en")
 
@@ -1121,23 +1186,10 @@ def test_select_page_release_notes_layout_no_overlap(qapp):
 
         notes_geom = page._notes.geometry()
         trans_geom = page._translate_label.geometry()
+        see_more_geom = page._see_more_label.geometry()
 
         assert notes_geom.bottom() < trans_geom.top()
-        # Outside English there is no second link under the notes: "View in
-        # browser" above already opens this release's page on the site.
-        assert page._see_more_label.isHidden()
-
-        # In English the See More link takes that row instead.
-        translator().set_language("en")
-        page._current_selected_rel["html_url"] = "https://github.com/example/release"
-        page._update_translate_link()
-        qapp.processEvents()
-        win._fit_window_to_select_content()
-        page._scroll_content.layout().activate()
-        page._notes_group.layout().activate()
-        qapp.processEvents()
-        assert not page._see_more_label.isHidden()
-        assert page._notes.geometry().bottom() < page._see_more_label.geometry().top()
+        assert trans_geom.bottom() < see_more_geom.top()
     finally:
         # The page's connectivity probe is a shared background QThread. The
         # worker is daemon-like in the app, but a test process that exits with

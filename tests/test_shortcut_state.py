@@ -94,10 +94,32 @@ def test_enabling_a_missing_shortcut_creates_it(tmp_path, monkeypatch):
     _stub_writer(monkeypatch)
 
     assert sm.set_shortcut(sm.APP_ID, "menu", True) is True
-    created = list(roots["menu"][0].iterdir())
+    folder = roots["menu"][0] / sm._menu_folder_name()
+    created = list(folder.iterdir())
     assert len(created) == 1
     assert created[0].stem == sm._creation_name(sm.APP_ID, "menu")
+    assert not list(roots["menu"][0].glob("*.lnk"))
     assert sm.get_state()[sm.APP_ID]["menu"] is True
+
+
+def test_legacy_community_folder_keeps_only_the_app_in_one_folder(tmp_path, monkeypatch):
+    monkeypatch.setattr(sm, "current_language", lambda: "en")
+    monkeypatch.setattr(sm, "_is_mediatek_brand", lambda: False)
+    roots = _sandbox(tmp_path, monkeypatch)
+    legacy = roots["menu"][0] / sm.LEGACY_COMMUNITY_FOLDER
+    legacy.mkdir()
+    app = legacy / f"{sm.APP_NAME}.lnk"
+    tool = legacy / f"{sm.TOOL_NAME}.lnk"
+    app.write_bytes(b"app")
+    tool.write_bytes(b"tool")
+
+    assert sm.set_shortcut(sm.APP_ID, "menu", True) is True
+
+    folder = roots["menu"][0] / sm._menu_folder_name()
+    assert (folder / app.name).read_bytes() == b"app"
+    assert not tool.exists()
+    assert not legacy.exists()
+    assert not list(roots["menu"][0].glob("*.lnk"))
 
 
 def test_another_apps_shortcut_is_not_ours(tmp_path, monkeypatch):

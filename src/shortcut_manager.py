@@ -10,10 +10,10 @@ read by looking for our shortcuts everywhere they can legally be - the per-user
 names this project has shipped - and a change acts on those same files instead
 of leaving a second copy beside them.
 
-On Windows the installer writes the menu entries to ``{userprograms}`` (the
-current user's Start Menu) but the desktop icon to ``{autodesktop}`` (the
-all-users desktop) under the brand's display name, which is why a per-user-only
-lookup reported shortcuts as missing.
+On Windows the installer writes the menu shortcut inside one ``{group}`` app
+folder but the desktop icon to ``{autodesktop}`` (the all-users desktop) under
+the brand's display name, which is why a per-user-only lookup reported
+shortcuts as missing.
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ TOOL_ID = "sp_flash_tool"
 SHORTCUT_IDS = (APP_ID, TOOL_ID)
 
 # Names this project has given the shortcuts. [Icons] in the installer writes
-# "{userprograms}\Innioasis Updater" for both brands and "{autodesktop}\{MyAppName}"
+# the menu entry inside the "{group}" app folder and "{autodesktop}\{MyAppName}"
 # for the desktop icon, so the desktop name is the brand's display name.
 APP_NAME = "Innioasis Updater"
 TOOL_NAME = "SP Flash Tool"
@@ -113,6 +113,11 @@ def _is_mediatek_brand() -> bool:
         return bool(is_mediatek_installer())
     except Exception:
         return False
+
+
+def _menu_folder_name() -> str:
+    """The one Start Menu folder this app owns (Windows)."""
+    return DESKTOP_APP_NAME_MEDIATEK if _is_mediatek_brand() else APP_NAME
 
 
 def shortcut_names(shortcut_id: str) -> Tuple[str, ...]:
@@ -691,11 +696,11 @@ def get_state(skip: Iterable[str] = ()) -> Dict[str, Dict[str, bool]]:
 # Changing it
 # ---------------------------------------------------------------------------
 def _migrate_community_folder() -> None:
-    """Move shortcuts out of the retired shared menu folder, then drop it.
+    """Move app shortcuts out of the retired shared menu folder.
 
-    Detection already covers the folder, so this is housekeeping: it keeps the
-    entries where the installer now writes them and does nothing when the
-    folder is absent.
+    Legacy tool entries are removed rather than moved: the Start Menu has one
+    Updater folder and only the app shortcut. The old folder is dropped when
+    nothing else remains in it.
     """
     roots = _roots("menu")
     if not roots:
@@ -703,11 +708,19 @@ def _migrate_community_folder() -> None:
     folder = roots[0] / LEGACY_COMMUNITY_FOLDER
     if not folder.is_dir():
         return
+    destination_dir = roots[0] / _menu_folder_name()
     for path, _owned_name in _walk_shortcuts(folder, 1, folder.name):
-        destination = roots[0] / path.name
+        if _name_matches(path.stem, shortcut_names(TOOL_ID)):
+            try:
+                path.unlink()
+            except OSError:
+                logger.debug("Could not remove legacy tool shortcut %s", path, exc_info=True)
+            continue
+        destination = destination_dir / path.name
         if destination.exists():
             continue
         try:
+            destination_dir.mkdir(parents=True, exist_ok=True)
             shutil.move(str(path), str(destination))
         except OSError:
             logger.debug("Could not move legacy shortcut %s", path, exc_info=True)
@@ -723,7 +736,10 @@ def _creation_path(shortcut_id: str, kind: str) -> Optional[Path]:
     if not roots:
         return None
     if paths.IS_WINDOWS:
-        return roots[0] / f"{_creation_name(shortcut_id, kind)}.lnk"
+        folder = roots[0]
+        if kind == "menu":
+            folder = folder / _menu_folder_name()
+        return folder / f"{_creation_name(shortcut_id, kind)}.lnk"
     return roots[0] / (LINUX_APP_FILE if shortcut_id == APP_ID else LINUX_TOOL_FILE)
 
 

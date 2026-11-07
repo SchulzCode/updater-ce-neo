@@ -892,6 +892,10 @@ class MainWindow(QMainWindow):
         # "Keep my data", as read from the install card when the user
         # confirmed the player was off. Off means the firmware is written whole.
         self._keep_data = False
+        # An accepted update notification asks for this explicitly; a reinstall
+        # of the exact tracked firmware is treated the same way. This is read
+        # when the prep card is built and stays with the run through retries.
+        self._keep_settings_default = False
         # A package that needs Format All + Download (manifest flag or a
         # previous 8502) runs the same SP backend with only the command mode
         # changed. Keep Data is unavailable while this is set.
@@ -4789,6 +4793,9 @@ class MainWindow(QMainWindow):
         self._package_path = path
         self._package_name = name
         self._package_model = model or ""
+        page = getattr(self, "_select_page", None)
+        taker = getattr(page, "take_keep_settings_default", None)
+        self._keep_settings_default = bool(taker()) if callable(taker) else False
         # Only the auto-started ROM-bundled run ends on Retry or Quit.
         self._bundled_firmware_run = bool(path) and path == getattr(self, "_bundled_package_path", None)
         if not self._bundled_firmware_run:
@@ -5249,6 +5256,7 @@ class MainWindow(QMainWindow):
         self._flash_page.set_package_name(self._package_name)
         self._flash_page.set_model(self._package_model)
         self._flash_page.set_method(self._flash_method)
+        keep_data_default = self._keep_data_default_for_install()
         try:
             from ..flash_service import completed_extract_dir, compute_extract_dir, _find_scatter, _parse_scatter_platform
             from ..fw_package import scatter_has_userdata, scatter_has_preserve_data_variant
@@ -5266,7 +5274,9 @@ class MainWindow(QMainWindow):
                     self._flash_page.set_platform(platform)
                 has_ud = scatter_has_userdata(sc)
                 has_preserve = scatter_has_preserve_data_variant(sc.parent)
-                self._flash_page.set_has_userdata(has_ud, preserve_data_default=has_preserve)
+                self._flash_page.set_has_userdata(
+                    has_ud, preserve_data_default=has_preserve or keep_data_default
+                )
         except Exception as e:
             logger.debug("Could not inspect scatter in _show_device_prep: %s", e)
         # This screen shows the release's own image, not only the settings
@@ -5464,6 +5474,7 @@ class MainWindow(QMainWindow):
         self._flash_page.set_package_name(self._package_name)
         self._flash_page.set_model(self._package_model)
         self._flash_page.set_method(self._flash_method)
+        keep_data_default = self._keep_data_default_for_install()
         self._flash_page.show_completion_appeal(False)
         self._apply_release_icon(complete=False)
         self._past_usb_search = False
@@ -5506,7 +5517,9 @@ class MainWindow(QMainWindow):
                         self._flash_page.set_platform(platform)
                 has_ud = scatter_has_userdata(sc)
                 has_preserve = scatter_has_preserve_data_variant(sc.parent)
-                self._flash_page.set_has_userdata(has_ud, preserve_data_default=has_preserve)
+                self._flash_page.set_has_userdata(
+                    has_ud, preserve_data_default=has_preserve or keep_data_default
+                )
         except Exception as e:
             logger.debug("Could not inspect scatter platform in _begin_flash_flow: %s", e)
         self._apply_pmt_format_state(
@@ -7015,7 +7028,45 @@ class MainWindow(QMainWindow):
         self._flash_page.leave_power_off_prompt()
         self._begin_flash_flow()
 
+    def _keep_data_default_for_install(self) -> bool:
+        """True when this run should start with Keep my settings ticked.
+
+        Accepting an update notification is the user saying they want the
+        upgrade without starting over. Reinstalling the exact firmware that is
+        already tracked is the same intent. A first install or a change to a
+        different firmware still asks the user to opt in.
+        """
+        try:
+            from .. import keep_data
+
+            pkg = getattr(self, "_keep_data_pkg", None) or self._current_firmware_package()
+            model = self._package_model or getattr(pkg, "model", "") or ""
+            hw = (
+                self._select_page.current_hardware_type()
+                if hasattr(self, "_select_page")
+                else ""
+            )
+            # Never pre-tick a package that forbids Keep Data or needs a
+            # destructive format: the checkbox would be hidden but still read
+            # as checked when the user continues.
+            if not keep_data.keep_data_available(
+                model, pkg, self.settings, hardware_type=hw
+            ):
+                return False
+            if getattr(self, "_keep_settings_default", False):
+                return True
+            return keep_data.tracked_is_same(
+                model, pkg, self.settings, hardware_type=hw
+            )
+        except Exception:
+            logger.debug("Could not evaluate the Keep Data default", exc_info=True)
+            return False
+
     def _keep_data_needs_confirmation(self) -> bool:
+        if self._keep_data_default_for_install():
+            # An update carries the player's data forward by definition; there
+            # is no "which firmware is running?" question to answer.
+            return False
         try:
             from .. import keep_data
 
