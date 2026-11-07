@@ -1080,9 +1080,11 @@ class AppUpdateToast(QFrame):
         app_name = get_app_name()
         version = getattr(self._info, "version", "") if self._info else ""
         if version:
-            self._label.setText(f"{app_name} v{version} is available.")
+            self._label.setText(
+                tr("toast_update_version_fmt").format(app=app_name, version=version)
+            )
         else:
-            self._label.setText(f"An update to {app_name} is available.")
+            self._label.setText(tr("toast_update_fmt").format(app=app_name))
         _apply_banner_text(self._label)
         self._close.setToolTip(tr("toast_dismiss"))
         self._action.setToolTip(tr("toast_install"))

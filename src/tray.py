@@ -18,6 +18,8 @@ from PySide6.QtCore import QObject, QSettings, Signal
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
+from .i18n import tr
+
 logger = logging.getLogger(__name__)
 
 RUN_IN_BACKGROUND_KEY = "run_in_background"
@@ -395,7 +397,7 @@ class BackgroundTray(QObject):
                 check_updates,
             )
         menu.addSeparator()
-        menu.addAction("Quit", self._on_quit)
+        menu.addAction(tr("flash_btn_quit"), self._on_quit)
         self._menu = menu
         self._tray.setContextMenu(menu)
         self._tray.activated.connect(self._on_activated)

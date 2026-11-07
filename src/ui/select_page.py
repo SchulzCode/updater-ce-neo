@@ -1358,7 +1358,7 @@ class SelectPackagePage(QWidget):
             self,
             tr("settings_sp_auth"),
             downloads.default_picker_dir(),
-            "Authentication Files (*.auth);;All Files (*.*)",
+            f"{tr('settings_sp_auth_filter')};;{tr('log_filter_all_files')} (*.*)",
         )
         if path:
             device_tracking.set_sp_auth_file(path, getattr(self, "settings", None))

@@ -1192,12 +1192,7 @@ class SettingsPage(QWidget):
         btn_row.addStretch()
         layout.addLayout(btn_row)
 
-        self._arm64_driver_note = QLabel(
-            "ARM64 Windows support is untested. On Snapdragon and RTX Spark laptops, "
-            "Zadig can be used with Driver Signature Enforcement disabled to install "
-            "WinUSB or libusb for the MT6227 Preloader device in Device Manager. "
-            "See the ARM64 driver guide for the steps."
-        )
+        self._arm64_driver_note = QLabel(tr("settings_arm64_driver_note"))
         self._arm64_driver_note.setWordWrap(True)
         self._arm64_driver_note.setProperty("cssClass", "subtitle")
         self._arm64_driver_note.setVisible(bool(paths.IS_WINDOWS and windows_only_method() == METHOD_MTK))

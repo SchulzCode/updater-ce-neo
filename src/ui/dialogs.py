@@ -1228,17 +1228,17 @@ class DiagnosticsView(QWidget):
         action_row.setSpacing(8)
 
         self._goto_btn = QPushButton(tr("log_btn_goto_file"))
-        self._goto_btn.setToolTip("Reveal log file in Finder / Explorer")
+        self._goto_btn.setToolTip(tr("log_btn_goto_file_tip"))
         self._goto_btn.clicked.connect(self._on_goto_file)
         action_row.addWidget(self._goto_btn)
 
         self._save_btn = QPushButton(tr("log_btn_save_file"))
-        self._save_btn.setToolTip("Export the displayed log file to disk")
+        self._save_btn.setToolTip(tr("log_btn_save_file_tip"))
         self._save_btn.clicked.connect(self._on_save_file)
         action_row.addWidget(self._save_btn)
 
         self._copy_btn = QPushButton(tr("log_btn_copy"))
-        self._copy_btn.setToolTip("Copy displayed log to clipboard")
+        self._copy_btn.setToolTip(tr("log_btn_copy_tip"))
         self._copy_btn.clicked.connect(self._on_copy)
         action_row.addWidget(self._copy_btn)
 
@@ -1536,7 +1536,9 @@ class DiagnosticsView(QWidget):
             except Exception:
                 pass
         reveal_in_file_manager(target_file)
-        self._show_temp_status(f"Revealed in file manager: {target_file.name}")
+        self._show_temp_status(
+            tr("log_revealed_in_file_manager_fmt").format(name=target_file.name)
+        )
 
     def _on_save_file(self):
         from pathlib import Path
@@ -1554,7 +1556,8 @@ class DiagnosticsView(QWidget):
             self,
             tr("log_save_title"),
             default_path,
-            "Text Files (*.log *.txt);;All Files (*)",
+            f"{tr('log_filter_text_files')} (*.log *.txt);;"
+            f"{tr('log_filter_all_files')} (*)",
         )
         if not path:
             return
@@ -1571,7 +1574,9 @@ class DiagnosticsView(QWidget):
             Path(path).write_text(content, encoding="utf-8")
             self._show_temp_status(tr("log_save_success").format(path=Path(path).name))
         except Exception as e:
-            self._show_temp_status(f"Error saving log: {e}")
+            self._show_temp_status(
+                tr("log_save_error_fmt").format(error=e)
+            )
 
     def _on_copy(self):
         from PySide6.QtWidgets import QApplication
@@ -2269,7 +2274,9 @@ class UpdateAvailableDialog(QDialog):
         self._progress_bar.setVisible(True)
         self._progress_bar.setValue(0)
         self._progress_label.setVisible(True)
-        self._progress_label.setText(f"Connecting... ({filename})")
+        self._progress_label.setText(
+            tr("update_connecting_fmt").format(name=filename)
+        )
         self._action_btn.setEnabled(False)
 
         worker = DownloadWorker(url, str(self._dest_path), parent=self)
@@ -2293,7 +2300,9 @@ class UpdateAvailableDialog(QDialog):
         def on_done(ok, err):
             if ok and self._dest_path and self._dest_path.is_file():
                 self._progress_bar.setValue(100)
-                self._progress_label.setText(f"Saved to: {self._dest_path}")
+                self._progress_label.setText(
+                    tr("update_saved_to_fmt").format(path=self._dest_path)
+                )
                 if sys.platform == "darwin":
                     # macOS: reveal in Finder and quit
                     try:
@@ -2321,12 +2330,16 @@ class UpdateAvailableDialog(QDialog):
                 self._icon_label.setPixmap(
                     get_symbol_icon("complete", 40, color=T().fg).pixmap(40, 40)
                 )
-                self._progress_label.setText("Ready to install.")
+                self._progress_label.setText(tr("update_ready_to_install"))
                 self._action_btn.setEnabled(True)
                 self._action_btn.setText(tr("install"))
                 self._action_btn.setToolTip(tr("install"))
             else:
-                self._progress_label.setText(f"Download failed: {err or 'Network error'}")
+                self._progress_label.setText(
+                    tr("update_download_failed_fmt").format(
+                        error=err or tr("network_error")
+                    )
+                )
                 self._action_btn.setEnabled(True)
                 open_browser(url)
                 self.accept()
@@ -2365,7 +2378,9 @@ class UpdateAvailableDialog(QDialog):
                     subprocess.Popen([str(self._dest_path)], start_new_session=True)
                 except Exception as e:
                     logger.error("Could not start the AppImage %s: %s", self._dest_path, e)
-                    self._progress_label.setText(f"Could not start the update: {e}")
+                    self._progress_label.setText(
+                        tr("update_start_failed_fmt").format(error=e)
+                    )
                     return
             else:
                 # The Windows installer understands -update: keep settings,
@@ -2542,7 +2557,7 @@ class LinuxSetupDialog(QDialog):
         sc_text.setSpacing(2)
         sc_title = QLabel(tr("linux_card_system_title"))
         sc_title.setStyleSheet(f"font-size: 14px; font-weight: 700; color: {t.fg}; border: none; background: transparent;")
-        self._sys_desc = QLabel("Linux x86_64")
+        self._sys_desc = QLabel(tr("linux_platform_label"))
         self._sys_desc.setStyleSheet(f"font-size: 12px; color: {t.fg}; border: none; background: transparent;")
         sc_text.addWidget(sc_title)
         sc_text.addWidget(self._sys_desc)
@@ -3106,7 +3121,7 @@ class LegacyMigrationDialog(QDialog):
         # Detected Items List
         items = self.scan_info.get("items_summary", [])
         if items:
-            items_box = QGroupBox("Detected Components")
+            items_box = QGroupBox(tr("legacy_cleanup_detected_components"))
             items_box_layout = QVBoxLayout(items_box)
             items_box_layout.setContentsMargins(12, 10, 12, 10)
             items_box_layout.setSpacing(6)
@@ -3154,7 +3169,7 @@ class LegacyMigrationDialog(QDialog):
 
     def _on_clean(self):
         self.btn_clean.setEnabled(False)
-        self.btn_clean.setText("Cleaning up...")
+        self.btn_clean.setText(tr("legacy_cleanup_cleaning"))
         from PySide6.QtWidgets import QApplication
         QApplication.processEvents()
 
@@ -3182,7 +3197,7 @@ class LegacyMigrationDialog(QDialog):
             QMessageBox.warning(
                 self,
                 tr("legacy_cleanup_title"),
-                f"Some items could not be removed:\n\n{err_msg}",
+                tr("legacy_cleanup_errors_fmt").format(errors=err_msg),
             )
         else:
             QMessageBox.information(

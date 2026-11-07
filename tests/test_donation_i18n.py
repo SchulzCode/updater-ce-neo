@@ -51,6 +51,10 @@ def _catalogs():
     for path in sorted(CATALOG_DIR.glob("*.json")):
         if path.stem == "languages":
             continue
+        # An English catalog (en-GB, en-US) shows English copy on purpose.
+        # This test is about copy that would otherwise fall back untranslated.
+        if i18n.is_english_language(path.stem):
+            continue
         yield path.stem, json.loads(path.read_text(encoding="utf-8"))
 
 

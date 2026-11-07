@@ -136,6 +136,13 @@
 - Every English UI string in `src/i18n.py` must ship with copy for every catalog in
   `assets/i18n/`, in that language (never a copy of the English sentence). Brand and product
   names (`Buy Me a Coffee`, `Boosty`) are the only strings left in English on purpose.
+- **Never pass an English literal to a user-facing Qt API.** That includes `QLabel`,
+  `QPushButton`, `QCheckBox`, `QAction`, `setText`, `setTitle`, `setWindowTitle`, `setToolTip`,
+  `setPlaceholderText`, file-dialog titles/filters, `QMessageBox` text, table/list/tree items and
+  headers. Add a key to `src/i18n.py`, wrap the call in `tr()`, and regenerate the catalogs with
+  `.venv-build/bin/python scripts/i18n_fill.py --lang <code>` (or `--all --workers 8`).
+  `tests/test_ui_literals.py` rejects new literals; `tests/test_i18n_completeness.py` rejects a
+  merge where any picker language is missing the new key.
 - `tests/test_donation_i18n.py` enforces this for the donations and appeal copy. Fill a gap with
   `fetch_google_translation` only after protecting `{placeholders}` and `<b>` markup, then keep the
   translation only if both survive; the match check in `scripts/sync_i18n.py` shows the form.

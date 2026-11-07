@@ -594,7 +594,9 @@ class ThemePackGuidanceDialog(QDialog):
 
         target_rockbox = find_or_create_rockbox_dir(chosen)
         self._target_dir = target_rockbox
-        self._folder_label.setText(f"Target: {target_rockbox}")
+        self._folder_label.setText(
+            tr("themepack_target_fmt").format(path=target_rockbox)
+        )
         self._select_btn.setEnabled(False)
 
         # Check if zip is already cached
@@ -619,7 +621,9 @@ class ThemePackGuidanceDialog(QDialog):
         if not ok:
             t = T()
             self._status_label.setStyleSheet(f"font-size: 12px; color: {t.err_fg};")
-            self._status_label.setText(f"Download failed: {result_or_err}")
+            self._status_label.setText(
+                tr("themepack_download_failed_fmt").format(error=result_or_err)
+            )
             self._select_btn.setEnabled(True)
             return
 
@@ -657,7 +661,9 @@ class ThemePackGuidanceDialog(QDialog):
         t = T()
         if not ok:
             self._status_label.setStyleSheet(f"font-size: 12px; color: {t.err_fg};")
-            self._status_label.setText(f"Extraction failed: {err_msg}")
+            self._status_label.setText(
+                tr("themepack_extraction_failed_fmt").format(error=err_msg)
+            )
             self._select_btn.setEnabled(True)
             return
 
@@ -1618,7 +1624,9 @@ class Rockbox360pSetupWizard(QDialog):
                 if cb:
                     cb()
                 return
-            self._adb_status.setText(f"Download failed: {result_or_err}")
+            self._adb_status.setText(
+                tr("themepack_download_failed_fmt").format(error=result_or_err)
+            )
             return
         self._build_combined()
 
@@ -1656,7 +1664,9 @@ class Rockbox360pSetupWizard(QDialog):
             self._usb_status.setText(f"{tr('themepack_err_not_found')} ({e})")
             return
         self._usb_target = target
-        self._usb_folder_label.setText(f"Target: {target}")
+        self._usb_folder_label.setText(
+            tr("themepack_target_fmt").format(path=target)
+        )
         self._usb_select_btn.setEnabled(False)
         self._ensure_payload_then(self._start_usb_merge)
 

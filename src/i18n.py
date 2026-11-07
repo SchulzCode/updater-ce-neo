@@ -6818,6 +6818,36 @@ _STRINGS: dict = {
         "fr": "Supprimé, environ {size} libérés.",
         "es": "Eliminado: se liberaron unos {size}.",
     },
+    # Copy that used to be hardcoded in the theme wizard, log viewer, updater
+    # wizard, legacy cleanup and app-update toast. Catalogs supply every
+    # language; these English entries are the source of truth.
+    "themepack_target_fmt": {"en": "Target: {path}"},
+    "themepack_download_failed_fmt": {"en": "Download failed: {error}"},
+    "themepack_extraction_failed_fmt": {"en": "Extraction failed: {error}"},
+    "log_btn_goto_file_tip": {"en": "Reveal log file in Finder / Explorer"},
+    "log_btn_save_file_tip": {"en": "Export the displayed log file to disk"},
+    "log_btn_copy_tip": {"en": "Copy displayed log to clipboard"},
+    "log_revealed_in_file_manager_fmt": {"en": "Revealed in file manager: {name}"},
+    "log_save_error_fmt": {"en": "Error saving log: {error}"},
+    "log_filter_text_files": {"en": "Text Files"},
+    "log_filter_all_files": {"en": "All Files"},
+    "update_connecting_fmt": {"en": "Connecting... ({name})"},
+    "update_saved_to_fmt": {"en": "Saved to: {path}"},
+    "update_ready_to_install": {"en": "Ready to install."},
+    "update_download_failed_fmt": {"en": "Download failed: {error}"},
+    "update_start_failed_fmt": {"en": "Could not start the update: {error}"},
+    "network_error": {"en": "Network error"},
+    "legacy_cleanup_detected_components": {"en": "Detected Components"},
+    "legacy_cleanup_errors_fmt": {
+        "en": "Some items could not be removed:\n\n{errors}"
+    },
+    "legacy_cleanup_cleaning": {"en": "Cleaning up..."},
+    "linux_platform_label": {"en": "Linux x86_64"},
+    "settings_arm64_driver_note": {
+        "en": "ARM64 Windows support is untested. On Snapdragon and RTX Spark laptops, Zadig can be used with Driver Signature Enforcement disabled to install WinUSB or libusb for the MT6227 Preloader device in Device Manager. See the ARM64 driver guide for the steps."
+    },
+    "toast_update_version_fmt": {"en": "{app} v{version} is available."},
+    "toast_update_fmt": {"en": "An update to {app} is available."},
 }
 
 
