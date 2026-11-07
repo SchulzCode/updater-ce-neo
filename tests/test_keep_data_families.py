@@ -77,6 +77,15 @@ def test_a_declared_family_that_matches_is_compatible():
     assert confirm is False
 
 
+def test_only_the_same_tracked_firmware_defaults_keep_data_on():
+    with patch(
+        "src.keep_data.get_device_install",
+        return_value={"software_name": "Rockbox", "package_slug": "rockbox"},
+    ):
+        assert keep_data.tracked_is_same("Y2", ROCKBOX) is True
+        assert keep_data.tracked_is_same("Y2", REBORN) is False
+
+
 def test_a_declared_family_that_differs_stays_incompatible():
     # One side names its parent, so the mismatch is evidence, not ignorance.
     compatible, available, confirm = _check([KOENSAYR, ROCKBOX], "Rockbox", KOENSAYR)

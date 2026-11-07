@@ -131,6 +131,43 @@ def tracked_package(model: str, pkg, settings: Optional[QSettings] = None, hardw
     return None
 
 
+def tracked_is_same(
+    model: str,
+    pkg,
+    settings: Optional[QSettings] = None,
+    hardware_type: str = "",
+) -> bool:
+    """True when ``pkg`` is exactly the firmware recorded for this player.
+
+    A family match is enough for Keep Data to be offered, but a reinstall of
+    the software already on the player is a stronger signal: it is an update,
+    not a first install or a switch to a different firmware. Only that
+    narrower case defaults the tick on.
+    """
+    if pkg is None:
+        return False
+    record = get_device_install(
+        model, hardware_type=hardware_type, settings=settings
+    )
+    if not record:
+        return False
+
+    def _key(value) -> str:
+        return str(value or "").strip().casefold()
+
+    tracked = {
+        _key(record.get("software_name")),
+        _key(record.get("package_slug")),
+    }
+    incoming = {
+        _key(getattr(pkg, "name", "")),
+        _key(getattr(pkg, "slug", "")),
+    }
+    tracked.discard("")
+    incoming.discard("")
+    return bool(tracked & incoming)
+
+
 def declares_family(pkg) -> bool:
     """True when the catalogue names the firmware ``pkg`` was built from."""
     return bool(_norm(getattr(pkg, "derivative", "")))

@@ -317,6 +317,9 @@ class SelectPackagePage(QWidget):
         self._selected_type = None  # None = all types; 'A' or 'B' for filtered
         self._current_selected_rel = None
         self._gui_explicit = None
+        # Set when an accepted update notification starts the install. The
+        # window consumes it for that run so Keep my settings starts ticked.
+        self._keep_settings_default = False
         self._gui_handoff_worker = False
         self._is_translated = False
         self._is_translating = False
@@ -1711,12 +1714,14 @@ class SelectPackagePage(QWidget):
         release = offer.get("release")
         if not release:
             return
+        self._keep_settings_default = True
         self.start_install_for_release(
             model=str(offer.get("model") or self.current_model()),
             software_name=str(offer.get("software") or self.current_software()),
             tag_name=str(offer.get("tag") or ""),
             release=release,
             package=offer.get("package") or self._package_for_selection(),
+            keep_settings=True,
         )
 
     def _set_online_banner(self, key, count=0):
@@ -3365,6 +3370,8 @@ class SelectPackagePage(QWidget):
         self._stop_gui_handoff_workers()
         self.gui_handoff_abandoned.emit()
         rel = item.data(Qt.UserRole)
+        # A manual Install is a fresh choice, not the accepted update prompt.
+        self._keep_settings_default = False
         self._trigger_release_install(rel)
         self._current_selected_rel = rel
 
@@ -3832,6 +3839,7 @@ class SelectPackagePage(QWidget):
             if self._should_prompt_pre_install():
                 if not self._prompt_pre_install(eff_model, eff_type):
                     return
+            self._keep_settings_default = False
             self._stop_transfer_workers()
             from ..flash_service import cleanup_previous_install_scatters
 
@@ -4442,8 +4450,10 @@ class SelectPackagePage(QWidget):
         tag_name: str = "",
         release: Optional[dict] = None,
         package: Optional[catalog.FirmwarePackage] = None,
+        keep_settings: bool = False,
     ):
         """Navigate to package/release and initiate installation with current method."""
+        self._keep_settings_default = bool(keep_settings)
         self.navigate_to_package(model, software_name, tag_name=tag_name)
         if release:
             self._trigger_release_install(release, package=package)
@@ -4465,3 +4475,9 @@ class SelectPackagePage(QWidget):
             if not self._release_list.count() and not worker_running:
                 self._refresh_releases()
             self._auto_install_tag = tag_name or "latest"
+
+    def take_keep_settings_default(self) -> bool:
+        """Return and clear the update-install Keep my settings default."""
+        wanted = bool(getattr(self, "_keep_settings_default", False))
+        self._keep_settings_default = False
+        return wanted

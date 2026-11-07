@@ -1047,6 +1047,87 @@ def test_guided_power_off_and_keep_data_flow(qapp):
         win.close()
 
 
+def _keep_data_window(tmp_path):
+    """A window with a real scatter folder and the Rondo Y1 package selected."""
+    from src.ui.main_window import MainWindow
+
+    pkgs = manifest.load_snapshot_manifest()
+    catalog.LIVE_CATALOG = pkgs
+    rondo_pkg = next(p for p in pkgs if "rondo" in p.name.lower())
+    firmware = tmp_path / "rondo_firmware"
+    firmware.mkdir()
+    (firmware / "MT6572_Android_scatter.txt").write_text(SCATTER, encoding="utf-8")
+
+    win = MainWindow()
+    win._package_name = "Rondo 1.0.0 for Y1"
+    win._package_model = "Y1"
+    win._package_path = str(firmware)
+    win._select_page._details_package = rondo_pkg
+    win._select_page._current_selected_rel = {
+        "tag_name": "v1.0.0",
+        "html_url": "https://github.com/fake",
+    }
+    # The prep card is what this test inspects; do not start a backend.
+    win._begin_flash_flow = lambda: None
+    return win, rondo_pkg
+
+
+def test_accepting_an_update_notification_prechecks_keep_data(qapp, tmp_path):
+    win, rondo_pkg = _keep_data_window(tmp_path)
+    try:
+        calls = []
+        win._select_page.start_install_for_release = lambda **kwargs: calls.append(kwargs)
+        win._select_page._on_model_toast_install({
+            "model": "Y1",
+            "software": rondo_pkg.name,
+            "tag": "v2.0.0",
+            "release": {
+                "tag_name": "v2.0.0",
+                "download_url": "https://example.test/rom.zip",
+            },
+            "package": rondo_pkg,
+        })
+
+        assert calls and calls[0]["keep_settings"] is True
+        # This is the handoff MainWindow performs when the package is ready.
+        win._on_package_selected(
+            win._package_path, "Rondo 1.0.0 for Y1", "Y1"
+        )
+        assert win._keep_settings_default is True
+        win._show_device_prep()
+        assert win._flash_page._keep_data_cb.isChecked()
+
+        win._on_power_off_continue()
+        assert win._keep_data is True
+        assert win._keep_data_confirm_pending is False
+    finally:
+        win.close()
+
+
+def test_reinstalling_the_tracked_firmware_prechecks_keep_data(qapp, tmp_path, monkeypatch):
+    from src.keep_data import tracked_is_same
+
+    win, rondo_pkg = _keep_data_window(tmp_path)
+    try:
+        monkeypatch.setattr(
+            "src.keep_data.get_device_install",
+            lambda *args, **kwargs: {
+                "software_name": rondo_pkg.name,
+                "package_slug": rondo_pkg.slug,
+            },
+        )
+        assert tracked_is_same("Y1", rondo_pkg) is True
+        win._keep_settings_default = False
+        win._show_device_prep()
+        assert win._flash_page._keep_data_cb.isChecked()
+
+        win._on_power_off_continue()
+        assert win._keep_data is True
+        assert win._keep_data_confirm_pending is False
+    finally:
+        win.close()
+
+
 def test_release_notes_see_more_follows_language(qapp):
     """The GitHub page is English, but its link label belongs to this UI."""
     from types import SimpleNamespace
