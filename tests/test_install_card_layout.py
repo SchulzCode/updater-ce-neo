@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QPoint, QRect, Qt  # noqa: E402
-from PySide6.QtGui import QColor, QImage, QPainter, QPixmap  # noqa: E402
+from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPixmap  # noqa: E402
 from PySide6.QtWidgets import QApplication, QStyleFactory  # noqa: E402
 
 from src.ui.flash_page import (  # noqa: E402
@@ -130,47 +130,68 @@ def test_a_running_install_window_hugs_the_progress_card():
         app.processEvents()
 
 
-def test_stop_prompt_keeps_the_status_line_wrapping():
-    """The sanity check borrows the step line, so it must wrap, not run off."""
+def test_stop_prompt_puts_the_question_in_the_head_row():
+    """The question takes the band's row, with its answers directly beside it."""
     page = _flashing_page(900)
     try:
-        page.prompt_stop("Stop installing this software?", on_continue=lambda: None)
-        assert page._status_flow._forced_stacked
-        assert page._step_label.wordWrap()
+        page.prompt_stop("Would you like to cancel the install?", on_continue=lambda: None)
+        _app().processEvents()
+        question = page._stop_question
+        assert question.isVisible()
+        assert question.text() == "Would you like to cancel the install?"
+        assert question.font().weight() == QFont.Weight.Bold
+        assert page._flash_row.indexOf(question) >= 0
+        assert (
+            page._flash_row.indexOf(page._stop_actions)
+            == page._flash_row.indexOf(question) + 1
+        )
+        # The chips follow the words, not the far edge of the card: the label
+        # keeps its natural width and the pair sits directly beside it.
+        assert question.width() <= question.fontMetrics().horizontalAdvance(question.text()) + 12
+        gap = page._stop_actions.x() - (question.x() + question.width())
+        assert 0 <= gap <= 20
+        assert not page._flash_pkg_label.isVisible()
+        assert not page._progress_bar.isVisible()
+        assert not page._step_label.isVisible()
+
         page._finish_stop(False)
-        assert not page._status_flow._forced_stacked
+        _app().processEvents()
+        assert question.isHidden()
+        assert page._flash_pkg_label.isVisible()
+        assert page._progress_bar.isVisible()
+        assert page._step_label.isVisible()
+        assert page._flash_row.indexOf(page._stop_actions) == -1
     finally:
         page.close()
 
 
-def test_stop_prompt_retains_progress_bar_and_prevents_layout_shift():
-    """The progress bar stays visible during the stop prompt to avoid layout shift."""
+def test_stop_prompt_hides_the_running_card_until_it_is_dismissed():
+    """No title, no body and no 0% bar: just the stop question and its answers."""
     page = _flashing_page(900)
     try:
         _app().processEvents()
-        head = page._flash_head
         bar = page._progress_bar
-        assert bar.isVisible()
-        head_h_before = head.sizeHint().height()
-        label_y_before = page._step_label.mapTo(page._progress_card, page._step_label.pos()).y()
+        package = page._flash_pkg_label
+        assert bar.isVisible() and package.isVisible()
 
         page.prompt_stop("Would you like to cancel the install?", on_continue=lambda: None)
         _app().processEvents()
 
-        assert bar.isVisible(), "Progress bar must remain visible during stop prompt"
-        assert head.sizeHint().height() == head_h_before, "Card head must not collapse"
-        assert page._step_label.mapTo(page._progress_card, page._step_label.pos()).y() == label_y_before
+        assert not bar.isVisible()
+        assert not package.isVisible()
+        assert page._stop_question.isVisible()
 
-        # Background progress updates must also not hide the bar
+        # A progress update must not bring the running card back behind it.
         page._apply_stop_hold()
-        assert bar.isVisible()
+        assert not bar.isVisible()
+        assert page._stop_question.text() == "Would you like to cancel the install?"
 
         page._finish_stop(False)
         _app().processEvents()
 
         assert bar.isVisible()
-        assert head.sizeHint().height() == head_h_before
-        assert page._step_label.mapTo(page._progress_card, page._step_label.pos()).y() == label_y_before
+        assert package.isVisible()
+        assert page._stop_question.isHidden()
     finally:
         page.close()
 

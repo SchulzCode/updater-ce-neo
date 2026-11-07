@@ -139,7 +139,9 @@ def test_cancel_revealed_on_back_confirmation(app):
         app.processEvents()
 
         assert getattr(page, "_stop_open", False) is True
-        assert page._wait_prompt_label.text() == tr_brand("install_stop_check")
+        assert page._stop_question.text() == tr_brand("install_stop_check")
+        assert page._stop_question.isVisible()
+        assert page._wait_head.identity.isHidden()
 
         # In confirmation state: cancel button (X) is revealed in _stop_actions
         assert not page._stop_actions.isHidden()
@@ -153,12 +155,15 @@ def test_cancel_revealed_on_back_confirmation(app):
         # Timer countdown ticks do not clobber the confirmation question
         page.set_attempt_timeout(22)
         app.processEvents()
-        assert page._wait_prompt_label.text() == tr_brand("install_stop_check")
+        assert page._stop_question.text() == tr_brand("install_stop_check")
+        assert page._stop_question.isVisible()
 
         # Reject confirmation -> returns to install view with [ < | > ]
         page._stop_back.click()
         app.processEvents()
         assert getattr(page, "_stop_open", False) is False
+        assert page._stop_question.isHidden()
+        assert not page._wait_head.identity.isHidden()
         assert not page._wait_cancel_btn.isHidden()
         assert not page._wait_continue_btn.isHidden()
         assert not page._wait_continue_btn.isEnabled()
