@@ -12,6 +12,8 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -80,9 +82,9 @@ def _drive(worker, monkeypatch, *, log_result=(True, "")):
     das = []
     real_args = fs.sp_flash_tool_console_args
 
-    def spy(scatter_arg, da_arg, auth_file="", log=None):
+    def spy(scatter_arg, da_arg, auth_file="", log=None, format_all=False):
         das.append(Path(da_arg))
-        return real_args(scatter_arg, da_arg, auth_file, log)
+        return real_args(scatter_arg, da_arg, auth_file, log, format_all=format_all)
 
     monkeypatch.setattr(fs, "sp_flash_tool_console_args", spy)
     monkeypatch.setattr(fs.FlashWorker, "_sp_console_search", lambda self, spawn, log_root: (0, 0.0))
@@ -135,6 +137,7 @@ def test_a_tool_folder_without_a_da_is_not_patched_from_the_package(tmp_path, mo
     assert package_da not in das
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="SP Flash Tool console mode is Windows-only")
 def test_the_terminal_command_uses_the_tools_da(tmp_path):
     scatter, package_da, tool, tool_da = _package(tmp_path)
 

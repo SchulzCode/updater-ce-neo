@@ -1535,7 +1535,10 @@ def is_overlay_package(scatter_path: Union[str, Path], parts: Optional[Sequence[
     has_bootloader = bool(dl_names & {"uboot", "lk", "lk2"})
     has_table = bool(dl_names & {"mbr", "pgpt", "sgpt", "gpt", "pmt"})
 
-    return not (has_preloader and has_bootloader and has_table)
+    # An overlay leaves all three alone. A partial stock update that keeps any
+    # one of them is not an overlay: its USER addresses still follow the stock
+    # scatter and may need the legacy MBR bias.
+    return not (has_preloader or has_bootloader or has_table)
 
 
 def _detect_legacy_user_addr_bias(scatter_path, parts=None):
@@ -3674,23 +3677,63 @@ def _y2linux_manifest_addresses(scatter_path):
     schema = str(data.get("schema") or "")
     if not schema.startswith("org.schulzcode.y2linux.release"):
         return {}
-    overrides = {}
+    entries = _parse_scatter_entries(scatter_path)
+    downloadable = {
+        str(entry.get("name") or "").strip().upper()
+        for entry in entries
+        if entry.get("is_download")
+        and str(entry.get("file_name") or "").strip().upper() not in ("", "NONE")
+    }
+
+    declared = {}
     for payload in data.get("payloads") or ():
         if not isinstance(payload, dict):
             continue
         name = str(payload.get("target_partition") or "").strip().upper()
-        address = payload.get("absolute_start_bytes")
-        if name and isinstance(address, int) and address >= 0:
-            overrides[name] = address
+        if name:
+            declared[name] = payload.get("absolute_start_bytes")
+
+    missing = [
+        name
+        for name, address in declared.items()
+        if name in downloadable
+        and not (
+            isinstance(address, int)
+            and not isinstance(address, bool)
+            and address >= 0
+        )
+    ]
+    if missing:
+        raise PackageLayoutError(
+            "Y2Linux manifest has no absolute_start_bytes for downloadable "
+            f"partition(s): {', '.join(sorted(missing))}; write stopped to "
+            "avoid installing at a guessed address"
+        )
+
+    overrides = {
+        name: address
+        for name, address in declared.items()
+        if isinstance(address, int)
+        and not isinstance(address, bool)
+        and address >= 0
+    }
     # RECOVERY is not one of the manifest payloads, but the scatter's physical
     # column is already the absolute start for it. Use that as the fallback
-    # rather than the generic +8 MiB legacy bias.
-    for entry in _parse_scatter_entries(scatter_path):
+    # rather than the generic +8 MiB legacy bias. A payload declared by the
+    # manifest is never allowed to fall back silently: if it was downloadable
+    # and had no address, the check above stopped the run.
+    for entry in entries:
         if not entry.get("is_download") or entry.get("tail_relative"):
             continue
         name = str(entry.get("name") or "").strip().upper()
         physical = entry.get("physical_start_addr")
-        if name and name not in overrides and isinstance(physical, int) and physical >= 0:
+        if (
+            name
+            and name not in declared
+            and name not in overrides
+            and isinstance(physical, int)
+            and physical >= 0
+        ):
             overrides[name] = physical
     return overrides
 
@@ -7198,6 +7241,15 @@ class FlashWorker(QThread):
             return current
         if current is None:
             current = self._configure_scatter_user_addressing(scatter_path)
+        if is_overlay_package(scatter_path, parts):
+            # Overlay packages (Y2Linux/Reborn) carry their own absolute install
+            # map. Reading the device's stock MBR/EBR before that map is used
+            # can drop the legacy DA off the bus and blocks a valid install.
+            self._log(
+                "  Overlay package: using its scatter/manifest addresses; "
+                "skipping the legacy MBR probe"
+            )
+            return current
 
         user_size = _get_emmc_user_size(mtk) or None
         block_size = (

@@ -5961,6 +5961,14 @@ _STRINGS: dict = {
         "fr": "L'agent de téléchargement n'a pas pu être envoyé. Éteignez le lecteur et rebranchez-le.",
         "es": "No se pudo enviar el agente de descarga. Apague el reproductor y vuelva a conectarlo.",
     },
+    "err_sp_da_invalid_type": {
+        "zh-CN": "播放器拒绝了下载代理（错误 6104）。请使用随 SP Flash Tool 附带的下载代理，并确认固件与此播放器匹配。",
+        "en": "The player rejected the download agent (error 6104). Use the Download Agent bundled with SP Flash Tool, and check that the firmware matches this player.",
+        "fr": "Le lecteur a refusé l'agent de téléchargement (erreur 6104). Utilisez l'agent fourni avec SP Flash Tool et vérifiez que le firmware correspond à ce lecteur.",
+        "es": "El reproductor rechazó el agente de descarga (error 6104). Use el agente incluido con SP Flash Tool y compruebe que el firmware corresponda a este reproductor.",
+        "de": "Der Player hat den Download-Agenten abgelehnt (Fehler 6104). Verwenden Sie den mit SP Flash Tool gelieferten Download-Agenten und prüfen Sie, ob die Firmware zu diesem Player passt.",
+        "ja": "プレーヤーがダウンロードエージェントを拒否しました（エラー 6104）。SP Flash Tool に付属のダウンロードエージェントを使用し、ファームウェアがこのプレーヤーに対応しているか確認してください。",
+    },
     "err_sp_com_port": {
         "zh-CN": "工具无法打开串口。请关闭其他刷机工具后重新连接。",
         "en": "The tool could not open its serial port. Close other flashing tools and reconnect.",

@@ -11,13 +11,20 @@ DEBIAN_SCATTER = Path("/Users/ryan/Downloads/debiany2/MT6582_Android_scatter.txt
 Y2_STOCK_SCATTER = Path("assets/compat/MT6582_Android_scatter.txt")
 Y1_STOCK_SCATTER = Path("assets/compat/MT6572_Android_scatter.txt")
 
+requires_debian_fixture = pytest.mark.skipif(
+    not DEBIAN_SCATTER.is_file(),
+    reason="the optional DebianY2 package is not present on this machine",
+)
 
+
+@requires_debian_fixture
 def test_is_overlay_package():
     assert fs.is_overlay_package(DEBIAN_SCATTER) is True
     assert fs.is_overlay_package(Y2_STOCK_SCATTER) is False
     assert fs.is_overlay_package(Y1_STOCK_SCATTER) is False
 
 
+@requires_debian_fixture
 def test_overlay_scatter_bias_is_zero():
     bias = fs._detect_legacy_user_addr_bias(DEBIAN_SCATTER)
     assert bias == 0
@@ -28,6 +35,7 @@ def test_stock_scatter_bias_maintained():
     assert bias == fs.LEGACY_MBR_USER_ADDR_BIAS
 
 
+@requires_debian_fixture
 def test_debiany2_write_plan_addresses():
     overrides = fs._y2linux_manifest_addresses(DEBIAN_SCATTER)
     plan = fs.build_mtk_write_plan(
@@ -49,6 +57,7 @@ def test_debiany2_write_plan_addresses():
     assert by_name["USRDATA"]["offset"] == 0x40380000
 
 
+@requires_debian_fixture
 def test_debiany2_keep_data_excludes_userdata():
     overrides = fs._y2linux_manifest_addresses(DEBIAN_SCATTER)
     plan = fs.build_mtk_write_plan(
