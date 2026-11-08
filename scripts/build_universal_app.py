@@ -650,6 +650,51 @@ def fetch_online_snapshots():
         print(f"  ! Online snapshot refresh skipped: {e}")
 
 
+def sign_ad_hoc_tree(app_dir: Path, entitlements: Path) -> None:
+    """Sign every Mach-O slice ad-hoc, then seal the bundle.
+
+    ``lipo`` merges an unsigned x86_64 slice into a binary that already carries
+    an arm64 signature, so the merged interpreter keeps only the arm64
+    signature and ``codesign --verify --arch x86_64`` rejects it. Signing only
+    ``*.so``/``*.dylib`` plus ``--deep`` does not help either: ``lipo``'d
+    binaries such as ``bin/python3.11`` and PySide6's Qt frameworks stay
+    linker-signed or half-signed. Each piece is signed here before the bundle,
+    so both slices verify on their own and the bundle seal is valid.
+    """
+    codesign = shutil.which("codesign")
+    if not codesign:
+        return
+
+    def sign(target: Path) -> None:
+        subprocess.run(
+            [codesign, "--force", "--timestamp=none", "--sign", "-", str(target)],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    for path in app_dir.rglob("*"):
+        if path.is_symlink() or not path.is_file():
+            continue
+        if is_macho(path):
+            sign(path)
+    for framework in sorted({p for p in app_dir.rglob("*.framework") if p.is_dir()}):
+        sign(framework)
+    subprocess.run(
+        [
+            codesign,
+            "--force",
+            "--timestamp=none",
+            "--entitlements",
+            str(entitlements),
+            "--sign",
+            "-",
+            str(app_dir),
+        ],
+        check=True,
+    )
+
+
 def build():
     print(f"=== Building Self-Contained Universal 2 macOS .app at {APP_DIR} ===")
     ensure_cached_assets()
@@ -808,12 +853,7 @@ def build():
         ], check=True)
     elif shutil.which("codesign"):
         print(">>> Signing bundle with native codesign...")
-        for inner_bin in APP_DIR.rglob("*"):
-            if inner_bin.is_file() and not inner_bin.is_symlink() and inner_bin.suffix in (".dylib", ".so"):
-                subprocess.run(["codesign", "--force", "-s", "-", str(inner_bin)], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        subprocess.run([
-            "codesign", "--force", "--deep", "--entitlements", str(entitlements), "-s", "-", str(APP_DIR)
-        ], check=True)
+        sign_ad_hoc_tree(APP_DIR, entitlements)
 
     print("\nVerification:")
     if shutil.which("file"):
