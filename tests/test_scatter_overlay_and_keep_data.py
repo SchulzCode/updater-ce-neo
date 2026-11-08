@@ -7,7 +7,15 @@ from src import flash_service as fs
 from src import mtk_legacy_layout as mtk_layout
 from src import sp_console_config
 
-DEBIAN_SCATTER = Path("/Users/ryan/Downloads/debiany2/MT6582_Android_scatter.txt")
+_DEBIAN_CANDIDATES = (
+    Path("/Users/ryan/Downloads/debiany2/MT6582_Android_scatter.txt"),
+    Path("/Users/ryan/Downloads/Y2Linux-1.0.0-beta.9.2.16-first-install/MT6582_Android_scatter.txt"),
+    Path("/Users/ryan/Downloads/Y2Linux-1.0.0-beta.8.43-first-install/MT6582_Android_scatter.txt"),
+)
+DEBIAN_SCATTER = next(
+    (cand for cand in _DEBIAN_CANDIDATES if cand.is_file()),
+    _DEBIAN_CANDIDATES[0],
+)
 Y2_STOCK_SCATTER = Path("assets/compat/MT6582_Android_scatter.txt")
 Y1_STOCK_SCATTER = Path("assets/compat/MT6572_Android_scatter.txt")
 
@@ -25,9 +33,9 @@ def test_is_overlay_package():
 
 
 @requires_debian_fixture
-def test_overlay_scatter_bias_is_zero():
+def test_overlay_scatter_bias_matches_legacy_mbr_bias():
     bias = fs._detect_legacy_user_addr_bias(DEBIAN_SCATTER)
-    assert bias == 0
+    assert bias == fs.LEGACY_MBR_USER_ADDR_BIAS
 
 
 def test_stock_scatter_bias_maintained():
@@ -51,10 +59,10 @@ def test_debiany2_write_plan_addresses():
     assert "ANDROID" in by_name
     assert "USRDATA" in by_name
 
-    assert by_name["BOOTIMG"]["offset"] == 0x1D80000
-    assert by_name["RECOVERY"]["offset"] == 0x2D80000
-    assert by_name["ANDROID"]["offset"] == 0x5180000
-    assert by_name["USRDATA"]["offset"] == 0x40380000
+    assert by_name["BOOTIMG"]["offset"] == 0x2900000
+    assert by_name["RECOVERY"]["offset"] == 0x3900000
+    assert by_name["ANDROID"]["offset"] == 0x5D00000
+    assert by_name["USRDATA"]["offset"] == 0x40F00000
 
 
 @requires_debian_fixture

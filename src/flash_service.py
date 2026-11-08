@@ -1543,10 +1543,6 @@ def is_overlay_package(scatter_path: Union[str, Path], parts: Optional[Sequence[
 
 def _detect_legacy_user_addr_bias(scatter_path, parts=None):
     """Detect whether a scatter file on a legacy platform requires MBR user address biasing."""
-    # Overlay firmware packages leave foundational bootloader / partition tables intact
-    # and write directly to their scatter physical addresses; never apply an artificial MBR bias.
-    if is_overlay_package(scatter_path, parts):
-        return 0
     platform_name = _parse_scatter_platform(scatter_path)
     if platform_name not in _LEGACY_MBR_BIAS_PLATFORMS:
         return 0
@@ -2852,6 +2848,17 @@ def _write_scatter_without_preloader(scatter_path) -> Optional[Path]:
 def _resolve_image_file(scatter_dir, fname):
     scatter_dir = Path(scatter_dir).resolve()
     clean_fname = Path(str(fname).replace("\\", "/")).name
+    stem, ext = os.path.splitext(clean_fname)
+    base_stem = re.sub(r"-(?:verified|sign)$", "", stem, flags=re.IGNORECASE)
+    # SP Flash Tool prefers signed/verified variants (<stem>-verified<ext>,
+    # <stem>-sign<ext>) when present beside an unsigned scatter entry (e.g.
+    # MT6750 Mechen H1 Pro / X55 shipping both boot.img and boot-verified.img).
+    if stem.lower() == base_stem.lower():
+        for signed_stem in (f"{base_stem}-verified", f"{base_stem}-sign"):
+            signed_variant = (scatter_dir / f"{signed_stem}{ext}").resolve()
+            if signed_variant.is_file():
+                return signed_variant
+
     exact = (scatter_dir / fname).resolve()
     if exact.is_file():
         return exact
@@ -2859,9 +2866,7 @@ def _resolve_image_file(scatter_dir, fname):
     if exact_clean.is_file():
         return exact_clean
 
-    stem, ext = os.path.splitext(clean_fname)
-    base_stem = re.sub(r"-(?:verified|sign)$", "", stem, flags=re.IGNORECASE)
-    candidate_stems = [stem, base_stem, f"{base_stem}-verified", f"{base_stem}-sign"]
+    candidate_stems = [stem, f"{base_stem}-verified", f"{base_stem}-sign", base_stem]
     for c_stem in candidate_stems:
         variant = (scatter_dir / f"{c_stem}{ext}").resolve()
         if variant.is_file():
@@ -3663,14 +3668,15 @@ def _scatter_region_parttype(region: str, partition_name: str = "") -> str:
     return "user"
 
 
-def _y2linux_manifest_addresses(scatter_path):
-    """Absolute write addresses declared by a Y2Linux release manifest.
+def _y2linux_manifest_addresses(scatter_path, user_addressing=None):
+    """Native EMMC_USER write addresses declared by a Y2Linux release manifest.
 
-    Y2Linux's scatter uses the stock Y2 physical column, but its manifest is
-    the authoritative install map (the release's own install.md says to stop if
-    SP Flash Tool shows different addresses). The generic legacy mapper adds
-    the Y2 stock MBR bias, which would move every Y2Linux image 8 MiB past its
-    partition. Use the manifest's absolute starts for those packages only.
+    Y2Linux's ``payloads[].absolute_start_bytes`` is the stock logical disk /
+    scatter ``physical_start_addr`` (relative to MBR at 0x0), whereas
+    ``mtkclient`` writes directly to native ``EMMC_USER`` where the Y2's MBR
+    lives at ``0xB80000`` (``23552`` sectors, declared in the manifest under
+    ``storage_addressing.logical_to_native_user_offset_sectors`` and
+    ``storage_addressing.targets.<PART>.native_user_start_bytes``).
     """
     import json
 
@@ -3715,18 +3721,69 @@ def _y2linux_manifest_addresses(scatter_path):
             "avoid installing at a guessed address"
         )
 
-    overrides = {
-        name: address
-        for name, address in declared.items()
-        if isinstance(address, int)
-        and not isinstance(address, bool)
-        and address >= 0
-    }
-    # RECOVERY is not one of the manifest payloads, but the scatter's physical
-    # column is already the absolute start for it. Use that as the fallback
-    # rather than the generic +8 MiB legacy bias. A payload declared by the
-    # manifest is never allowed to fall back silently: if it was downloadable
-    # and had no address, the check above stopped the run.
+    storage_addressing = data.get("storage_addressing")
+    targets = (
+        storage_addressing.get("targets")
+        if isinstance(storage_addressing, dict)
+        and isinstance(storage_addressing.get("targets"), dict)
+        else {}
+    )
+    manifest_bias = None
+    if isinstance(storage_addressing, dict):
+        offset_sectors = storage_addressing.get("logical_to_native_user_offset_sectors")
+        sector_bytes = (
+            storage_addressing.get("logical_sector_bytes")
+            or storage_addressing.get("logical_sector_size_bytes")
+            or 512
+        )
+        if (
+            isinstance(offset_sectors, int)
+            and not isinstance(offset_sectors, bool)
+            and offset_sectors >= 0
+            and isinstance(sector_bytes, int)
+            and not isinstance(sector_bytes, bool)
+            and sector_bytes > 0
+        ):
+            manifest_bias = offset_sectors * sector_bytes
+
+    if user_addressing is not None and getattr(user_addressing, "mode", "") == "physical":
+        native_bias = int(getattr(user_addressing, "bias", 0) or 0)
+    elif manifest_bias is not None:
+        native_bias = manifest_bias
+    else:
+        mbr_zero = any(
+            str(entry.get("name") or "").strip().upper() == "MBR"
+            and int(entry.get("physical_start_addr") or 0) == 0
+            for entry in entries
+        )
+        native_bias = mtk_layout.LEGACY_MBR_ALT_USER_ADDR_BIAS if mbr_zero else 0
+
+    use_manifest_targets = (
+        manifest_bias is not None and native_bias == manifest_bias
+    ) or (user_addressing is None and bool(targets))
+
+    overrides = {}
+    for name, address in declared.items():
+        if not (isinstance(address, int) and not isinstance(address, bool) and address >= 0):
+            continue
+        target_info = targets.get(name) if isinstance(targets, dict) else None
+        native_start = (
+            target_info.get("native_user_start_bytes")
+            if isinstance(target_info, dict)
+            else None
+        )
+        if (
+            use_manifest_targets
+            and isinstance(native_start, int)
+            and not isinstance(native_start, bool)
+            and native_start >= 0
+        ):
+            overrides[name] = native_start
+        else:
+            overrides[name] = address + native_bias
+
+    # RECOVERY is not in payloads[], so resolve its native EMMC_USER start from
+    # the scatter's physical_start_addr plus the same native EMMC_USER bias.
     for entry in entries:
         if not entry.get("is_download") or entry.get("tail_relative"):
             continue
@@ -3739,7 +3796,21 @@ def _y2linux_manifest_addresses(scatter_path):
             and isinstance(physical, int)
             and physical >= 0
         ):
-            overrides[name] = physical
+            target_info = targets.get(name) if isinstance(targets, dict) else None
+            native_start = (
+                target_info.get("native_user_start_bytes")
+                if isinstance(target_info, dict)
+                else None
+            )
+            if (
+                use_manifest_targets
+                and isinstance(native_start, int)
+                and not isinstance(native_start, bool)
+                and native_start >= 0
+            ):
+                overrides[name] = native_start
+            else:
+                overrides[name] = physical + native_bias
     return overrides
 
 
@@ -6481,7 +6552,9 @@ class FlashWorker(QThread):
             )
             user_size = _get_emmc_user_size(mtk)
             block_size = _parse_scatter_block_size(scatter_file)
-            y2_addresses = _y2linux_manifest_addresses(scatter_file)
+            y2_addresses = _y2linux_manifest_addresses(
+                scatter_file, user_addressing=addressing
+            )
             if y2_addresses:
                 self._log(
                     "Y2Linux manifest addresses: "
@@ -7246,23 +7319,6 @@ class FlashWorker(QThread):
             return current
         if current is None:
             current = self._configure_scatter_user_addressing(scatter_path)
-        if is_legacy_da_session(getattr(mtk, "daloader", None)):
-            # The 1.1.7 legacy DA writes the package layout directly. A table
-            # read before the first write drops the player off the USB bus.
-            self._log(
-                "  Legacy DA session: using the package addresses; "
-                "skipping the live MBR probe"
-            )
-            return current
-        if is_overlay_package(scatter_path, parts):
-            # Overlay packages (Y2Linux/Reborn) carry their own absolute install
-            # map. Reading the device's stock MBR/EBR before that map is used
-            # can drop the legacy DA off the bus and blocks a valid install.
-            self._log(
-                "  Overlay package: using its scatter/manifest addresses; "
-                "skipping the legacy MBR probe"
-            )
-            return current
 
         user_size = _get_emmc_user_size(mtk) or None
         block_size = (

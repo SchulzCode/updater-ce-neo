@@ -55,13 +55,13 @@ def _scatter(*rows):
 
 
 BOOTIMG = ("BOOTIMG", "BOOTIMG.img", True, 0x3180000, 0x1D80000, 0x1000000, "EMMC_USER")
-RECOVERY = ("RECOVERY", "RECOVERY.img", True, 0x4280000, 0x2D80000, 0x1000000, "EMMC_USER")
+RECOVERY = ("RECOVERY", "RECOVERY.img", True, 0x4180000, 0x2D80000, 0x1000000, "EMMC_USER")
 ANDROID = ("ANDROID", "Y2ROOT.img", True, 0x6580000, 0x5180000, 0x33400000, "EMMC_USER")
 USRDATA = ("USRDATA", "Y2DATA.img", True, 0x41780000, 0x40380000, 0x32000000, "EMMC_USER")
 PRELOADER = ("PRELOADER", "NONE", False, 0x0, 0x0, 0x1400000, "EMMC_BOOT_1")
 PRELOADER_DL = ("PRELOADER", "preloader.bin", True, 0x0, 0x0, 0x1400000, "EMMC_BOOT_1")
-MBR = ("MBR", "NONE", False, 0xB80000, 0xB80000, 0x80000, "EMMC_USER")
-EBR1 = ("EBR1", "NONE", False, 0xC00000, 0xC00000, 0x80000, "EMMC_USER")
+MBR = ("MBR", "NONE", False, 0x1400000, 0x0, 0x80000, "EMMC_USER")
+EBR1 = ("EBR1", "NONE", False, 0x1480000, 0x80000, 0x80000, "EMMC_USER")
 
 
 def _write_images(folder: Path, *names):
@@ -70,7 +70,7 @@ def _write_images(folder: Path, *names):
 
 
 def _overlay_package(tmp_path: Path):
-    """A Y2Linux/Reborn-shaped package with the manifest's absolute map."""
+    """A Y2Linux/Reborn-shaped package with the manifest's native EMMC_USER map."""
     scatter = tmp_path / "MT6582_Android_scatter.txt"
     scatter.write_text(
         _scatter(PRELOADER, MBR, EBR1, BOOTIMG, RECOVERY, ANDROID, USRDATA),
@@ -79,12 +79,24 @@ def _overlay_package(tmp_path: Path):
     (tmp_path / "manifest.json").write_text(
         json.dumps(
             {
-                "schema": "org.schulzcode.y2linux.release.1",
+                "schema": "org.schulzcode.y2linux.release/v1",
                 "payloads": [
                     {"target_partition": "BOOTIMG", "absolute_start_bytes": 0x1D80000},
                     {"target_partition": "ANDROID", "absolute_start_bytes": 0x5180000},
                     {"target_partition": "USRDATA", "absolute_start_bytes": 0x40380000},
                 ],
+                "storage_addressing": {
+                    "logical_sector_bytes": 512,
+                    "logical_to_native_user_offset_sectors": 23552,
+                    "payload_absolute_start_bytes_semantics": (
+                        "stock logical disk / scatter physical_start_addr; not native EMMC_USER"
+                    ),
+                    "targets": {
+                        "BOOTIMG": {"native_user_start_bytes": 0x2900000},
+                        "ANDROID": {"native_user_start_bytes": 0x5D00000},
+                        "USRDATA": {"native_user_start_bytes": 0x40F00000},
+                    },
+                },
             }
         ),
         encoding="utf-8",
@@ -124,24 +136,40 @@ def test_a_partial_stock_update_with_a_foundation_is_not_an_overlay(tmp_path):
     assert fs.is_overlay_package(scatter) is False
 
 
-def test_overlay_package_skips_the_legacy_mbr_probe(tmp_path):
-    """The probe must not run before Y2Linux's own install map is used."""
+def test_overlay_package_probes_live_mbr_to_find_native_user_offset(tmp_path):
+    """Overlay packages must probe the live MBR/EBR1 to resolve +0xB80000 on Y2."""
     scatter = _overlay_package(tmp_path)
     worker = fs.FlashWorker("pkg.zip", method="mtk")
     worker._log = lambda *a, **k: None
     worker._is_legacy_mode = lambda _mtk: True
 
-    def fail_probe(*_args, **_kwargs):
-        raise AssertionError("overlay package issued a legacy MBR probe")
+    def make_table(boot, part_type):
+        table = bytearray(512)
+        table[446] = boot
+        table[450] = part_type
+        table[454:458] = (2048).to_bytes(4, "little")
+        table[458:462] = (1000).to_bytes(4, "little")
+        table[510:512] = b"\x55\xaa"
+        return bytes(table)
 
-    worker._read_user_blob = fail_probe
+    mbr_blob = make_table(0x80, 0x83)
+    ebr_blob = make_table(0x00, 0x05)
+
+    def read_blob(_mtk, addr, length):
+        if addr == 0xB80000 and length == 512:
+            return mbr_blob
+        if addr == 0xC00000 and length == 512:
+            return ebr_blob
+        return b"\x00" * int(length)
+
+    worker._read_user_blob = read_blob
     current = worker._configure_scatter_user_addressing(scatter)
 
     result = worker._auto_configure_scatter_user_addressing(
         SimpleNamespace(), scatter, current
     )
 
-    assert result == current
+    assert (result.mode, result.bias) == ("physical", 0xB80000)
 
 
 def test_overlay_manifest_payload_without_an_address_fails_closed(tmp_path):
@@ -173,10 +201,10 @@ def test_overlay_manifest_addresses_drive_the_write_plan(tmp_path):
     )
     by_name = {step["name"].upper(): step for step in plan}
 
-    assert by_name["BOOTIMG"]["offset"] == 0x1D80000
-    assert by_name["RECOVERY"]["offset"] == 0x2D80000
-    assert by_name["ANDROID"]["offset"] == 0x5180000
-    assert by_name["USRDATA"]["offset"] == 0x40380000
+    assert by_name["BOOTIMG"]["offset"] == 0x2900000
+    assert by_name["RECOVERY"]["offset"] == 0x3900000
+    assert by_name["ANDROID"]["offset"] == 0x5D00000
+    assert by_name["USRDATA"]["offset"] == 0x40F00000
 
 
 def test_preserve_scatter_is_the_packages_own_exclusion_list(tmp_path):
@@ -221,3 +249,72 @@ def test_6104_is_reported_as_a_secure_da_rejection():
     assert fs.SP_ERROR_GUIDANCE[name] == "err_sp_da_invalid_type"
     guidance = tr("err_sp_da_invalid_type")
     assert guidance and guidance != "err_sp_da_invalid_type"
+
+
+def test_verified_boot_variants_take_precedence_over_unsigned_intermediates(tmp_path):
+    """When a scatter declares unsigned filenames (e.g. boot.img, lk.img, logo.bin)
+    and the package directory ships both the unsigned intermediate and the signed
+    *-verified / *-sign image (as on MT6750 Mechen H1 Pro / X55), the signed image
+    must be selected to match SP Flash Tool Verified Boot resolution."""
+    scatter = tmp_path / "MT6750_Android_scatter.txt"
+    scatter.write_text(
+        "- general: MTK_PLATFORM_CFG\n"
+        "  info:\n"
+        "    - config_version: V1.1.2\n"
+        "      platform: MT6750\n"
+        "      project: k50v1_64_bsp\n"
+        "      storage: EMMC\n"
+        "      boot_channel: MSDC_0\n"
+        "      block_size: 0x20000\n"
+        "- partition_index: SYS1\n"
+        "  partition_name: pgpt\n"
+        "  file_name: NONE\n"
+        "  is_download: false\n"
+        "  type: NORMAL_ROM\n"
+        "  linear_start_addr: 0x0\n"
+        "  physical_start_addr: 0x0\n"
+        "  partition_size: 0x8000\n"
+        "  region: EMMC_USER\n"
+        "- partition_index: SYS19\n"
+        "  partition_name: lk\n"
+        "  file_name: lk.img\n"
+        "  is_download: true\n"
+        "  type: NORMAL_ROM\n"
+        "  linear_start_addr: 0xac00000\n"
+        "  physical_start_addr: 0xac00000\n"
+        "  partition_size: 0x100000\n"
+        "  region: EMMC_USER\n"
+        "- partition_index: SYS21\n"
+        "  partition_name: boot\n"
+        "  file_name: boot.img\n"
+        "  is_download: true\n"
+        "  type: NORMAL_ROM\n"
+        "  linear_start_addr: 0xae00000\n"
+        "  physical_start_addr: 0xae00000\n"
+        "  partition_size: 0x1000000\n"
+        "  region: EMMC_USER\n"
+        "- partition_index: SYS22\n"
+        "  partition_name: logo\n"
+        "  file_name: logo.bin\n"
+        "  is_download: true\n"
+        "  type: NORMAL_ROM\n"
+        "  linear_start_addr: 0xbe00000\n"
+        "  physical_start_addr: 0xbe00000\n"
+        "  partition_size: 0x800000\n"
+        "  region: EMMC_USER\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "lk.img").write_bytes(b"unsigned-lk")
+    (tmp_path / "lk-verified.img").write_bytes(b"verified-lk")
+    (tmp_path / "boot.img").write_bytes(b"unsigned-boot")
+    (tmp_path / "boot-verified.img").write_bytes(b"verified-boot")
+    (tmp_path / "logo.bin").write_bytes(b"unsigned-logo")
+    (tmp_path / "logo-verified.bin").write_bytes(b"verified-logo")
+
+    plan = fs.build_mtk_write_plan(scatter, "")
+    assert [(step["name"], step["path"].name, step["offset"]) for step in plan] == [
+        ("lk", "lk-verified.img", 0xAC00000),
+        ("boot", "boot-verified.img", 0xAE00000),
+        ("logo", "logo-verified.bin", 0xBE00000),
+    ]
+

@@ -156,31 +156,30 @@ def test_probe_aborts_before_writing_when_the_layout_is_unproven(tmp_path):
         _resolve(_worker(), _fake_mtk(bytearray(user_size), user_size), scatter)
 
 
-def test_a_legacy_da_session_skips_the_probe_wiring(tmp_path):
-    """A stock package on the bundled DALegacy must not read the live table."""
+def test_overlay_scatter_without_bundled_mbr_files_probes_live_device_layout(tmp_path):
+    """An overlay package (where MBR/EBR1 have file_name: NONE) still probes the
+    live device's MBR/EBR1 at 0xB80000/0xC00000 and resolves +0xB80000."""
     scatter = _package(tmp_path)
-    worker = _worker()
-    worker._is_legacy_mode = lambda _mtk: True
+    mbr, ebr = _tables(scatter.parent)
+    text = scatter.read_text(encoding="utf-8")
+    for part_file in ("MBR", "EBR1", "EBR2", "lk.bin", "preloader_eastaeon82_wet_kk.bin"):
+        text = text.replace(f"file_name: {part_file}", "file_name: NONE")
+        (scatter.parent / part_file).unlink(missing_ok=True)
+    scatter.write_text(text, encoding="utf-8")
 
-    class DALegacy:
-        pass
+    user_size = 0x74000000
+    data = bytearray(user_size)
+    data[0xB80000 : 0xB80000 + 512] = mbr
+    data[0xC00000 : 0xC00000 + 512] = ebr
 
-    mtk = SimpleNamespace(
-        daloader=DALegacy(),
-        config=SimpleNamespace(last_error=None),
-        port=None,
-    )
+    candidate = _resolve(_worker(), _fake_mtk(data, user_size), scatter)
 
-    def fail_probe(*_args, **_kwargs):
-        raise AssertionError("legacy DA issued a live MBR probe")
-
-    worker._read_user_blob = fail_probe
-    current = worker._configure_scatter_user_addressing(scatter)
-
-    result = worker._auto_configure_scatter_user_addressing(mtk, scatter, current)
-
-    assert fs.is_legacy_da_session(mtk.daloader) is True
-    assert result == current
+    assert (candidate.mode, candidate.bias) == ("physical", 0xB80000)
+    by_name = {step["name"].upper(): step for step in _plan(scatter, candidate)}
+    assert by_name["BOOTIMG"]["offset"] == 0x2900000
+    assert by_name["RECOVERY"]["offset"] == 0x3900000
+    assert by_name["ANDROID"]["offset"] == 0x5D00000
+    assert by_name["USRDATA"]["offset"] == 0x40F00000
 
 
 def test_probe_runs_for_a_scatter_without_a_known_chip_name(tmp_path):

@@ -3093,10 +3093,34 @@ class FlashPage(QWidget):
             val = 0.0
         val = max(0.0, min(100.0, val))
         bar.setRange(0, 100)
-        bar.setFormat("%p%")
+        if not getattr(bar, "is_getting_ready", lambda: False)():
+            bar.setFormat("%p%")
         bar.setValue(val)
         bar.setTextVisible(True)
         self._sync_wait_band_page()
+
+    def set_getting_ready(self, active: bool = True, text: str = "") -> None:
+        """Toggle 'Getting ready...' state: hide percentage and display text on and near progress bar."""
+        self._getting_ready = bool(active)
+        msg = text or tr("flash_getting_ready")
+        if hasattr(self, "_progress_bar") and hasattr(self._progress_bar, "set_getting_ready"):
+            self._progress_bar.set_getting_ready(active, text=msg)
+        if hasattr(self, "_wait_progress_bar") and hasattr(self._wait_progress_bar, "set_getting_ready"):
+            self._wait_progress_bar.set_getting_ready(active, text=msg)
+        if active:
+            if hasattr(self, "_step_label"):
+                self._step_label.setText(msg)
+            flow = getattr(self, "_status_flow", None)
+            if flow is not None:
+                flow.refresh()
+            self._notify_geometry_change()
+        elif hasattr(self, "_step_key") and getattr(self, "_step_key", None):
+            if hasattr(self, "_step_label"):
+                self._step_label.setText(tr(self._step_key))
+            flow = getattr(self, "_status_flow", None)
+            if flow is not None:
+                flow.refresh()
+            self._notify_geometry_change()
 
     def show_install_failure(
         self,
@@ -3111,6 +3135,7 @@ class FlashPage(QWidget):
         the ×: no retry can turn the connected model into the package's model,
         so the useful next step is to cancel and choose the right software.
         """
+        self.set_getting_ready(False)
         self.update_partition_progress("")
         self.dismiss_prompt_stop()
         self._failed = True
@@ -3289,6 +3314,7 @@ class FlashPage(QWidget):
                 self.themes.forget_watch(worker)
 
     def clear_install_failure(self) -> None:
+        self.set_getting_ready(False)
         self.dismiss_prompt_stop()
         self._failed = False
         self._complete = False
@@ -5540,6 +5566,8 @@ class FlashPage(QWidget):
         except (TypeError, ValueError):
             val = 0.0
         val = max(0.0, min(100.0, val))
+        if getattr(self, "_getting_ready", False) and val > 12.5:
+            self.set_getting_ready(False)
         if (
             getattr(self, "_wait_copy", "") == "please_wait"
             and val <= 0
@@ -5563,7 +5591,13 @@ class FlashPage(QWidget):
         if getattr(self, "_stop_open", False):
             self._apply_stop_hold()
             return
-        self._step_label.setText(tr(step_key))
+        if getattr(self, "_getting_ready", False):
+            if step_key not in ("DETECT", "step_detect", "flash_getting_ready", "GETTING_READY"):
+                self.set_getting_ready(False)
+        if getattr(self, "_getting_ready", False):
+            self._step_label.setText(tr("flash_getting_ready"))
+        else:
+            self._step_label.setText(tr(step_key))
         flow = getattr(self, "_status_flow", None)
         if flow is not None:
             flow.refresh()
@@ -6197,7 +6231,6 @@ class FlashPage(QWidget):
         self._stop_question.setSizePolicy(
             QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred
         )
-        self._stop_question.setMaximumWidth(INSTALL_TEXT_WIDTH)
         _style_card_heading(self._stop_question)
         self._stop_question.hide()
         self._stop_host = None
@@ -6258,6 +6291,48 @@ class FlashPage(QWidget):
         if hasattr(self, "_stop_continue"):
             self._stop_continue.show()
             self._stop_back.show()
+        self._fit_stop_question()
+
+    def _fit_stop_question(self) -> None:
+        """Give the stop question the room it needs on the head row.
+
+        The head row is a horizontal box, which cannot trade width for height:
+        a wrapping label left to its own size hint wraps into a narrow column
+        and its last line is clipped by the row's fixed icon height. The
+        question is held to one line when the row has the room, and otherwise
+        to the widest column that fits beside the icon and chips, with its
+        height reserved for the lines that column needs.
+        """
+        question = getattr(self, "_stop_question", None)
+        host = getattr(self, "_stop_host", None)
+        if question is None or host is None:
+            return
+        text = question.text() or " "
+        metrics = question.fontMetrics()
+        one_line = int(metrics.horizontalAdvance(text)) + 4
+        parent = host.parentWidget()
+        total = int(parent.width()) if parent is not None else 0
+        actions = getattr(self, "_stop_actions", None)
+        chips = int(actions.sizeHint().width()) if actions is not None else 0
+        if total > 0:
+            available = total - _CARD_ICON_PX - _CARD_HEAD_GAP * 3 - chips - 8
+            width = min(one_line, max(120, available))
+        else:
+            width = one_line
+        width = max(1, int(width))
+        flags = int(Qt.AlignmentFlag.AlignLeft | Qt.TextFlag.TextWordWrap)
+        rect = metrics.boundingRect(0, 0, width, 10000, flags, text)
+        height = max(metrics.height(), rect.height()) + 2
+        if question.minimumWidth() != width or question.maximumWidth() != width:
+            question.setFixedWidth(width)
+        if question.minimumHeight() != height:
+            question.setMinimumHeight(height)
+            question.updateGeometry()
+
+    def resizeEvent(self, event):  # noqa: N802 (Qt naming)
+        super().resizeEvent(event)
+        if getattr(self, "_stop_open", False):
+            self._fit_stop_question()
 
     def _stop_target(self):
         """The progress card that should host the stop check."""

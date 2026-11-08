@@ -981,6 +981,12 @@ def prune_to_firmware_package(extract_dir: Union[str, Path]) -> list[str]:
             keep.add(ini.resolve())
     if (folder / FW_PACKAGE_INI).is_file():
         keep.add((folder / FW_PACKAGE_INI).resolve())
+    if (folder / "manifest.json").is_file():
+        keep.add((folder / "manifest.json").resolve())
+    from .flash_service import find_preserve_data_scatter
+    preserve_scatter = find_preserve_data_scatter(scatter)
+    if preserve_scatter is not None and preserve_scatter.is_file():
+        keep.add(preserve_scatter.resolve())
     for _name, img in _list_expected_images(scatter):
         if img.exists():
             keep.add(img.resolve())
